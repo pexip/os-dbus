@@ -1,3 +1,9 @@
+dbus (1.4.18-1ubuntu1.4pexip1) pexip; urgency=low
+
+  * Prepare Pexip packaging
+
+ -- John-Mark Bell <jmb@pexip.com>  Tue, 24 Dec 2013 14:37:04 +0000
+
 dbus (1.4.18-1ubuntu1.4) precise-security; urgency=low
 
   * SECURITY UPDATE: denial of service via _dbus_printf_string_upper_bound()
