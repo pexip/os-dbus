@@ -10,3 +10,6 @@
 CVE-2012-3524-dbus.patch
 CVE-2012-3524-regression-fix.patch
 CVE-2013-2168.patch
+CVE-2014-3477.patch
+CVE-2014-3532.patch
+CVE-2014-3533.patch
