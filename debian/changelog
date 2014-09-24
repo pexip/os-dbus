@@ -1,3 +1,42 @@
+dbus (1.4.18-1ubuntu1.6pexip1) pexip; urgency=low
+
+  * New upstream release.
+
+ -- John-Mark Bell <jmb@pexip.com>  Wed, 24 Sep 2014 16:45:32 +0100
+
+dbus (1.4.18-1ubuntu1.6) precise-security; urgency=medium
+
+  * SECURITY UPDATE: buffer overrun via odd max_message_unix_fds
+    - debian/patches/CVE-2014-3635.patch: do not extra fds in cmsg padding
+      in dbus/dbus-sysdeps-unix.c, allow using _DBUS_STATIC_ASSERT at a
+      non-global scope in dbus/dbus-internals.h, dbus/dbus-macros.h.
+    - CVE-2014-3635
+  * SECURITY UPDATE: denial of service via large number of fds
+    - debian/patches/CVE-2014-3636.patch: reduce max number of fds in
+      bus/config-parser.c, bus/session.conf.in, dbus/dbus-message.c,
+      dbus/dbus-sysdeps.h.
+    - CVE-2014-3636
+  * SECURITY UPDATE: denial of service via persistent file descriptiors
+    - debian/patches/CVE-2014-3637.patch: add a timeout to expire pending
+      fds in bus/bus.*, bus/config-parser.c, bus/connection.c,
+      bus/session.conf.in, cmake/bus/dbus-daemon.xml,
+      dbus/dbus-connection-internal.h, dbus/dbus-connection.c,
+      dbus/dbus-message-internal.h, dbus/dbus-message-private.h,
+      dbus/dbus-message.c, dbus/dbus-transport.*.
+    - CVE-2014-3637
+  * SECURITY UPDATE: denial of service via large number of pending replies
+    - debian/patches/CVE-2014-3638.patch: reduce max_replies_per_connection
+      to 128 in bus/config-parser.c.
+    - CVE-2014-3638
+  * SECURITY UPDATE: denial of service via incomplete connections
+    - debian/patches/CVE-2014-3639.patch: reduce auth_timeout in
+      bus/config-parser.c, stop listening on DBusServer sockets when
+      reaching max_incomplete_connections in bus/bus.*, bus/connection.*,
+      dbus/dbus-server-protected.h, dbus/dbus-server.c, dbus/dbus-watch.*.
+    - CVE-2014-3639
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Wed, 17 Sep 2014 11:21:20 -0400
+
 dbus (1.4.18-1ubuntu1.5pexip1) pexip; urgency=low
 
   * New upstream release.
