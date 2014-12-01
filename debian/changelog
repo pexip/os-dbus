@@ -1,3 +1,27 @@
+dbus (1.4.18-1ubuntu1.7pexip1) pexip; urgency=low
+
+  * New upstream release.
+
+ -- John-Mark Bell <jmb@pexip.com>  Mon, 01 Dec 2014 11:17:33 +0000
+
+dbus (1.4.18-1ubuntu1.7) precise-security; urgency=medium
+
+  * SECURITY UPDATE: denial of service via large number of fds
+    - debian/patches/CVE-2014-7824.patch: raise rlimit and restore it for
+      activated services in bus/activation.c, bus/bus.*,
+      dbus/dbus-sysdeps-util-unix.c, dbus/dbus-sysdeps-util-win.c,
+      dbus/dbus-sysdeps.h.
+    - debian/dbus.init: don't launch daemon as a user so the rlimit can be
+      raised.
+    - CVE-2014-7824
+  * SECURITY REGRESSION: authentication timeout on certain slower systems
+    - debian/patches/CVE-2014-3639-regression.patch: raise auth_timeout
+      back up to 30 secs in bus/config-parser.c, add a warning to
+      bus/connection.c.
+    - CVE-2014-3639
+
+ -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 25 Nov 2014 14:46:53 -0500
+
 dbus (1.4.18-1ubuntu1.6pexip1) pexip; urgency=low
 
   * New upstream release.

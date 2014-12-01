@@ -18,3 +18,5 @@ CVE-2014-3636.patch
 CVE-2014-3637.patch
 CVE-2014-3638.patch
 CVE-2014-3639.patch
+CVE-2014-7824.patch
+CVE-2014-3639-regression.patch
