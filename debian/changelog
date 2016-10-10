@@ -1,131 +1,457 @@
-dbus (1.4.18-1ubuntu1.7) precise-security; urgency=medium
+dbus (1.8.22-0+deb8u1) jessie; urgency=medium
 
-  * SECURITY UPDATE: denial of service via large number of fds
-    - debian/patches/CVE-2014-7824.patch: raise rlimit and restore it for
-      activated services in bus/activation.c, bus/bus.*,
-      dbus/dbus-sysdeps-util-unix.c, dbus/dbus-sysdeps-util-win.c,
-      dbus/dbus-sysdeps.h.
-    - debian/dbus.init: don't launch daemon as a user so the rlimit can be
-      raised.
-    - CVE-2014-7824
-  * SECURITY REGRESSION: authentication timeout on certain slower systems
-    - debian/patches/CVE-2014-3639-regression.patch: raise auth_timeout
-      back up to 30 secs in bus/config-parser.c, add a warning to
-      bus/connection.c.
-    - CVE-2014-3639
+  * New upstream bugfix release
+    - fix a potential format string vulnerability, which is not believed
+      to be exploitable in practice
+  * dbus.prerm: ensure that dbus.socket is stopped before removal,
+    so that a new connection to the bus won't cause dbus.service to be
+    restarted (Closes: #813970)
 
- -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Tue, 25 Nov 2014 14:46:53 -0500
+ -- Simon McVittie <smcv@debian.org>  Mon, 10 Oct 2016 11:42:50 +0100
 
-dbus (1.4.18-1ubuntu1.6) precise-security; urgency=medium
+dbus (1.8.20-0+deb8u1) jessie; urgency=medium
 
-  * SECURITY UPDATE: buffer overrun via odd max_message_unix_fds
-    - debian/patches/CVE-2014-3635.patch: do not extra fds in cmsg padding
-      in dbus/dbus-sysdeps-unix.c, allow using _DBUS_STATIC_ASSERT at a
-      non-global scope in dbus/dbus-internals.h, dbus/dbus-macros.h.
-    - CVE-2014-3635
-  * SECURITY UPDATE: denial of service via large number of fds
-    - debian/patches/CVE-2014-3636.patch: reduce max number of fds in
-      bus/config-parser.c, bus/session.conf.in, dbus/dbus-message.c,
-      dbus/dbus-sysdeps.h.
-    - CVE-2014-3636
-  * SECURITY UPDATE: denial of service via persistent file descriptiors
-    - debian/patches/CVE-2014-3637.patch: add a timeout to expire pending
-      fds in bus/bus.*, bus/config-parser.c, bus/connection.c,
-      bus/session.conf.in, cmake/bus/dbus-daemon.xml,
-      dbus/dbus-connection-internal.h, dbus/dbus-connection.c,
-      dbus/dbus-message-internal.h, dbus/dbus-message-private.h,
-      dbus/dbus-message.c, dbus/dbus-transport.*.
-    - CVE-2014-3637
-  * SECURITY UPDATE: denial of service via large number of pending replies
-    - debian/patches/CVE-2014-3638.patch: reduce max_replies_per_connection
-      to 128 in bus/config-parser.c.
-    - CVE-2014-3638
-  * SECURITY UPDATE: denial of service via incomplete connections
-    - debian/patches/CVE-2014-3639.patch: reduce auth_timeout in
-      bus/config-parser.c, stop listening on DBusServer sockets when
-      reaching max_incomplete_connections in bus/bus.*, bus/connection.*,
-      dbus/dbus-server-protected.h, dbus/dbus-server.c, dbus/dbus-watch.*.
-    - CVE-2014-3639
+  * New upstream bugfix release
+    - fix a memory leak when GetConnectionCredentials is called
+    - stop dbus-monitor replying to org.freedesktop.DBus.Peer
+      messages, including those that another process should have
+      replied to
 
- -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Wed, 17 Sep 2014 11:21:20 -0400
+ -- Simon McVittie <smcv@debian.org>  Tue, 21 Jul 2015 17:59:42 +0100
 
-dbus (1.4.18-1ubuntu1.5) precise-security; urgency=medium
+dbus (1.8.18-0+deb8u1) jessie; urgency=medium
 
-  * SECURITY UPDATE: denial of service via activation errors
-    - debian/patches/CVE-2014-3477.patch: improve error handling in
-      bus/activation.*, bus/services.c.
-    - CVE-2014-3477
-  * SECURITY UPDATE: denial of service via ETOOMANYREFS
-    - debian/patches/CVE-2014-3532.patch: drop message on ETOOMANYREFS in
-      dbus/dbus-sysdeps.*, dbus/dbus-transport-socket.c.
-    - CVE-2014-3532
-  * SECURITY UPDATE: denial of service via invalid file descriptor
-    - debian/patches/CVE-2014-3533.patch: fix memory handling in
-      dbus/dbus-message.c.
-    - CVE-2014-3533
+  * New upstream bugfix release
+    - Hardening: lock down the session bus to only allow EXTERNAL auth by
+      default, the same as the system bus. This avoids allowing
+      DBUS_COOKIE_SHA1, which can end up using a predictable random source
+      on systems where /dev/urandom is unavailable or dbus-daemon runs out
+      of memory. See the upstream NEWS for more details.
 
- -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Thu, 03 Jul 2014 08:39:34 -0400
+ -- Simon McVittie <smcv@debian.org>  Thu, 14 May 2015 13:52:50 +0100
 
-dbus (1.4.18-1ubuntu1.4) precise-security; urgency=low
+dbus (1.8.16-1) unstable; urgency=high
 
-  * SECURITY UPDATE: denial of service via _dbus_printf_string_upper_bound()
-    length.
-    - debian/patches/CVE-2013-2168.patch: use a copy of va_list in
-      dbus/dbus-sysdeps-unix.c, dbus/dbus-sysdeps-win.c, added test to
-      test/Makefile.am, test/internals/printf.c.
-    - CVE-2013-2168
+  * New upstream release fixes a local denial of service
+    when using systemd activation (CVE-2015-0245)
 
- -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Thu, 13 Jun 2013 10:23:58 -0400
+ -- Simon McVittie <smcv@debian.org>  Wed, 04 Feb 2015 20:14:46 +0000
 
-dbus (1.4.18-1ubuntu1.3) precise-security; urgency=low
+dbus (1.8.14-2) unstable; urgency=high
 
-  * REGRESSION FIX: some applications launched with the activation helper
-    may need DBUS_STARTER_ADDRESS. (LP: #1058343)
-    - debian/patches/CVE-2012-3524-regression-fix.patch: hardcode the
-      starter address to the default system bus address.
-  * REGRESSION FIX: unclean shutdown after dbus upgrade (LP: #740390)
-    - debian/libdbus-1-3.postinst: trigger an upstart re-exec before
-      shutdown or reboot so that it can safely unmount the root
-      filesystem.
+  * Relax the triggers from interest to interest-noawait (Closes: #771989;
+    mitigates: #776063; partially reopens: #740139).
 
- -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Wed, 03 Oct 2012 06:12:39 -0400
+    This is not strictly correct, because the purpose of the triggers
+    is to set up the .conf, .service files for system services before those
+    services satisfy dependencies. However, it mitigates #776063
+    (apt getting into a stuck state during upgrades), and should in
+    principle be redundant anyway, because dbus-daemon is meant to use
+    inotify to keep up with configuration changes. See #771989, #776063
+    for details.
 
-dbus (1.4.18-1ubuntu1.1) precise-security; urgency=low
+ -- Simon McVittie <smcv@debian.org>  Tue, 03 Feb 2015 17:28:12 +0000
 
-  * SECURITY UPDATE: privilege escalation via unsanitized environment
-    - debian/patches/CVE-2012-3524-dbus.patch: Don't access environment
-      variables or run dbus-launch when setuid in configure.ac,
-      dbus/dbus-keyring.c, dbus/dbus-sysdeps*
-    - CVE-2012-3524
+dbus (1.8.14-1) unstable; urgency=medium
 
- -- Marc Deslauriers <marc.deslauriers@ubuntu.com>  Fri, 14 Sep 2012 09:01:59 -0400
+  * New upstream release to harden dbus-daemon against packages that install
+    unsafe security policy configurations.
 
-dbus (1.4.18-1ubuntu1) precise; urgency=low
+ -- Simon McVittie <smcv@debian.org>  Thu, 01 Jan 2015 13:07:23 +0000
 
-  * Merge with Debian unstable to pick up the new bug fix release. Remaining
-    Ubuntu changes:
-    - Install binaries into / rather than /usr:
-      + debian/rules: Set --exec-prefix=/
-      + debian/dbus.install, debian/dbus-x11.install: Install from /bin
-    - Use upstart to start:
-      + Add debian/dbus.upstart.
-      + debian/control: Add upstart dependency.
-      + debian/dbus.postinst: Use upstart call instead of invoking the init.d
-        script for checking if we are already running. 
-      + debian/control: versioned dependency on netbase that emits the new
-        deconfiguring-networking event used in upstart script.
-    - 20_system_conf_limit.patch: Increase max_match_rules_per_connection for
-      the system bus to 5000 (LP #454093)
-    - 81-session.conf-timeout.patch: Raise the service startup timeout from 25
-      to 60 seconds. It may be too short on the live CD with slow machines.
-    - Add 0001-activation-allow-for-more-variation-than-just-system.patch,
-      0002-bus-change-systemd-activation-to-activation-systemd.patch,
-      0003-upstart-add-upstart-as-a-possible-activation-type.patch,
-      0004-upstart-add-UpstartJob-to-service-desktop-files.patch,
-      0005-activation-implement-upstart-activation.patch: Patches from Scott
-      James Remnant to implement Upstart service activation. Not upstream.
+dbus (1.8.12-3) unstable; urgency=medium
 
- -- Martin Pitt <martin.pitt@ubuntu.com>  Wed, 22 Feb 2012 09:26:02 +0100
+  * preinst: partially revert change from 1.8.12-2. It seems that the
+    preinst is too late to add a useful dpkg-statoverride entry: dpkg has
+    already loaded the statoverride database by this point, and if we add
+    the entry in the preinst, dpkg-statoverride won't run and have
+    its --update side-effect in the postinst. (Closes: #773107, #773838)
+  * postinst: don't run dpkg-statoverride with 2>/dev/null: in the unlikely
+    event that it fails for a reason other than "not overridden" (which
+    results in silently exiting 1), we'll want to know about it.
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 23 Dec 2014 21:21:20 +0000
+
+dbus (1.8.12-2) unstable; urgency=medium
+
+  * postinst: use dpkg-statoverride to set the permissions for
+    dbus-daemon-launch-helper (expected to be 04754 root:messagebus)
+    as suggested in Policy §10.9. This avoids a temporarily broken state
+    when an upgraded dbus is unpacked but not yet configured (Closes: #773107)
+  * preinst: opportunistically set up the same dpkg-statoverride entry
+    if the group already exists, to avoid the same broken state during
+    upgrades from older versions without needing Pre-Depends: adduser
+  * postrm: delete the dpkg-statoverride entry on purge
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 21 Dec 2014 15:02:22 +0000
+
+dbus (1.8.12-1) unstable; urgency=medium
+
+  * New upstream release 1.8.12
+    - increase auth_timeout from 5 seconds back to 30 seconds since it
+      appears to cause slow or failed boot on some systems, reverting a
+      change in 1.8.8 (Closes: #769069)
+    - add a README.Debian to the dbus package documenting how
+      sysadmins with hostile local users can get the lower timeout back,
+      if their systems are fast enough to boot correctly like that
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 24 Nov 2014 13:46:01 +0000
+
+dbus (1.8.10-1) unstable; urgency=medium
+
+  * New upstream release 1.8.10
+    - raise dbus-daemon's file descriptor limit to 65536 to avoid an
+      opportunity for denial of service
+      (CVE-2014-7824, an incomplete fix for CVE-2014-3636)
+  * Start 'dbus-daemon --system' as root under sysvinit (it already
+    starts as root under systemd), so it can increase its file
+    descriptor limit
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 06 Nov 2014 16:28:22 +0000
+
+dbus (1.8.8-2) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * Build against libsystemd-dev. In systemd v209 the various libraries were
+    merged into a single libsystemd library.
+
+  [ Simon McVittie ]
+  * debian/dbus.bug-control: when people report bugs against dbus,
+    also report the status of systemd and systemd-sysv (because
+    those alter how system service activation works), and dbus-x11
+    (because that's responsible for normal session bus setup)
+  * Remove Build-Profiles control field until the syntax settles down
+    (Closes: #764222)
+  * Use --with-valgrind=auto (supported since 1.7.6) for the debug build
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 06 Oct 2014 19:17:04 +0100
+
+dbus (1.8.8-1) unstable; urgency=medium
+
+  [ Michael Biebl ]
+  * Don't attempt config reload if dbus system bus is not running.
+
+  [ Simon McVittie ]
+  * Bump dbus up to Priority: standard because without it, systemd-logind
+    does not run a getty on tty2..tty6 (matching ftp-master action in
+    #759293)
+  * New upstream release fixes several security issues
+    - CVE-2014-3635: do not accept an extra fd in cmsg padding,
+      avoiding a buffer overrun in dbus-daemon or system services
+    - CVE-2014-3636: reduce maximum number of file descriptors
+       per message from 1024 to 16, to avoid two separate denial-of-service
+       attacks that could cause system services to be dropped from the bus
+    - CVE-2014-3637: time out connections that have a
+       partially-sent message containing a file descriptor, so that
+       malicious processes cannot use self-referential file descriptors
+       to make a connection that will never close
+    - CVE-2014-3638: reduce maximum number of pending replies
+      per connection to avoid algorithmic complexity DoS
+    - CVE-2014-3639: reduce timeout for authentication and
+      do not accept() new connections when all unauthenticated connection
+      slots are in use, so that malicious processes cannot prevent new
+      connections to the system bus
+  * debian/copyright: fix glob syntax, .[ch] is not supported
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 15 Sep 2014 12:58:25 +0100
+
+dbus (1.8.6-2) unstable; urgency=medium
+
+  * debian/dbus.posinst: When triggered only poke the dbus-daemon, don't run
+    update-rc.d/invoke-rc.d as added by dh_installinit. This prevent some
+    odd-corner when being triggered during init system upgrade
+    (Closes: #754404)
+
+ -- Sjoerd Simons <sjoerd@debian.org>  Wed, 13 Aug 2014 22:30:38 +0200
+
+dbus (1.8.6-1) unstable; urgency=high
+
+  * New upstream release
+    - fix two local DoS vulnerabilities (CVE-2014-3532, CVE-2014-3533)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 30 Jun 2014 15:15:58 +0100
+
+dbus (1.8.4-1) unstable; urgency=high
+
+  * New upstream release, fixing a DoS vulnerability (CVE-2014-3477)
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 05 Jun 2014 15:12:02 +0100
+
+dbus (1.8.2-1) unstable; urgency=medium
+
+  * New upstream release
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 30 Apr 2014 20:17:46 +0100
+
+dbus (1.8.0-3) unstable; urgency=medium
+
+  * Improve autopkgtest support
+    - use a shell wildcard instead of dpkg-architecture, to avoid stderr spam
+      failing the test if gcc is missing
+    - wrap each test-case in an arbitrary (5 minute) timeout so that one
+      test-case failing won't halt the whole build
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 26 Mar 2014 09:17:20 +0000
+
+dbus (1.8.0-2) unstable; urgency=low
+
+  * debian/rules: look for DEB_BUILD_PROFILES, the new name for
+    DEB_BUILD_PROFILE
+  * Don't try to install systemd units in a stage1 build (they are
+    no longer installed unless libsystemd*-dev are found) (Closes: #738317)
+  * Mark dbus-1-doc with Build-Profiles: !stage1
+  * Register a dpkg trigger on /usr/share/dbus-1/system-services and
+    /etc/dbus-1/system.d that calls ReloadConfig on the system dbus-daemon,
+    in case our inotify monitoring isn't completely reliable (see #740139)
+  * Clean debian/tmp-udeb in `debian/rules clean`
+  * Hook up the installed tests to DEP-8 metadata
+  * Add a simple compile/link/run test
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 26 Feb 2014 13:15:14 +0000
+
+dbus (1.8.0-1) unstable; urgency=low
+
+  * New upstream stable release
+    - add debian/copyright stanzas for some new BSD-licensed cmake macros
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 20 Jan 2014 15:05:53 +0000
+
+dbus (1.7.10-2) unstable; urgency=low
+
+  * Conditionalize libaudit and libcap-ng build-dependencies to [linux-any]
+  * Explicitly enable libaudit, SELinux and systemd on Linux;
+    do not enable them elsewhere
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 07 Jan 2014 12:12:15 +0000
+
+dbus (1.7.10-1) unstable; urgency=low
+
+  * Merge from experimental into unstable
+  * New upstream release 1.7.10 (1.8 rc1)
+  * Generate debian/dbus.install from a generic part and a Linux-specific
+    part, since systemd metadata doesn't get installed on non-Linux any more
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 06 Jan 2014 19:43:36 +0000
+
+dbus (1.7.8-1) experimental; urgency=low
+
+  [ Laurent Bigonville ]
+  * debian/rules: Re-add udeb_configure_flags that were lost during merge
+    (Closes: #727774)
+
+  [ Simon McVittie ]
+  * Standards-Version: 3.9.5 (no changes needed)
+  * Enable libaudit support so messages that violate SELinux policy go to the
+    audit log (Closes: #727771)
+  * New upstream release
+    - add new dependency on libsystemd-journal-dev for linux-any
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 29 Oct 2013 13:07:02 +0000
+
+dbus (1.7.6-2) experimental; urgency=low
+
+  * debian/rules: FTBFS if new symbols or libraries are added
+    without updating the symbols file
+  * debian/copyright: list copyright holders and minor licenses
+    (Closes: #726000)
+  * Merge packaging changes from unstable:
+    - Run `update-rc.d dbus defaults` instead of deprecated
+      `update-rc.d dbus start ...` (Closes: #725923)
+    - Add udeb packages, so the graphical installer can use AT-SPI
+      (Closes: #723952)
+    - Standards-Version: 3.9.4 (no changes needed)
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 12 Oct 2013 16:30:55 +0100
+
+dbus (1.7.6-1) experimental; urgency=low
+
+  * Standards-Version: 3.9.4 (no changes needed)
+  * New upstream development release
+    - update symbols
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 09 Oct 2013 16:44:43 +0100
+
+dbus (1.7.4-1) experimental; urgency=low
+
+  * New upstream development release
+    - CVE-2013-2168: avoid a user-triggerable crash (denial of services)
+      in system services that use libdbus
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 12 Jun 2013 19:53:00 +0100
+
+dbus (1.7.2-1) experimental; urgency=low
+
+  * New upstream development release
+  * Do the debug build --with-valgrind on mipsel, too
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 25 Apr 2013 13:46:10 +0100
+
+dbus (1.7.0-1) experimental; urgency=low
+
+  * Branch for experimental
+  * New upstream development release
+  * On architectures where it's currently supported, do the
+    debug build with --with-valgrind for better instrumentation
+  * debian/rules: factor out production and debug configure flags
+  * Add support for DEB_BUILD_OPTIONS=nodocs, which omits most documentation
+    (allowing doxygen and xmlto to be avoided) and the dbus-1-doc package
+  * Add support for DEB_BUILD_PROFILE=stage1, which does the same as nodocs
+    and additionally makes the debug build not insist on building all tests
+  * Make the development and debugging packages Multi-Arch: same,
+    since their arch-dependent files are all arch-segregated
+    (/usr/lib/TUPLE) or named according to a build-ID (/usr/lib/debug)
+    (Closes: #689071). This is not actually useful until pkg-config
+    becomes M-A: foreign (#631275).
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 22 Feb 2013 15:20:10 +0000
+
+dbus (1.6.18-2) unstable; urgency=medium
+
+  * Disable valgrind integration in the debug build on armel,
+    since valgrind no longer supports armel (Closes: #729136)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 02 Dec 2013 10:22:39 +0000
+
+dbus (1.6.18-1) unstable; urgency=low
+
+  * Run `update-rc.d dbus defaults` instead of deprecated
+    `update-rc.d dbus start ...` (Closes: #725923)
+  * debian/rules: FTBFS if new symbols or libraries are added
+    without updating the symbols file
+  * debian/copyright: list copyright holders and minor licenses
+    (Closes: #726000)
+  * New upstream release 1.6.18
+  * Standards-Version: 3.9.5 (no changes needed)
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 01 Nov 2013 16:30:33 +0000
+
+dbus (1.6.16-1) unstable; urgency=low
+
+  * New upstream stable release 1.6.16
+  * Backport the new dbus-run-session tool from D-Bus 1.7
+  * Add udeb packages, so the graphical installer can use AT-SPI
+    (Closes: #723952)
+  * Standards-Version: 3.9.4 (no changes needed)
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 08 Oct 2013 16:44:21 +0100
+
+dbus (1.6.14-1) unstable; urgency=low
+
+  * New upstream stable release 1.6.14
+    - fixes an infinite busy-loop if waitpid() is interrupted by a signal
+      while spawning a subprocess (Closes: #721932)
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 05 Sep 2013 16:42:55 +0100
+
+dbus (1.6.12-1) unstable; urgency=high
+
+  * New upstream stable release 1.6.12
+    - CVE-2013-2168: avoid a user-triggerable crash (denial of services)
+      in system services that use libdbus
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 12 Jun 2013 14:38:34 +0100
+
+dbus (1.6.10-1) unstable; urgency=low
+
+  * New upstream stable release 1.6.10
+  * Merge everything except the upstream development release from experimental:
+    - On architectures where it's currently supported, do the
+      debug build with --with-valgrind for better instrumentation
+    - debian/rules: factor out production and debug configure flags
+    - Add support for DEB_BUILD_OPTIONS=nodocs, which omits most documentation
+      (allowing doxygen and xmlto to be avoided) and the dbus-1-doc package
+    - Add support for DEB_BUILD_PROFILE=stage1, which does the same as nodocs
+      and additionally makes the debug build not insist on building all tests
+    - Make the development and debugging packages Multi-Arch: same,
+      since their arch-dependent files are all arch-segregated
+      (/usr/lib/TUPLE) or named according to a build-ID (/usr/lib/debug)
+      (Closes: #689071). This is not actually useful until pkg-config
+      becomes M-A: foreign (#631275).
+  * Do the debug build --with-valgrind on mipsel, too
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 08 May 2013 10:52:51 +0100
+
+dbus (1.6.8-1) unstable; urgency=low
+
+  * Merge from experimental
+  * New upstream stable release 1.6.6
+    - CVE-2012-3524: avoid arbitrary code execution in setuid or otherwise
+      privileged binaries that incorrectly use libdbus without first
+      sanitizing the environment variables inherited from their
+      less-privileged caller (Closes: #689070)
+  * New upstream stable release 1.6.8
+    - Revert part of 1.6.6 (do not check filesystem capabilities, only
+      setuid/setgid), fixing regressions in certain configurations of
+      gnome-keyring
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 29 Sep 2012 13:25:50 +0100
+
+dbus (1.6.4-1) experimental; urgency=low
+
+  * gbp.conf: switch to experimental branch
+  * New upstream stable release
+    - remove incorrect assertion and have correct default for developer mode
+      (Closes: #680027, differently)
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 18 Jul 2012 18:42:52 +0100
+
+dbus (1.6.2-2) unstable; urgency=low
+
+  * Disable "developer mode", which was intended to be off-by-default,
+    but was incorrectly on-by-default in 1.6.2, causing an incorrect
+    assertion to be hit when starting fcitx before dbus-launch.
+    (Closes: #680027)
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 03 Jul 2012 19:33:42 +0100
+
+dbus (1.6.2-1) unstable; urgency=low
+
+  * New upstream stable release
+    - dbus-launch --exit-with-session no longer monitors its stdin if
+      run under X11 (Closes: #453755)
+  * Remove the workaround for #453755 from dbus-Xsession
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 27 Jun 2012 18:22:20 +0100
+
+dbus (1.6.0-1) unstable; urgency=low
+
+  * Merge from "experimental" (1.5.12 was accidentally uploaded to unstable)
+  * New upstream stable release
+  * debian/watch: only match stable (0.even.x) releases
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 05 Jun 2012 14:23:46 +0100
+
+dbus (1.5.12-1) unstable; urgency=low
+
+  * Merge from unstable
+  * New upstream release
+    - adds new API
+  * Standards-Version: 3.9.3 (no changes)
+  * Remove lintian override for #629648, hopefully the ftpmasters are using
+    lintian 2.5.1 by now
+  * Add lintian overrides for the empty directories we (intentionally) ship
+  * Don't run dh_makeshlibs on dbus-1-dbg, nothing should be linking to its
+    extra-debug-enabled build of the library
+  * Register D-Bus documentation in doc-base
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 27 Mar 2012 18:36:38 +0100
+
+dbus (1.4.20-1) unstable; urgency=low
+
+  * New upstream release
+    - fixes FTBFS with GLib 2.32 (Closes: #665665)
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 27 Mar 2012 13:33:33 +0100
+
+dbus (1.5.10-1) experimental; urgency=low
+
+  * New upstream release
+  * Merge from unstable
+  * Build with systemd console-user-checking support
+  * Use debhelper 9 (mainly for compressed, build-ID-based debug symbols),
+    and dpkg's default.mk instead of hardening-includes
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 21 Feb 2012 18:24:14 +0000
 
 dbus (1.4.18-1) unstable; urgency=low
 
@@ -135,58 +461,12 @@ dbus (1.4.18-1) unstable; urgency=low
 
  -- Simon McVittie <smcv@debian.org>  Mon, 13 Feb 2012 17:17:43 +0000
 
-dbus (1.4.16-1ubuntu4) precise; urgency=low
+dbus (1.5.8-1) experimental; urgency=low
 
-  * debian/rules, debian/dbus-1-dbg.install: Only set --exec-prefix=/ in
-    the production build.  This prevents the debug version of dbus-daemon
-    from overwriting the non-debug version, which crashes the dbus-python
-    test suite.  This leaves the debug version in a somewhat bogus path,
-    but we won't worry about that for now.  Solution given by Jason Conti.
-    Also closes https://bugs.freedesktop.org/show_bug.cgi?id=43303
-    (LP: #913991)
+  * Merge from unstable
+  * New upstream release
 
- -- Barry Warsaw <barry@ubuntu.com>  Tue, 10 Jan 2012 15:52:43 +0100
-
-dbus (1.4.16-1ubuntu3) precise; urgency=low
-
-  * Add a post-stop in the upstart script making sure /var/run/dbus/pid
-    doesn't exist after dbus has been stopped/died. This fixes dbus
-    not respawning when dying (segfault for example).
-
- -- Stéphane Graber <stgraber@ubuntu.com>  Mon, 09 Jan 2012 15:15:50 +0100
-
-dbus (1.4.16-1ubuntu2) precise; urgency=low
-
-  * Add debian/patches/02_obsolete_g_thread_api.patch: Port to glib 2.31.x
-    g_thread API. Bump libglib2.0-dev build dep accordingly. (LP: #911125)
-
- -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 03 Jan 2012 11:08:46 +0100
-
-dbus (1.4.16-1ubuntu1) precise; urgency=low
-
-  * Merge with Debian testing. Remaining changes:
-    - Install binaries into / rather than /usr:
-      + debian/rules: Set --exec-prefix=/
-      + debian/dbus.install, debian/dbus-x11.install: Install from /bin
-    - Use upstart to start:
-      + Add debian/dbus.upstart.
-      + debian/control: Add upstart dependency.
-      + debian/dbus.postinst: Use upstart call instead of invoking the init.d
-        script for checking if we are already running. 
-      + debian/control: versioned dependency on netbase that emits the new
-        deconfiguring-networking event used in upstart script.
-    - 20_system_conf_limit.patch: Increase max_match_rules_per_connection for
-      the system bus to 5000 (LP #454093)
-    - 81-session.conf-timeout.patch: Raise the service startup timeout from 25
-      to 60 seconds. It may be too short on the live CD with slow machines.
-    - Add 0001-activation-allow-for-more-variation-than-just-system.patch,
-      0002-bus-change-systemd-activation-to-activation-systemd.patch,
-      0003-upstart-add-upstart-as-a-possible-activation-type.patch,
-      0004-upstart-add-UpstartJob-to-service-desktop-files.patch,
-      0005-activation-implement-upstart-activation.patch: Patches from Scott
-      James Remnant to implement Upstart service activation. Not upstream.
-
- -- Martin Pitt <martin.pitt@ubuntu.com>  Tue, 18 Oct 2011 18:10:19 +0200
+ -- Simon McVittie <smcv@debian.org>  Wed, 21 Sep 2011 18:32:46 +0100
 
 dbus (1.4.16-1) unstable; urgency=low
 
@@ -198,6 +478,13 @@ dbus (1.4.16-1) unstable; urgency=low
 
  -- Simon McVittie <smcv@debian.org>  Wed, 21 Sep 2011 15:32:10 +0100
 
+dbus (1.5.6-1) experimental; urgency=low
+
+  * Merge from unstable
+  * New upstream release
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 29 Jul 2011 16:56:04 +0100
+
 dbus (1.4.14-1) unstable; urgency=low
 
   * New upstream release
@@ -205,6 +492,12 @@ dbus (1.4.14-1) unstable; urgency=low
   * Remove --disable-gc-sections, unnecessary since 1.4.12
 
  -- Simon McVittie <smcv@debian.org>  Fri, 29 Jul 2011 16:50:56 +0100
+
+dbus (1.5.4-3) experimental; urgency=low
+
+  * Merge from unstable
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 15 Jul 2011 11:26:08 +0100
 
 dbus (1.4.12-5) unstable; urgency=low
 
@@ -245,6 +538,12 @@ dbus (1.4.12-3) unstable; urgency=low
 
  -- Simon McVittie <smcv@debian.org>  Thu, 30 Jun 2011 17:21:03 +0100
 
+dbus (1.5.4-2) experimental; urgency=low
+
+  * Merge from unstable
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 11 Jun 2011 19:33:40 +0100
+
 dbus (1.4.12-2) unstable; urgency=medium
 
   * Don't run tests during build (again), it appears they time out on most of
@@ -253,6 +552,24 @@ dbus (1.4.12-2) unstable; urgency=medium
     with automake1.9 like kfreebsd-i386 did
 
  -- Simon McVittie <smcv@debian.org>  Sat, 11 Jun 2011 14:11:04 +0100
+
+dbus (1.5.4-1) experimental; urgency=low
+
+  * Merge from unstable
+  * New(er) upstream version fixing local DoS (Closes: #629938)
+  * Revert some of the changes merged from Ubuntu, which look as though
+    they shouldn't be needed on either distribution:
+    - there's no need to create/chown messagebus' home directory, the sysvinit
+      script and the Upstart job both do that on-demand
+  * Revert changes which are useful in Ubuntu but not Debian:
+    - move everything except the library back into /usr; Debian doesn't have
+      any uses for dbus-daemon in early boot, and if we do later, we'd need to
+      get libexpat moved first
+      - this gets the locations back into sync with what it says in the
+        Xsession hook (Closes: #630011) and the init script (Closes: #629954)
+  * Improve comments in postinst explaining why it behaves as it does
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 10 Jun 2011 23:35:51 +0100
 
 dbus (1.4.12-1) unstable; urgency=medium
 
@@ -263,6 +580,24 @@ dbus (1.4.12-1) unstable; urgency=medium
     dependencies can be dropped if bootstrapping new architectures)
 
  -- Simon McVittie <smcv@debian.org>  Fri, 10 Jun 2011 22:39:14 +0100
+
+dbus (1.5.2-2) experimental; urgency=low
+
+  * Merge from unstable
+  * Merge and adapt from Ubuntu:
+    - create, chown messagebus' home directory in postinst
+    - run dbus-uuidgen --ensure in postinst
+    - call ReloadConfig with dbus-send in the postinst, since that'll work
+      regardless of whether dbus was started with sysvinit or Upstart; just
+      call it unconditionally, and ignore any failures we might see (in
+      chroots or if dbus-daemon wasn't running)
+    - move dbus-daemon and its helpers from /usr to /
+    - move libraries into multiarch locations
+  * Don't delete jquery.js, no longer installed by recent Doxygen
+  * libdbus-1-dev: explicitly pre-depend on multiarch-support to work around
+    debhelper and lintian disagreeing whether it's necessary
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 09 Jun 2011 08:00:24 +0100
 
 dbus (1.4.10-2) unstable; urgency=low
 
@@ -275,6 +610,13 @@ dbus (1.4.10-2) unstable; urgency=low
     they'll pass in a minimal build chroot
 
  -- Simon McVittie <smcv@debian.org>  Thu, 02 Jun 2011 17:08:25 +0100
+
+dbus (1.5.2-1) experimental; urgency=low
+
+  * Merge from unstable
+  * New(er) upstream version
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 01 Jun 2011 16:32:25 +0100
 
 dbus (1.4.10-1) unstable; urgency=low
 
@@ -298,6 +640,12 @@ dbus (1.4.10-1) unstable; urgency=low
 
  -- Simon McVittie <smcv@debian.org>  Wed, 01 Jun 2011 16:18:45 +0100
 
+dbus (1.5.0-2) experimental; urgency=low
+
+  * Merge from unstable
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 27 Apr 2011 16:41:52 +0100
+
 dbus (1.4.8-3) unstable; urgency=low
 
   * libdbus-1-3 Breaks versions of kdebase-workspace-bin and kde-window-manager
@@ -315,6 +663,13 @@ dbus (1.4.8-2) unstable; urgency=low
   * Re-upload with non-broken .changes file
 
  -- Simon McVittie <smcv@debian.org>  Tue, 19 Apr 2011 09:15:04 +0100
+
+dbus (1.5.0-1) experimental; urgency=low
+
+  * New upstream development version (targeting experimental)
+  * Remove jquery.js at the right location
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 11 Apr 2011 18:04:56 +0100
 
 dbus (1.4.8-1) unstable; urgency=low
 

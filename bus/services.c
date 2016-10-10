@@ -368,7 +368,7 @@ bus_registry_list_services (BusRegistry *registry,
   
  error:
   for (j = 0; j < i; j++)
-    dbus_free (retval[i]);
+    dbus_free (retval[j]);
   dbus_free (retval);
 
   return FALSE;
@@ -385,7 +385,6 @@ bus_registry_acquire_service (BusRegistry      *registry,
 {
   dbus_bool_t retval;
   DBusConnection *old_owner_conn;
-  DBusConnection *current_owner_conn;
   BusClientPolicy *policy;
   BusService *service;
   BusActivation  *activation;
@@ -460,8 +459,7 @@ bus_registry_acquire_service (BusRegistry      *registry,
       goto out;
     }
   
-  if (!bus_client_policy_check_can_own (policy, connection,
-                                        service_name))
+  if (!bus_client_policy_check_can_own (policy, service_name))
     {
       dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
                       "Connection \"%s\" is not allowed to own the service \"%s\" due "
@@ -510,12 +508,10 @@ bus_registry_acquire_service (BusRegistry      *registry,
   primary_owner = bus_service_get_primary_owner (service);
   if (primary_owner == NULL)
     goto out;
-    
-  current_owner_conn = primary_owner->conn;
-     
+
   if (old_owner_conn == NULL)
     {
-      _dbus_assert (current_owner_conn == connection);
+      _dbus_assert (primary_owner->conn == connection);
 
       *result = DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER;      
     }
@@ -592,8 +588,9 @@ bus_registry_acquire_service (BusRegistry      *registry,
   activation = bus_context_get_activation (registry->context);
   retval = bus_activation_send_pending_auto_activation_messages (activation,
 								 service,
-								 transaction,
-								 error);
+								 transaction);
+  if (!retval)
+    BUS_SET_OOM (error);
   
  out:
   return retval;

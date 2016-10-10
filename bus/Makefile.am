@@ -1,10 +1,30 @@
 configdir=$(sysconfdir)/dbus-1
 dbus_daemon_execdir = $(DBUS_DAEMONDIR)
 
-INCLUDES = -I$(top_srcdir) \
-	$(DBUS_BUS_CFLAGS) \
+DBUS_BUS_LIBS = \
+	$(XML_LIBS) \
+	$(SELINUX_LIBS) \
+	$(THREAD_LIBS) \
+	$(ADT_LIBS) \
+	$(NETWORK_libs) \
+	$(NULL)
+
+DBUS_LAUNCHER_LIBS = \
+	$(XML_LIBS) \
+	$(THREAD_LIBS) \
+	$(NETWORK_libs) \
+	$(NULL)
+
+AM_CPPFLAGS = \
+	-I$(top_srcdir) \
+	$(XML_CFLAGS) \
 	-DDBUS_SYSTEM_CONFIG_FILE=\""$(configdir)/system.conf"\" \
-	-DDBUS_COMPILATION
+	-DDBUS_COMPILATION \
+	-DDBUS_STATIC_BUILD \
+	$(NULL)
+
+# if assertions are enabled, improve backtraces
+AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 
 EFENCE=
 
@@ -22,12 +42,7 @@ agentdir=$(LAUNCHD_AGENT_DIR)
 agent_DATA=org.freedesktop.dbus-session.plist
 endif
 
-if DBUS_USE_LIBXML
-XML_SOURCES=config-loader-libxml.c
-endif
-if DBUS_USE_EXPAT
 XML_SOURCES=config-loader-expat.c
-endif
 
 if DBUS_BUS_ENABLE_KQUEUE
 DIR_WATCH_SOURCE=dir-watch-kqueue.c
@@ -35,11 +50,7 @@ else
 if DBUS_BUS_ENABLE_INOTIFY
 DIR_WATCH_SOURCE=dir-watch-inotify.c
 else
-if DBUS_BUS_ENABLE_DNOTIFY_ON_LINUX
-DIR_WATCH_SOURCE=dir-watch-dnotify.c
-else
 DIR_WATCH_SOURCE=dir-watch-default.c
-endif
 endif
 endif
 
@@ -73,6 +84,8 @@ BUS_SOURCES=					\
 	services.h				\
 	signals.c				\
 	signals.h				\
+	stats.c					\
+	stats.h					\
 	test.c					\
 	test.h					\
 	utils.c					\
@@ -83,13 +96,10 @@ dbus_daemon_SOURCES=				\
 	$(BUS_SOURCES)				\
 	main.c
 
-dbus_daemon_CPPFLAGS = -DDBUS_STATIC_BUILD
 dbus_daemon_LDADD=					\
 	$(top_builddir)/dbus/libdbus-internal.la	\
 	$(EFENCE)					\
 	$(DBUS_BUS_LIBS)
-
-dbus_daemon_LDFLAGS=@R_DYNAMIC_LDFLAG@
 
 LAUNCH_HELPER_SOURCES=				\
 	$(XML_SOURCES)				\
@@ -110,12 +120,9 @@ dbus_daemon_launch_helper_SOURCES=		\
 	activation-helper-bin.c			\
 	$(LAUNCH_HELPER_SOURCES)
 
-dbus_daemon_launch_helper_CPPFLAGS = -DDBUS_STATIC_BUILD
 dbus_daemon_launch_helper_LDADD=		\
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(DBUS_LAUNCHER_LIBS)
-
-dbus_daemon_launch_helper_LDFLAGS=@R_DYNAMIC_LDFLAG@
 
 ## we build another binary so we can do the launch testing without root privs.
 ## DO NOT INSTALL THIS FILE
@@ -127,22 +134,22 @@ dbus_daemon_launch_helper_test_LDADD=		\
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(DBUS_LAUNCHER_LIBS)
 
-dbus_daemon_launch_helper_test_LDFLAGS=@R_DYNAMIC_LDFLAG@
-dbus_daemon_launch_helper_test_CPPFLAGS= -DDBUS_STATIC_BUILD	\
+dbus_daemon_launch_helper_test_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
 	-DACTIVATION_LAUNCHER_TEST
 
 ## we build yet another binary so we can do the OOM tests
 ## DO NOT INSTALL THIS FILE
-bus_test_launch_helper_SOURCES=		\
+test_bus_launch_helper_SOURCES=		\
 	test-launch-helper.c   		\
 	$(LAUNCH_HELPER_SOURCES)
 
-bus_test_launch_helper_LDADD=		\
+test_bus_launch_helper_LDADD=		\
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(DBUS_LAUNCHER_LIBS)
 
-bus_test_launch_helper_LDFLAGS=@R_DYNAMIC_LDFLAG@
-bus_test_launch_helper_CPPFLAGS= -DDBUS_STATIC_BUILD	\
+test_bus_launch_helper_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
 	-DACTIVATION_LAUNCHER_TEST	\
 	-DACTIVATION_LAUNCHER_DO_OOM
 
@@ -157,23 +164,23 @@ endif DBUS_UNIX
 ## compiled, so we don't put them in TESTS here; we run them in test/
 ## instead.
 
-if DBUS_BUILD_TESTS
+if DBUS_ENABLE_EMBEDDED_TESTS
 ## we use noinst_PROGRAMS not check_PROGRAMS so that we build
 ## even when not doing "make check"
 
 # run as a test by test/Makefile.am
-noinst_PROGRAMS += bus-test bus-test-system
+noinst_PROGRAMS += test-bus test-bus-system
 
 if DBUS_UNIX
 # run as a test by test/Makefile.am
-noinst_PROGRAMS += bus-test-launch-helper
+noinst_PROGRAMS += test-bus-launch-helper
 # this is used by the tests but is not,itself, a test
 noinst_PROGRAMS += dbus-daemon-launch-helper-test
 endif DBUS_UNIX
 
-endif DBUS_BUILD_TESTS
+endif DBUS_ENABLE_EMBEDDED_TESTS
 
-bus_test_system_SOURCES=			\
+test_bus_system_SOURCES=			\
 	$(XML_SOURCES)				\
 	config-parser-common.c			\
 	config-parser-common.h			\
@@ -183,17 +190,13 @@ bus_test_system_SOURCES=			\
 	utils.h					\
 	test-system.c
 
-bus_test_system_CPPFLAGS = -DDBUS_STATIC_BUILD
-bus_test_system_LDADD=$(top_builddir)/dbus/libdbus-internal.la $(DBUS_BUS_LIBS)
-bus_test_system_LDFLAGS=@R_DYNAMIC_LDFLAG@
+test_bus_system_LDADD=$(top_builddir)/dbus/libdbus-internal.la $(DBUS_BUS_LIBS)
 
-bus_test_SOURCES=				\
+test_bus_SOURCES=				\
 	$(BUS_SOURCES)				\
 	test-main.c
 
-bus_test_CPPFLAGS = -DDBUS_STATIC_BUILD
-bus_test_LDADD=$(top_builddir)/dbus/libdbus-internal.la $(DBUS_BUS_LIBS)
-bus_test_LDFLAGS=@R_DYNAMIC_LDFLAG@
+test_bus_LDADD=$(top_builddir)/dbus/libdbus-internal.la $(DBUS_BUS_LIBS)
 
 ## mop up the gcov files
 clean-local:

@@ -26,6 +26,7 @@
 #include "dbus-protocol.h"
 #include "dbus-marshal-basic.h"
 #include "dbus-test.h"
+#include "dbus-valgrind-internal.h"
 #include <stdio.h>
 #include <stdarg.h>
 #include <string.h>
@@ -162,26 +163,11 @@
  */
 
 /**
- * @def _DBUS_DEFINE_GLOBAL_LOCK
- *
- * Defines a global lock variable with the given name.
- * The lock must be added to the list to initialize
- * in dbus_threads_init().
- */
-
-/**
- * @def _DBUS_DECLARE_GLOBAL_LOCK
- *
- * Expands to declaration of a global lock defined
- * with _DBUS_DEFINE_GLOBAL_LOCK.
- * The lock must be added to the list to initialize
- * in dbus_threads_init().
- */
-
-/**
  * @def _DBUS_LOCK
  *
- * Locks a global lock
+ * Locks a global lock, initializing it first if necessary.
+ *
+ * @returns #FALSE if not enough memory
  */
 
 /**
@@ -346,26 +332,22 @@ _dbus_verbose_init (void)
 */ 
 static char *_dbus_file_path_extract_elements_from_tail(const char *file,int level)
 {
-  static int prefix = -1;
-  char *p;
+  int prefix = 0;
+  char *p = (char *)file + strlen(file);
+  int i = 0;
 
-  if (prefix == -1) 
+  for (;p >= file;p--)
     {
-      char *p = (char *)file + strlen(file);
-      int i = 0;
-      prefix = 0;
-      for (;p >= file;p--)
+      if (DBUS_IS_DIR_SEPARATOR(*p))
         {
-          if (DBUS_IS_DIR_SEPARATOR(*p))
+          if (++i >= level)
             {
-              if (++i >= level) 
-                {
-                  prefix = p-file+1;
-                  break;
-                }
-           }
-        }
+              prefix = p-file+1;
+              break;
+            }
+       }
     }
+
   return (char *)file+prefix;
 }
 
@@ -390,14 +372,13 @@ _dbus_is_verbose_real (void)
  * @param format printf-style format string.
  */
 void
+_dbus_verbose_real (
 #ifdef DBUS_CPP_SUPPORTS_VARIABLE_MACRO_ARGUMENTS
-_dbus_verbose_real (const char *file, 
+                    const char *file,
                     const int line, 
                     const char *function, 
-                    const char *format,
-#else
-_dbus_verbose_real (const char *format,
 #endif
+                    const char *format,
                     ...)
 {
   va_list args;
@@ -464,6 +445,72 @@ void
 _dbus_verbose_reset_real (void)
 {
   verbose_initted = FALSE;
+}
+
+void
+_dbus_trace_ref (const char *obj_name,
+                 void       *obj,
+                 int         old_refcount,
+                 int         new_refcount,
+                 const char *why,
+                 const char *env_var,
+                 int        *enabled)
+{
+  _dbus_assert (obj_name != NULL);
+  _dbus_assert (obj != NULL);
+  _dbus_assert (old_refcount >= -1);
+  _dbus_assert (new_refcount >= -1);
+
+  if (old_refcount == -1)
+    {
+      _dbus_assert (new_refcount == -1);
+    }
+  else
+    {
+      _dbus_assert (new_refcount >= 0);
+      _dbus_assert (old_refcount >= 0);
+      _dbus_assert (old_refcount > 0 || new_refcount > 0);
+    }
+
+  _dbus_assert (why != NULL);
+  _dbus_assert (env_var != NULL);
+  _dbus_assert (enabled != NULL);
+
+  if (*enabled < 0)
+    {
+      const char *s = _dbus_getenv (env_var);
+
+      *enabled = FALSE;
+
+      if (s && *s)
+        {
+          if (*s == '0')
+            *enabled = FALSE;
+          else if (*s == '1')
+            *enabled = TRUE;
+          else
+            _dbus_warn ("%s should be 0 or 1 if set, not '%s'", env_var, s);
+        }
+    }
+
+  if (*enabled)
+    {
+      if (old_refcount == -1)
+        {
+          VALGRIND_PRINTF_BACKTRACE ("%s %p ref stolen (%s)",
+                                     obj_name, obj, why);
+          _dbus_verbose ("%s %p ref stolen (%s)\n",
+                         obj_name, obj, why);
+        }
+      else
+        {
+          VALGRIND_PRINTF_BACKTRACE ("%s %p %d -> %d refs (%s)",
+                                     obj_name, obj,
+                                     old_refcount, new_refcount, why);
+          _dbus_verbose ("%s %p %d -> %d refs (%s)\n",
+                         obj_name, obj, old_refcount, new_refcount, why);
+        }
+    }
 }
 
 #endif /* DBUS_ENABLE_VERBOSE_MODE */
@@ -595,7 +642,10 @@ _dbus_generate_uuid (DBusGUID *uuid)
 {
   long now;
 
-  _dbus_get_current_time (&now, NULL);
+  /* don't use monotonic time because the UUID may be saved to disk, e.g.
+   * it may persist across reboots
+   */
+  _dbus_get_real_time (&now, NULL);
 
   uuid->as_uint32s[DBUS_UUID_LENGTH_WORDS - 1] = DBUS_UINT32_TO_BE (now);
   
@@ -695,10 +745,18 @@ _dbus_read_uuid_file_without_creating (const DBusString *filename,
   return FALSE;
 }
 
-static dbus_bool_t
-_dbus_create_uuid_file_exclusively (const DBusString *filename,
-                                    DBusGUID         *uuid,
-                                    DBusError        *error)
+/**
+ * Write the give UUID to a file.
+ *
+ * @param filename the file to write
+ * @param uuid the UUID to save
+ * @param error used to raise an error
+ * @returns #FALSE on error
+ */
+dbus_bool_t
+_dbus_write_uuid_file (const DBusString *filename,
+                       const DBusGUID   *uuid,
+                       DBusError        *error)
 {
   DBusString encoded;
 
@@ -707,8 +765,6 @@ _dbus_create_uuid_file_exclusively (const DBusString *filename,
       _DBUS_SET_OOM (error);
       return FALSE;
     }
-
-  _dbus_generate_uuid (uuid);
   
   if (!_dbus_uuid_encode (uuid, &encoded))
     {
@@ -775,11 +831,12 @@ _dbus_read_uuid_file (const DBusString *filename,
   else
     {
       dbus_error_free (&read_error);
-      return _dbus_create_uuid_file_exclusively (filename, uuid, error);
+      _dbus_generate_uuid (uuid);
+      return _dbus_write_uuid_file (filename, uuid, error);
     }
 }
 
-_DBUS_DEFINE_GLOBAL_LOCK (machine_uuid);
+/* Protected by _DBUS_LOCK (machine_uuid) */
 static int machine_uuid_initialized_generation = 0;
 static DBusGUID machine_uuid;
 
@@ -798,7 +855,9 @@ _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str)
 {
   dbus_bool_t ok;
   
-  _DBUS_LOCK (machine_uuid);
+  if (!_DBUS_LOCK (machine_uuid))
+    return FALSE;
+
   if (machine_uuid_initialized_generation != _dbus_current_generation)
     {
       DBusError error = DBUS_ERROR_INIT;
@@ -806,7 +865,7 @@ _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str)
       if (!_dbus_read_local_machine_uuid (&machine_uuid, FALSE,
                                           &error))
         {          
-#ifndef DBUS_BUILD_TESTS
+#ifndef DBUS_ENABLE_EMBEDDED_TESTS
           /* For the test suite, we may not be installed so just continue silently
            * here. But in a production build, we want to be nice and loud about
            * this.
@@ -828,42 +887,6 @@ _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str)
 
   return ok;
 }
-
-#ifdef DBUS_BUILD_TESTS
-/**
- * Returns a string describing the given name.
- *
- * @param header_field the field to describe
- * @returns a constant string describing the field
- */
-const char *
-_dbus_header_field_to_string (int header_field)
-{
-  switch (header_field)
-    {
-    case DBUS_HEADER_FIELD_INVALID:
-      return "invalid";
-    case DBUS_HEADER_FIELD_PATH:
-      return "path";
-    case DBUS_HEADER_FIELD_INTERFACE:
-      return "interface";
-    case DBUS_HEADER_FIELD_MEMBER:
-      return "member";
-    case DBUS_HEADER_FIELD_ERROR_NAME:
-      return "error-name";
-    case DBUS_HEADER_FIELD_REPLY_SERIAL:
-      return "reply-serial";
-    case DBUS_HEADER_FIELD_DESTINATION:
-      return "destination";
-    case DBUS_HEADER_FIELD_SENDER:
-      return "sender";
-    case DBUS_HEADER_FIELD_SIGNATURE:
-      return "signature";
-    default:
-      return "unknown";
-    }
-}
-#endif /* DBUS_BUILD_TESTS */
 
 #ifndef DBUS_DISABLE_CHECKS
 /** String used in _dbus_return_if_fail macro */
@@ -921,7 +944,7 @@ _dbus_real_assert_not_reached (const char *explanation,
 }
 #endif /* DBUS_DISABLE_ASSERT */
   
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 static dbus_bool_t
 run_failing_each_malloc (int                    n_mallocs,
                          const char            *description,
@@ -1016,6 +1039,6 @@ _dbus_test_oom_handling (const char             *description,
 
   return TRUE;
 }
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
 /** @} */

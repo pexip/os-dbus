@@ -35,10 +35,15 @@
 #include "dbus-list.h"
 #include "dbus-threads-internal.h"
 #ifdef HAVE_UNIX_FD_PASSING
+#include "dbus-sysdeps.h"
 #include "dbus-sysdeps-unix.h"
 #endif
 
 #include <string.h>
+
+#define _DBUS_TYPE_IS_STRINGLIKE(type) \
+  (type == DBUS_TYPE_STRING || type == DBUS_TYPE_SIGNATURE || \
+   type == DBUS_TYPE_OBJECT_PATH)
 
 static void dbus_message_finalize (DBusMessage *message);
 
@@ -51,6 +56,51 @@ static void dbus_message_finalize (DBusMessage *message);
  *
  * @{
  */
+
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+static dbus_bool_t
+_dbus_enable_message_cache (void)
+{
+  static int enabled = -1;
+
+  if (enabled < 0)
+    {
+      const char *s = _dbus_getenv ("DBUS_MESSAGE_CACHE");
+
+      enabled = TRUE;
+
+      if (s && *s)
+        {
+          if (*s == '0')
+            enabled = FALSE;
+          else if (*s == '1')
+            enabled = TRUE;
+          else
+            _dbus_warn ("DBUS_MESSAGE_CACHE should be 0 or 1 if set, not '%s'",
+                s);
+        }
+    }
+
+  return enabled;
+}
+#else
+    /* constant expression, should be optimized away */
+#   define _dbus_enable_message_cache() (TRUE)
+#endif
+
+#ifndef _dbus_message_trace_ref
+void
+_dbus_message_trace_ref (DBusMessage *message,
+                         int          old_refcount,
+                         int          new_refcount,
+                         const char  *why)
+{
+  static int enabled = -1;
+
+  _dbus_trace_ref ("DBusMessage", message, old_refcount, new_refcount, why,
+      "DBUS_MESSAGE_TRACE", &enabled);
+}
+#endif
 
 /* Not thread locked, but strictly const/read-only so should be OK
  */
@@ -115,8 +165,11 @@ _dbus_message_byteswap (DBusMessage *message)
 {
   const DBusString *type_str;
   int type_pos;
-  
-  if (message->byte_order == DBUS_COMPILER_BYTE_ORDER)
+  char byte_order;
+
+  byte_order = _dbus_header_get_byte_order (&message->header);
+
+  if (byte_order == DBUS_COMPILER_BYTE_ORDER)
     return;
 
   _dbus_verbose ("Swapping message into compiler byte order\n");
@@ -124,13 +177,13 @@ _dbus_message_byteswap (DBusMessage *message)
   get_const_signature (&message->header, &type_str, &type_pos);
   
   _dbus_marshal_byteswap (type_str, type_pos,
-                          message->byte_order,
+                          byte_order,
                           DBUS_COMPILER_BYTE_ORDER,
                           &message->body, 0);
 
-  message->byte_order = DBUS_COMPILER_BYTE_ORDER;
-  
   _dbus_header_byteswap (&message->header, DBUS_COMPILER_BYTE_ORDER);
+  _dbus_assert (_dbus_header_get_byte_order (&message->header) ==
+                DBUS_COMPILER_BYTE_ORDER);
 }
 
 /** byte-swap the message if it doesn't match our byte order.
@@ -139,9 +192,7 @@ _dbus_message_byteswap (DBusMessage *message)
  *  Otherwise should not be called since it would do needless
  *  work.
  */
-#define ensure_byte_order(message)                      \
- if (message->byte_order != DBUS_COMPILER_BYTE_ORDER)   \
-   _dbus_message_byteswap (message)
+#define ensure_byte_order(message) _dbus_message_byteswap (message)
 
 /**
  * Gets the data to be sent over the network for this message.
@@ -217,6 +268,11 @@ dbus_message_set_serial (DBusMessage   *message,
  * itself not incremented.  Ownership of link and counter refcount is
  * passed to the message.
  *
+ * This function may be called with locks held. As a result, the counter's
+ * notify function is not called; the caller is expected to either call
+ * _dbus_counter_notify() on the counter when they are no longer holding
+ * locks, or take the same action that would be taken by the notify function.
+ *
  * @param message the message
  * @param link link with counter as data
  */
@@ -260,6 +316,11 @@ _dbus_message_add_counter_link (DBusMessage  *message,
  * of this message, and decremented by the size/unix fds of this
  * message when this message if finalized.
  *
+ * This function may be called with locks held. As a result, the counter's
+ * notify function is not called; the caller is expected to either call
+ * _dbus_counter_notify() on the counter when they are no longer holding
+ * locks, or take the same action that would be taken by the notify function.
+ *
  * @param message the message
  * @param counter the counter
  * @returns #FALSE if no memory
@@ -285,13 +346,11 @@ _dbus_message_add_counter (DBusMessage *message,
  * decrements the counter by the size/unix fds of this message.
  *
  * @param message the message
- * @param link_return return the link used
  * @param counter the counter
  */
 void
 _dbus_message_remove_counter (DBusMessage  *message,
-                              DBusCounter  *counter,
-                              DBusList    **link_return)
+                              DBusCounter  *counter)
 {
   DBusList *link;
 
@@ -299,12 +358,7 @@ _dbus_message_remove_counter (DBusMessage  *message,
                                counter);
   _dbus_assert (link != NULL);
 
-  _dbus_list_unlink (&message->counters,
-                     link);
-  if (link_return)
-    *link_return = link;
-  else
-    _dbus_list_free_link (link);
+  _dbus_list_remove_link (&message->counters, link);
 
   _dbus_counter_adjust_size (counter, - message->size_counter_delta);
 
@@ -312,6 +366,7 @@ _dbus_message_remove_counter (DBusMessage  *message,
   _dbus_counter_adjust_unix_fd (counter, - message->unix_fd_counter_delta);
 #endif
 
+  _dbus_counter_notify (counter);
   _dbus_counter_unref (counter);
 }
 
@@ -452,7 +507,7 @@ _dbus_message_set_signature (DBusMessage *message,
 /** Avoid caching too many messages */
 #define MAX_MESSAGE_CACHE_SIZE    5
 
-_DBUS_DEFINE_GLOBAL_LOCK (message_cache);
+/* Protected by _DBUS_LOCK (message_cache) */
 static DBusMessage *message_cache[MAX_MESSAGE_CACHE_SIZE];
 static int message_cache_count = 0;
 static dbus_bool_t message_cache_shutdown_registered = FALSE;
@@ -462,7 +517,9 @@ dbus_message_cache_shutdown (void *data)
 {
   int i;
 
-  _DBUS_LOCK (message_cache);
+  if (!_DBUS_LOCK (message_cache))
+    _dbus_assert_not_reached ("we would have initialized global locks "
+        "before registering a shutdown function");
 
   i = 0;
   while (i < MAX_MESSAGE_CACHE_SIZE)
@@ -494,7 +551,12 @@ dbus_message_get_cached (void)
 
   message = NULL;
 
-  _DBUS_LOCK (message_cache);
+  if (!_DBUS_LOCK (message_cache))
+    {
+      /* we'd have initialized global locks before caching anything,
+       * so there can't be anything in the cache */
+      return NULL;
+    }
 
   _dbus_assert (message_cache_count >= 0);
 
@@ -574,6 +636,7 @@ free_counter (void *element,
   _dbus_counter_adjust_unix_fd (counter, - message->unix_fd_counter_delta);
 #endif
 
+  _dbus_counter_notify (counter);
   _dbus_counter_unref (counter);
 }
 
@@ -605,7 +668,13 @@ dbus_message_cache_or_finalize (DBusMessage *message)
 
   was_cached = FALSE;
 
-  _DBUS_LOCK (message_cache);
+  if (!_DBUS_LOCK (message_cache))
+    {
+      /* The only way to get a non-null message goes through
+       * dbus_message_get_cached() which takes the lock. */
+      _dbus_assert_not_reached ("we would have initialized global locks "
+          "the first time we constructed a message");
+    }
 
   if (!message_cache_shutdown_registered)
     {
@@ -625,6 +694,9 @@ dbus_message_cache_or_finalize (DBusMessage *message)
     }
 
   _dbus_assert (message_cache_count >= 0);
+
+  if (!_dbus_enable_message_cache ())
+    goto out;
 
   if ((_dbus_string_get_length (&message->header.data) +
        _dbus_string_get_length (&message->body)) >
@@ -658,19 +730,23 @@ dbus_message_cache_or_finalize (DBusMessage *message)
     dbus_message_finalize (message);
 }
 
-#ifndef DBUS_DISABLE_CHECKS
+#if defined(DBUS_ENABLE_CHECKS) || defined(DBUS_ENABLE_ASSERT)
 static dbus_bool_t
 _dbus_message_iter_check (DBusMessageRealIter *iter)
 {
+  char byte_order;
+
   if (iter == NULL)
     {
       _dbus_warn_check_failed ("dbus message iterator is NULL\n");
       return FALSE;
     }
 
+  byte_order = _dbus_header_get_byte_order (&iter->message->header);
+
   if (iter->iter_type == DBUS_MESSAGE_ITER_TYPE_READER)
     {
-      if (iter->u.reader.byte_order != iter->message->byte_order)
+      if (iter->u.reader.byte_order != byte_order)
         {
           _dbus_warn_check_failed ("dbus message changed byte order since iterator was created\n");
           return FALSE;
@@ -680,7 +756,7 @@ _dbus_message_iter_check (DBusMessageRealIter *iter)
     }
   else if (iter->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER)
     {
-      if (iter->u.writer.byte_order != iter->message->byte_order)
+      if (iter->u.writer.byte_order != byte_order)
         {
           _dbus_warn_check_failed ("dbus message changed byte order since append iterator was created\n");
           return FALSE;
@@ -702,14 +778,12 @@ _dbus_message_iter_check (DBusMessageRealIter *iter)
 
   return TRUE;
 }
-#endif /* DBUS_DISABLE_CHECKS */
+#endif /* DBUS_ENABLE_CHECKS || DBUS_ENABLE_ASSERT */
 
 /**
  * Implementation of the varargs arg-getting functions.
  * dbus_message_get_args() is the place to go for complete
  * documentation.
- *
- * @todo This may leak memory and file descriptors if parsing fails. See #21259
  *
  * @see dbus_message_get_args
  * @param iter the message iter
@@ -725,8 +799,9 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
                                     va_list          var_args)
 {
   DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
-  int spec_type, msg_type, i;
+  int spec_type, msg_type, i, j;
   dbus_bool_t retval;
+  va_list copy_args;
 
   _dbus_assert (_dbus_message_iter_check (real));
 
@@ -735,12 +810,17 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
   spec_type = first_arg_type;
   i = 0;
 
+  /* copy var_args first, then we can do another iteration over it to
+   * free memory and close unix fds if parse failed at some point.
+   */
+  DBUS_VA_COPY (copy_args, var_args);
+
   while (spec_type != DBUS_TYPE_INVALID)
     {
       msg_type = dbus_message_iter_get_arg_type (iter);
 
       if (msg_type != spec_type)
-	{
+        {
           dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
                           "Argument %d is specified to be of type \"%s\", but "
                           "is actually of type \"%s\"\n", i,
@@ -748,7 +828,7 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
                           _dbus_type_to_string (msg_type));
 
           goto out;
-	}
+        }
 
       if (spec_type == DBUS_TYPE_UNIX_FD)
         {
@@ -829,9 +909,7 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
               _dbus_type_reader_read_fixed_multi (&array,
                                                   (void *) ptr, n_elements_p);
             }
-          else if (spec_element_type == DBUS_TYPE_STRING ||
-                   spec_element_type == DBUS_TYPE_SIGNATURE ||
-                   spec_element_type == DBUS_TYPE_OBJECT_PATH)
+          else if (_DBUS_TYPE_IS_STRINGLIKE (spec_element_type))
             {
               char ***str_array_p;
               int n_elements;
@@ -863,30 +941,30 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
               /* Now go through and dup each string */
               _dbus_type_reader_recurse (&real->u.reader, &array);
 
-              i = 0;
-              while (i < n_elements)
+              j = 0;
+              while (j < n_elements)
                 {
                   const char *s;
                   _dbus_type_reader_read_basic (&array,
                                                 (void *) &s);
                   
-                  str_array[i] = _dbus_strdup (s);
-                  if (str_array[i] == NULL)
+                  str_array[j] = _dbus_strdup (s);
+                  if (str_array[j] == NULL)
                     {
                       dbus_free_string_array (str_array);
                       _DBUS_SET_OOM (error);
                       goto out;
                     }
                   
-                  ++i;
+                  ++j;
                   
                   if (!_dbus_type_reader_next (&array))
-                    _dbus_assert (i == n_elements);
+                    _dbus_assert (j == n_elements);
                 }
 
               _dbus_assert (_dbus_type_reader_get_current_type (&array) == DBUS_TYPE_INVALID);
-              _dbus_assert (i == n_elements);
-              _dbus_assert (str_array[i] == NULL);
+              _dbus_assert (j == n_elements);
+              _dbus_assert (str_array[j] == NULL);
 
               *str_array_p = str_array;
               *n_elements_p = n_elements;
@@ -909,6 +987,9 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
         }
 #endif
 
+      /* how many arguments already handled */
+      i++;
+
       spec_type = va_arg (var_args, int);
       if (!_dbus_type_reader_next (&real->u.reader) && spec_type != DBUS_TYPE_INVALID)
         {
@@ -916,14 +997,71 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
                           "Message has only %d arguments, but more were expected", i);
           goto out;
         }
-
-      i++;
     }
 
   retval = TRUE;
 
  out:
+  /* there may memory or unix fd leak in the above iteration if parse failed.
+   * so we have another iteration over copy_args to free memory and close
+   * unix fds.
+   */
+  if (!retval)
+    {
+      spec_type = first_arg_type;
+      j = 0;
 
+      while (j < i)
+        {
+          if (spec_type == DBUS_TYPE_UNIX_FD)
+            {
+#ifdef HAVE_UNIX_FD_PASSING
+              int *pfd;
+
+              pfd = va_arg (copy_args, int *);
+              _dbus_assert(pfd);
+              if (*pfd >= 0)
+                {
+                  _dbus_close (*pfd, NULL);
+                  *pfd = -1;
+                }
+#endif
+            }
+          else if (dbus_type_is_basic (spec_type))
+            {
+              /* move the index forward */
+              va_arg (copy_args, DBusBasicValue *);
+            }
+          else if (spec_type == DBUS_TYPE_ARRAY)
+            {
+              int spec_element_type;
+
+              spec_element_type = va_arg (copy_args, int);
+              if (dbus_type_is_fixed (spec_element_type))
+                {
+                  /* move the index forward */
+                  va_arg (copy_args, const DBusBasicValue **);
+                  va_arg (copy_args, int *);
+                }
+              else if (_DBUS_TYPE_IS_STRINGLIKE (spec_element_type))
+                {
+                  char ***str_array_p;
+
+                  str_array_p = va_arg (copy_args, char ***);
+                  /* move the index forward */
+                  va_arg (copy_args, int *);
+                  _dbus_assert (str_array_p != NULL);
+                  dbus_free_string_array (*str_array_p);
+                  *str_array_p = NULL;
+                }
+            }
+
+          spec_type = va_arg (copy_args, int);
+          j++;
+        }
+    }
+
+  va_end (copy_args);
   return retval;
 }
 
@@ -1092,7 +1230,8 @@ dbus_message_new_empty_header (void)
 
   _dbus_atomic_inc (&message->refcount);
 
-  message->byte_order = DBUS_COMPILER_BYTE_ORDER;
+  _dbus_message_trace_ref (message, 0, 1, "new_empty_header");
+
   message->locked = FALSE;
 #ifndef DBUS_DISABLE_CHECKS
   message->in_cache = FALSE;
@@ -1112,12 +1251,12 @@ dbus_message_new_empty_header (void)
 
   if (from_cache)
     {
-      _dbus_header_reinit (&message->header, message->byte_order);
+      _dbus_header_reinit (&message->header);
       _dbus_string_set_length (&message->body, 0);
     }
   else
     {
-      if (!_dbus_header_init (&message->header, message->byte_order))
+      if (!_dbus_header_init (&message->header))
         {
           dbus_free (message);
           return NULL;
@@ -1158,6 +1297,7 @@ dbus_message_new (int message_type)
     return NULL;
 
   if (!_dbus_header_create (&message->header,
+                            DBUS_COMPILER_BYTE_ORDER,
                             message_type,
                             NULL, NULL, NULL, NULL, NULL))
     {
@@ -1184,7 +1324,7 @@ dbus_message_new (int message_type)
  * 
  * @param destination name that the message should be sent to or #NULL
  * @param path object path the message should be sent to
- * @param interface interface to invoke method on, or #NULL
+ * @param iface interface to invoke method on, or #NULL
  * @param method method to invoke
  *
  * @returns a new DBusMessage, free with dbus_message_unref()
@@ -1192,7 +1332,7 @@ dbus_message_new (int message_type)
 DBusMessage*
 dbus_message_new_method_call (const char *destination,
                               const char *path,
-                              const char *interface,
+                              const char *iface,
                               const char *method)
 {
   DBusMessage *message;
@@ -1202,8 +1342,8 @@ dbus_message_new_method_call (const char *destination,
   _dbus_return_val_if_fail (destination == NULL ||
                             _dbus_check_is_valid_bus_name (destination), NULL);
   _dbus_return_val_if_fail (_dbus_check_is_valid_path (path), NULL);
-  _dbus_return_val_if_fail (interface == NULL ||
-                            _dbus_check_is_valid_interface (interface), NULL);
+  _dbus_return_val_if_fail (iface == NULL ||
+                            _dbus_check_is_valid_interface (iface), NULL);
   _dbus_return_val_if_fail (_dbus_check_is_valid_member (method), NULL);
 
   message = dbus_message_new_empty_header ();
@@ -1211,8 +1351,9 @@ dbus_message_new_method_call (const char *destination,
     return NULL;
 
   if (!_dbus_header_create (&message->header,
+                            DBUS_COMPILER_BYTE_ORDER,
                             DBUS_MESSAGE_TYPE_METHOD_CALL,
-                            destination, path, interface, method, NULL))
+                            destination, path, iface, method, NULL))
     {
       dbus_message_unref (message);
       return NULL;
@@ -1245,6 +1386,7 @@ dbus_message_new_method_return (DBusMessage *method_call)
     return NULL;
 
   if (!_dbus_header_create (&message->header,
+                            DBUS_COMPILER_BYTE_ORDER,
                             DBUS_MESSAGE_TYPE_METHOD_RETURN,
                             sender, NULL, NULL, NULL, NULL))
     {
@@ -1274,22 +1416,22 @@ dbus_message_new_method_return (DBusMessage *method_call)
  * specification defines the syntax of these fields).
  * 
  * @param path the path to the object emitting the signal
- * @param interface the interface the signal is emitted from
+ * @param iface the interface the signal is emitted from
  * @param name name of the signal
  * @returns a new DBusMessage, free with dbus_message_unref()
  */
 DBusMessage*
 dbus_message_new_signal (const char *path,
-                         const char *interface,
+                         const char *iface,
                          const char *name)
 {
   DBusMessage *message;
 
   _dbus_return_val_if_fail (path != NULL, NULL);
-  _dbus_return_val_if_fail (interface != NULL, NULL);
+  _dbus_return_val_if_fail (iface != NULL, NULL);
   _dbus_return_val_if_fail (name != NULL, NULL);
   _dbus_return_val_if_fail (_dbus_check_is_valid_path (path), NULL);
-  _dbus_return_val_if_fail (_dbus_check_is_valid_interface (interface), NULL);
+  _dbus_return_val_if_fail (_dbus_check_is_valid_interface (iface), NULL);
   _dbus_return_val_if_fail (_dbus_check_is_valid_member (name), NULL);
 
   message = dbus_message_new_empty_header ();
@@ -1297,8 +1439,9 @@ dbus_message_new_signal (const char *path,
     return NULL;
 
   if (!_dbus_header_create (&message->header,
+                            DBUS_COMPILER_BYTE_ORDER,
                             DBUS_MESSAGE_TYPE_SIGNAL,
-                            NULL, path, interface, name, NULL))
+                            NULL, path, iface, name, NULL))
     {
       dbus_message_unref (message);
       return NULL;
@@ -1347,6 +1490,7 @@ dbus_message_new_error (DBusMessage *reply_to,
     return NULL;
 
   if (!_dbus_header_create (&message->header,
+                            DBUS_COMPILER_BYTE_ORDER,
                             DBUS_MESSAGE_TYPE_ERROR,
                             sender, NULL, NULL, NULL, error_name))
     {
@@ -1451,7 +1595,7 @@ dbus_message_copy (const DBusMessage *message)
     return NULL;
 
   _dbus_atomic_inc (&retval->refcount);
-  retval->byte_order = message->byte_order;
+
   retval->locked = FALSE;
 #ifndef DBUS_DISABLE_CHECKS
   retval->generation = message->generation;
@@ -1494,6 +1638,7 @@ dbus_message_copy (const DBusMessage *message)
 
 #endif
 
+  _dbus_message_trace_ref (retval, 0, 1, "copy");
   return retval;
 
  failed_copy:
@@ -1521,20 +1666,15 @@ dbus_message_copy (const DBusMessage *message)
 DBusMessage *
 dbus_message_ref (DBusMessage *message)
 {
-#ifndef DBUS_DISABLE_ASSERT
   dbus_int32_t old_refcount;
-#endif
 
   _dbus_return_val_if_fail (message != NULL, NULL);
   _dbus_return_val_if_fail (message->generation == _dbus_current_generation, NULL);
   _dbus_return_val_if_fail (!message->in_cache, NULL);
 
-#ifdef DBUS_DISABLE_ASSERT
-  _dbus_atomic_inc (&message->refcount);
-#else
   old_refcount = _dbus_atomic_inc (&message->refcount);
   _dbus_assert (old_refcount >= 1);
-#endif
+  _dbus_message_trace_ref (message, old_refcount, old_refcount + 1, "ref");
 
   return message;
 }
@@ -1558,6 +1698,8 @@ dbus_message_unref (DBusMessage *message)
   old_refcount = _dbus_atomic_dec (&message->refcount);
 
   _dbus_assert (old_refcount >= 1);
+
+  _dbus_message_trace_ref (message, old_refcount, old_refcount - 1, "unref");
 
   if (old_refcount == 1)
     {
@@ -1737,9 +1879,7 @@ dbus_message_append_args_valist (DBusMessage *message,
                 goto failed;
               }
             }
-          else if (element_type == DBUS_TYPE_STRING ||
-                   element_type == DBUS_TYPE_SIGNATURE ||
-                   element_type == DBUS_TYPE_OBJECT_PATH)
+          else if (_DBUS_TYPE_IS_STRINGLIKE (element_type))
             {
               const char ***value_p;
               const char **value;
@@ -1937,7 +2077,7 @@ dbus_message_iter_init (DBusMessage     *message,
                                   DBUS_MESSAGE_ITER_TYPE_READER);
 
   _dbus_type_reader_init (&real->u.reader,
-                          message->byte_order,
+                          _dbus_header_get_byte_order (&message->header),
                           type_str, type_pos,
                           &message->body,
                           0);
@@ -2129,22 +2269,22 @@ dbus_message_iter_get_signature (DBusMessageIter *iter)
  * descriptors), you can get all the array elements at once with
  * dbus_message_iter_get_fixed_array(). Otherwise, you have to iterate
  * over the container's contents one value at a time.
- * 
- * All basic-typed values are guaranteed to fit in 8 bytes. So you can
- * write code like this:
+ *
+ * All basic-typed values are guaranteed to fit in a #DBusBasicValue,
+ * so in versions of libdbus that have that type, you can write code like this:
  *
  * @code
- * dbus_uint64_t value;
+ * DBusBasicValue value;
  * int type;
  * dbus_message_iter_get_basic (&read_iter, &value);
  * type = dbus_message_iter_get_arg_type (&read_iter);
  * dbus_message_iter_append_basic (&write_iter, type, &value);
  * @endcode
  *
- * On some really obscure platforms dbus_uint64_t might not exist, if
- * you need to worry about this you will know.  dbus_uint64_t is just
- * one example of a type that's large enough to hold any possible
- * value, you could use a struct or char[8] instead if you like.
+ * (All D-Bus basic types are either numeric and 8 bytes or smaller, or
+ * behave like a string; so in older versions of libdbus, DBusBasicValue
+ * can be replaced with union { char *string; unsigned char bytes[8]; },
+ * for instance.)
  *
  * @param iter the iterator
  * @param value location to store the value
@@ -2253,12 +2393,14 @@ dbus_message_iter_get_fixed_array (DBusMessageIter  *iter,
                                    int              *n_elements)
 {
   DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
+#ifndef DBUS_DISABLE_CHECKS
   int subtype = _dbus_type_reader_get_current_type(&real->u.reader);
 
   _dbus_return_if_fail (_dbus_message_iter_check (real));
   _dbus_return_if_fail (value != NULL);
   _dbus_return_if_fail ((subtype == DBUS_TYPE_INVALID) ||
                         (dbus_type_is_fixed (subtype) && subtype != DBUS_TYPE_UNIX_FD));
+#endif
 
   _dbus_type_reader_read_fixed_multi (&real->u.reader,
                                       value, n_elements);
@@ -2292,7 +2434,7 @@ dbus_message_iter_init_append (DBusMessage     *message,
    * due to OOM.
    */
   _dbus_type_writer_init_types_delayed (&real->u.writer,
-                                        message->byte_order,
+                                        _dbus_header_get_byte_order (&message->header),
                                         &message->body,
                                         _dbus_string_get_length (&message->body));
 }
@@ -2810,12 +2952,14 @@ dbus_message_iter_abandon_container (DBusMessageIter *iter,
                                      DBusMessageIter *sub)
 {
   DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
+#ifndef DBUS_DISABLE_CHECKS
   DBusMessageRealIter *real_sub = (DBusMessageRealIter *)sub;
 
   _dbus_return_if_fail (_dbus_message_iter_append_check (real));
   _dbus_return_if_fail (real->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
   _dbus_return_if_fail (_dbus_message_iter_append_check (real_sub));
   _dbus_return_if_fail (real_sub->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
+#endif
 
   _dbus_message_iter_abandon_signature (real);
 }
@@ -3047,23 +3191,23 @@ dbus_message_get_path_decomposed (DBusMessage   *message,
  * in the D-Bus specification.
  * 
  * @param message the message
- * @param interface the interface or #NULL to unset
+ * @param iface the interface or #NULL to unset
  * @returns #FALSE if not enough memory
  */
 dbus_bool_t
 dbus_message_set_interface (DBusMessage  *message,
-                            const char   *interface)
+                            const char   *iface)
 {
   _dbus_return_val_if_fail (message != NULL, FALSE);
   _dbus_return_val_if_fail (!message->locked, FALSE);
-  _dbus_return_val_if_fail (interface == NULL ||
-                            _dbus_check_is_valid_interface (interface),
+  _dbus_return_val_if_fail (iface == NULL ||
+                            _dbus_check_is_valid_interface (iface),
                             FALSE);
 
   return set_or_delete_string_field (message,
                                      DBUS_HEADER_FIELD_INTERFACE,
                                      DBUS_TYPE_STRING,
-                                     interface);
+                                     iface);
 }
 
 /**
@@ -3098,28 +3242,28 @@ dbus_message_get_interface (DBusMessage *message)
  * Checks if the message has an interface
  *
  * @param message the message
- * @param interface the interface name
+ * @param iface the interface name
  * @returns #TRUE if the interface field in the header matches
  */
 dbus_bool_t
 dbus_message_has_interface (DBusMessage   *message,
-                            const char    *interface)
+                            const char    *iface)
 {
   const char *msg_interface;
   msg_interface = dbus_message_get_interface (message);
    
   if (msg_interface == NULL)
     {
-      if (interface == NULL)
+      if (iface == NULL)
         return TRUE;
       else
         return FALSE;
     }
 
-  if (interface == NULL)
+  if (iface == NULL)
     return FALSE;
      
-  if (strcmp (msg_interface, interface) == 0)
+  if (strcmp (msg_interface, iface) == 0)
     return TRUE;
 
   return FALSE;
@@ -3411,13 +3555,13 @@ dbus_message_get_signature (DBusMessage *message)
 static dbus_bool_t
 _dbus_message_has_type_interface_member (DBusMessage *message,
                                          int          type,
-                                         const char  *interface,
+                                         const char  *iface,
                                          const char  *member)
 {
   const char *n;
 
   _dbus_assert (message != NULL);
-  _dbus_assert (interface != NULL);
+  _dbus_assert (iface != NULL);
   _dbus_assert (member != NULL);
 
   if (dbus_message_get_type (message) != type)
@@ -3433,7 +3577,7 @@ _dbus_message_has_type_interface_member (DBusMessage *message,
     {
       n = dbus_message_get_interface (message);
 
-      if (n == NULL || strcmp (n, interface) == 0)
+      if (n == NULL || strcmp (n, iface) == 0)
         return TRUE;
     }
 
@@ -3449,18 +3593,18 @@ _dbus_message_has_type_interface_member (DBusMessage *message,
  * protocol allows method callers to leave out the interface name.
  *
  * @param message the message
- * @param interface the name to check (must not be #NULL)
+ * @param iface the name to check (must not be #NULL)
  * @param method the name to check (must not be #NULL)
  *
  * @returns #TRUE if the message is the specified method call
  */
 dbus_bool_t
 dbus_message_is_method_call (DBusMessage *message,
-                             const char  *interface,
+                             const char  *iface,
                              const char  *method)
 {
   _dbus_return_val_if_fail (message != NULL, FALSE);
-  _dbus_return_val_if_fail (interface != NULL, FALSE);
+  _dbus_return_val_if_fail (iface != NULL, FALSE);
   _dbus_return_val_if_fail (method != NULL, FALSE);
   /* don't check that interface/method are valid since it would be
    * expensive, and not catch many common errors
@@ -3468,7 +3612,7 @@ dbus_message_is_method_call (DBusMessage *message,
 
   return _dbus_message_has_type_interface_member (message,
                                                   DBUS_MESSAGE_TYPE_METHOD_CALL,
-                                                  interface, method);
+                                                  iface, method);
 }
 
 /**
@@ -3477,18 +3621,18 @@ dbus_message_is_method_call (DBusMessage *message,
  * has a different interface or member field, returns #FALSE.
  *
  * @param message the message
- * @param interface the name to check (must not be #NULL)
+ * @param iface the name to check (must not be #NULL)
  * @param signal_name the name to check (must not be #NULL)
  *
  * @returns #TRUE if the message is the specified signal
  */
 dbus_bool_t
 dbus_message_is_signal (DBusMessage *message,
-                        const char  *interface,
+                        const char  *iface,
                         const char  *signal_name)
 {
   _dbus_return_val_if_fail (message != NULL, FALSE);
-  _dbus_return_val_if_fail (interface != NULL, FALSE);
+  _dbus_return_val_if_fail (iface != NULL, FALSE);
   _dbus_return_val_if_fail (signal_name != NULL, FALSE);
   /* don't check that interface/name are valid since it would be
    * expensive, and not catch many common errors
@@ -3496,7 +3640,7 @@ dbus_message_is_signal (DBusMessage *message,
 
   return _dbus_message_has_type_interface_member (message,
                                                   DBUS_MESSAGE_TYPE_SIGNAL,
-                                                  interface, signal_name);
+                                                  iface, signal_name);
 }
 
 /**
@@ -3736,7 +3880,7 @@ _dbus_message_loader_new (void)
   SCM_RIGHTS works we need to preallocate an fd array of the maximum
   number of unix fds we want to receive in advance. A
   try-and-reallocate loop is not possible. */
-  loader->max_message_unix_fds = 1024;
+  loader->max_message_unix_fds = DBUS_DEFAULT_MESSAGE_UNIX_FDS;
 
   if (!_dbus_string_init (&loader->data))
     {
@@ -3833,12 +3977,10 @@ _dbus_message_loader_get_buffer (DBusMessageLoader  *loader,
  *
  * @param loader the loader.
  * @param buffer the buffer.
- * @param bytes_read number of bytes that were read into the buffer.
  */
 void
 _dbus_message_loader_return_buffer (DBusMessageLoader  *loader,
-                                    DBusString         *buffer,
-                                    int                 bytes_read)
+                                    DBusString         *buffer)
 {
   _dbus_assert (loader->buffer_outstanding);
   _dbus_assert (buffer == &loader->data);
@@ -3902,7 +4044,7 @@ _dbus_message_loader_get_unix_fds(DBusMessageLoader  *loader,
  *
  * @param loader the message loader.
  * @param fds the array fds were read into
- * @param max_n_fds how many fds were read
+ * @param n_fds how many fds were read
  */
 
 void
@@ -3917,6 +4059,9 @@ _dbus_message_loader_return_unix_fds(DBusMessageLoader  *loader,
 
   loader->n_unix_fds += n_fds;
   loader->unix_fds_outstanding = FALSE;
+
+  if (n_fds && loader->unix_fds_change)
+    loader->unix_fds_change (loader->unix_fds_change_data);
 #else
   _dbus_assert_not_reached("Platform doesn't support unix fd passing");
 #endif
@@ -4003,8 +4148,6 @@ load_message (DBusMessageLoader *loader,
 
   _dbus_assert (validity == DBUS_VALID);
 
-  message->byte_order = byte_order;
-
   /* 2. VALIDATE BODY */
   if (mode != DBUS_VALIDATION_MODE_WE_TRUST_THIS_DATA_ABSOLUTELY)
     {
@@ -4065,7 +4208,10 @@ load_message (DBusMessageLoader *loader,
 
       message->n_unix_fds_allocated = message->n_unix_fds = n_unix_fds;
       loader->n_unix_fds -= n_unix_fds;
-      memmove(loader->unix_fds + n_unix_fds, loader->unix_fds, loader->n_unix_fds);
+      memmove (loader->unix_fds, loader->unix_fds + n_unix_fds, loader->n_unix_fds * sizeof (loader->unix_fds[0]));
+
+      if (loader->unix_fds_change)
+        loader->unix_fds_change (loader->unix_fds_change_data);
     }
   else
     message->unix_fds = NULL;
@@ -4332,7 +4478,7 @@ _dbus_message_loader_get_max_message_size (DBusMessageLoader  *loader)
  * Sets the maximum unix fds per message we allow.
  *
  * @param loader the loader
- * @param size the max number of unix fds in a message
+ * @param n the max number of unix fds in a message
  */
 void
 _dbus_message_loader_set_max_message_unix_fds (DBusMessageLoader  *loader,
@@ -4359,8 +4505,42 @@ _dbus_message_loader_get_max_message_unix_fds (DBusMessageLoader  *loader)
   return loader->max_message_unix_fds;
 }
 
-static DBusDataSlotAllocator slot_allocator;
-_DBUS_DEFINE_GLOBAL_LOCK (message_slots);
+/**
+ * Return how many file descriptors are pending in the loader
+ *
+ * @param loader the loader
+ */
+int
+_dbus_message_loader_get_pending_fds_count (DBusMessageLoader *loader)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  return loader->n_unix_fds;
+#else
+  return 0;
+#endif
+}
+
+/**
+ * Register a function to be called whenever the number of pending file
+ * descriptors in the loader change.
+ *
+ * @param loader the loader
+ * @param callback the callback
+ * @param data the data for the callback
+ */
+void
+_dbus_message_loader_set_pending_fds_function (DBusMessageLoader *loader,
+                                               void (* callback) (void *),
+                                               void *data)
+{
+#ifdef HAVE_UNIX_FD_PASSING
+  loader->unix_fds_change = callback;
+  loader->unix_fds_change_data = data;
+#endif
+}
+
+static DBusDataSlotAllocator slot_allocator =
+  _DBUS_DATA_SLOT_ALLOCATOR_INIT (_DBUS_LOCK_NAME (message_slots));
 
 /**
  * Allocates an integer ID to be used for storing application-specific
@@ -4380,7 +4560,6 @@ dbus_bool_t
 dbus_message_allocate_data_slot (dbus_int32_t *slot_p)
 {
   return _dbus_data_slot_allocator_alloc (&slot_allocator,
-                                          &_DBUS_LOCK_NAME (message_slots),
                                           slot_p);
 }
 
@@ -4617,8 +4796,11 @@ dbus_message_demarshal (const char *str,
     return NULL;
 
   _dbus_message_loader_get_buffer (loader, &buffer);
-  _dbus_string_append_len (buffer, str, len);
-  _dbus_message_loader_return_buffer (loader, buffer, len);
+
+  if (!_dbus_string_append_len (buffer, str, len))
+    goto fail_oom;
+
+  _dbus_message_loader_return_buffer (loader, buffer);
 
   if (!_dbus_message_loader_queue_messages (loader))
     goto fail_oom;
@@ -4653,9 +4835,8 @@ dbus_message_demarshal (const char *str,
  * Generally, this function is only useful for encapsulating D-Bus messages in
  * a different protocol.
  *
- * @param str data to be marshalled
- * @param len the length of str
- * @param error the location to save errors to
+ * @param buf data to be marshalled
+ * @param len the length of @p buf
  * @returns -1 if there was no valid data to be demarshalled, 0 if there wasn't enough data to determine how much should be demarshalled. Otherwise returns the number of bytes to be demarshalled
  * 
  */
@@ -4689,6 +4870,7 @@ dbus_message_demarshal_bytes_needed(const char *buf,
   if (validity == DBUS_VALID)
     {
       _dbus_assert (have_message || (header_len + body_len) > len);
+      (void) have_message; /* unused unless asserting */
       return header_len + body_len;
     }
   else

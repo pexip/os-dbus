@@ -89,10 +89,8 @@ handle_new_client_fd_and_unlock (DBusServer *server,
   DBusConnection *connection;
   DBusTransport *transport;
   DBusNewConnectionFunction new_connection_function;
-  DBusServerSocket* socket_server;
   void *new_connection_data;
 
-  socket_server = (DBusServerSocket*)server;
   _dbus_verbose ("Creating new client connection with fd %d\n", client_fd);
 
   HAVE_LOCK_CHECK (server);
@@ -103,7 +101,7 @@ handle_new_client_fd_and_unlock (DBusServer *server,
       return TRUE;
     }
 
-  transport = _dbus_transport_new_for_socket (client_fd, &server->guid_hex, FALSE);
+  transport = _dbus_transport_new_for_socket (client_fd, &server->guid_hex, NULL);
   if (transport == NULL)
     {
       _dbus_close_socket (client_fd, NULL);
@@ -236,6 +234,7 @@ socket_disconnect (DBusServer *server)
         {
           _dbus_server_remove_watch (server,
                                      socket_server->watch[i]);
+          _dbus_watch_invalidate (socket_server->watch[i]);
           _dbus_watch_unref (socket_server->watch[i]);
           socket_server->watch[i] = NULL;
         }
@@ -344,6 +343,7 @@ _dbus_server_new_for_socket (int              *fds,
 
   SERVER_UNLOCK (server);
 
+  _dbus_server_trace_ref (&socket_server->base, 0, 1, "new_for_socket");
   return (DBusServer*) socket_server;
 
  failed_2:
@@ -478,7 +478,10 @@ _dbus_server_new_for_tcp_socket (const char     *host,
   if (server == NULL)
     {
       dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
-      goto failed_4;
+      if (noncefile != NULL)
+        goto failed_4;
+      else
+        goto failed_2;
     }
 
   _dbus_string_free (&port_str);

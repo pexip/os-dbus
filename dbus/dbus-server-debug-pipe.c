@@ -31,7 +31,7 @@
 #include "dbus-string.h"
 #include "dbus-protocol.h"
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 
 /**
  * @defgroup DBusServerDebugPipe DBusServerDebugPipe
@@ -177,7 +177,8 @@ _dbus_server_debug_pipe_new (const char     *server_name,
   _dbus_string_free (&address);
 
   /* server keeps the pipe hash ref */
-  
+
+  _dbus_server_trace_ref (&debug_server->base, 0, 1, "debug_pipe_new");
   return (DBusServer *)debug_server;
 
  nomem_4:
@@ -426,5 +427,5 @@ _dbus_transport_open_debug_pipe (DBusAddressEntry  *entry,
 
 /** @} */
 
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
