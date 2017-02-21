@@ -130,9 +130,10 @@ main (int argc, char **argv)
      fprintf (stderr, "%ls %ls\n", dbusDaemonPath, command);
 #else
    command[0] = L'\0';
-   /* Windows CE has a different interpretation of cmdline: Start with argv[1].  */
-   wcscpy_s (command, sizeof (command), dbusDaemonPath);
-   wcscat_s (command, sizeof (command), L" --session");
+   /* Windows cmdline starts with path, which can contain spaces.  */
+   wcscpy_s (command, sizeof (command), L"\"");
+   wcscat_s (command, sizeof (command), dbusDaemonPath);
+   wcscat_s (command, sizeof (command), L"\" --session");
    if (verbose)
      fprintf (stderr, "%ls\n", command);
 #endif
@@ -158,8 +159,8 @@ main (int argc, char **argv)
   if (result == 0) 
     {
       if (verbose)
-        fprintf (stderr, "Could not start " DBUS_DAEMON_NAME ". error=%d\n",
-                 GetLastError ());
+        fprintf (stderr, "Could not start " DBUS_DAEMON_NAME ". error=%u\n",
+                 (unsigned)GetLastError ());
       return 4;
     }
    

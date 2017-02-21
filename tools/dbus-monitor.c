@@ -35,6 +35,8 @@
 
 #include "dbus-print-message.h"
 
+#define EAVESDROPPING_RULE "eavesdrop=true"
+
 #ifdef DBUS_WIN
 
 /* gettimeofday is not defined on windows */
@@ -76,6 +78,13 @@ gettimeofday (struct timeval *__p,
 }
 #endif
 
+inline static void
+oom (const char *doing)
+{
+  fprintf (stderr, "OOM while %s\n", doing);
+  exit (1);
+}
+
 static DBusHandlerResult
 monitor_filter_func (DBusConnection     *connection,
 		     DBusMessage        *message,
@@ -97,6 +106,9 @@ monitor_filter_func (DBusConnection     *connection,
 
 #ifdef __APPLE__
 #define PROFILE_TIMED_FORMAT "%s\t%lu\t%d"
+#elif defined(__NetBSD__)
+#include <inttypes.h>
+#define PROFILE_TIMED_FORMAT "%s\t%" PRId64 "\t%d"
 #else
 #define PROFILE_TIMED_FORMAT "%s\t%lu\t%lu"
 #endif
@@ -230,14 +242,6 @@ only_one_type (dbus_bool_t *seen_bus_type,
     }
 }
 
-static dbus_bool_t sigint_received = FALSE;
-
-static void
-sigint_handler (int signum)
-{
-  sigint_received = TRUE;
-}
-
 int
 main (int argc, char *argv[])
 {
@@ -299,11 +303,21 @@ main (int argc, char *argv[])
       else if (arg[0] == '-')
 	usage (argv[0], 1);
       else {
-	numFilters++;
-       filters = (char **)realloc(filters, numFilters * sizeof(char *));
-	filters[j] = (char *)malloc((strlen(arg) + 1) * sizeof(char *));
-	snprintf(filters[j], strlen(arg) + 1, "%s", arg);
-	j++;
+          unsigned int filter_len;
+          numFilters++;
+          /* Prepend a rule (and a comma) to enable the monitor to eavesdrop.
+           * Prepending allows the user to add eavesdrop=false at command line
+           * in order to disable eavesdropping when needed */
+          filter_len = strlen (EAVESDROPPING_RULE) + 1 + strlen (arg) + 1;
+
+          filters = (char **) realloc (filters, numFilters * sizeof (char *));
+          if (filters == NULL)
+            oom ("adding a new filter slot");
+          filters[j] = (char *) malloc (filter_len);
+          if (filters[j] == NULL)
+            oom ("adding a new filter");
+          snprintf (filters[j], filter_len, "%s,%s", EAVESDROPPING_RULE, arg);
+          j++;
       }
     }
 
@@ -351,43 +365,52 @@ main (int argc, char *argv[])
       exit (1);
     }
 
+  /* Receive o.fd.Peer messages as normal messages, rather than having
+   * libdbus handle them internally, which is the wrong thing for
+   * a monitor */
+  dbus_connection_set_route_peer_messages (connection, TRUE);
+
   if (numFilters)
     {
+      size_t offset = 0;
       for (i = 0; i < j; i++)
         {
-          dbus_bus_add_match (connection, filters[i], &error);
-          if (dbus_error_is_set (&error))
+          dbus_bus_add_match (connection, filters[i] + offset, &error);
+          if (dbus_error_is_set (&error) && i == 0 && offset == 0)
+            {
+              /* We might be talking to a pre-1.5.6 dbus-daemon
+              * which wouldn't understand eavesdrop=true.
+              * If this works, carry on with offset > 0
+              * on the remaining iterations. */
+              offset = strlen (EAVESDROPPING_RULE) + 1;
+              dbus_error_free (&error);
+              dbus_bus_add_match (connection, filters[i] + offset, &error);
+            }
+
+	  if (dbus_error_is_set (&error))
             {
               fprintf (stderr, "Failed to setup match \"%s\": %s\n",
                        filters[i], error.message);
               dbus_error_free (&error);
               exit (1);
             }
-	  free(filters[i]);
+          free(filters[i]);
         }
     }
   else
     {
       dbus_bus_add_match (connection,
-		          "type='signal'",
-		          &error);
+                          EAVESDROPPING_RULE,
+                          &error);
       if (dbus_error_is_set (&error))
-        goto lose;
-      dbus_bus_add_match (connection,
-		          "type='method_call'",
-		          &error);
-      if (dbus_error_is_set (&error))
-        goto lose;
-      dbus_bus_add_match (connection,
-		          "type='method_return'",
-		          &error);
-      if (dbus_error_is_set (&error))
-        goto lose;
-      dbus_bus_add_match (connection,
-		          "type='error'",
-		          &error);
-      if (dbus_error_is_set (&error))
-        goto lose;
+        {
+          dbus_error_free (&error);
+          dbus_bus_add_match (connection,
+                              "",
+                              &error);
+          if (dbus_error_is_set (&error))
+            goto lose;
+        }
     }
 
   if (!dbus_connection_add_filter (connection, filter_func, NULL, NULL)) {

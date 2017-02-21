@@ -74,7 +74,13 @@ do_check_nonce (int fd, const DBusString *nonce, DBusError *error)
         }
       else
         {
-          _dbus_string_append_len(&buffer, _dbus_string_get_const_data (&p), n);
+          if (!_dbus_string_append_len (&buffer, _dbus_string_get_const_data (&p), n))
+            {
+              dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
+              _dbus_string_free (&p);
+              _dbus_string_free (&buffer);
+              return FALSE;
+            }
           nleft -= n;
         }
     }
@@ -113,7 +119,15 @@ _dbus_read_nonce (const DBusString *fname, DBusString *nonce, DBusError* error)
 
   fp = fopen (_dbus_string_get_const_data (fname), "rb");
   if (!fp)
-    return FALSE;
+    {
+      dbus_set_error (error,
+		      _dbus_error_from_system_errno (),
+		      "Failed to open %s for read: %s",
+		      _dbus_string_get_const_data (fname),
+		      _dbus_strerror_from_errno ());
+      return FALSE;
+    }
+
   nread = fread (buffer, 1, sizeof buffer - 1, fp);
   fclose (fp);
   if (!nread)
@@ -196,7 +210,6 @@ _dbus_send_nonce (int fd, const DBusString *noncefile, DBusError *error)
 {
   dbus_bool_t read_result;
   int send_result;
-  size_t sendLen;
   DBusString nonce;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -240,8 +253,8 @@ do_noncefile_create (DBusNonceFile *noncefile,
                      DBusError *error,
                      dbus_bool_t use_subdir)
 {
-    dbus_bool_t ret;
     DBusString randomStr;
+    const char *tmp;
 
     _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -259,8 +272,11 @@ do_noncefile_create (DBusNonceFile *noncefile,
         goto on_error;
       }
 
+    tmp = _dbus_get_tmpdir ();
+
     if (!_dbus_string_init (&noncefile->dir)
-        || !_dbus_string_append (&noncefile->dir, _dbus_get_tmpdir()))
+        || tmp == NULL
+        || !_dbus_string_append (&noncefile->dir, tmp))
       {
         dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
         goto on_error;

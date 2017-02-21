@@ -1,25 +1,23 @@
-project(test)
+include_directories(${CMAKE_SOURCE_DIR}/../test)
 
 add_definitions(${DBUS_INTERNAL_CLIENT_DEFINITIONS})
 
-add_library(dbus_testutils STATIC
+set(DBUS_SESSION_BUS_LISTEN_ADDRESS ${TEST_LISTEN})
+
+add_library(dbus-testutils STATIC
     ${CMAKE_SOURCE_DIR}/../test/test-utils.h
     ${CMAKE_SOURCE_DIR}/../test/test-utils.c
 )
-target_link_libraries(dbus_testutils ${DBUS_INTERNAL_LIBRARIES})
+target_link_libraries(dbus-testutils ${DBUS_INTERNAL_LIBRARIES})
 
 add_subdirectory( name-test )
 
 set (test-service_SOURCES
     ${CMAKE_SOURCE_DIR}/../test/test-service.c
-    ${CMAKE_SOURCE_DIR}/../test/test-utils.c
-    ${CMAKE_SOURCE_DIR}/../test/test-utils.h
 )
 
 set (test-names_SOURCES
     ${CMAKE_SOURCE_DIR}/../test/test-names.c
-    ${CMAKE_SOURCE_DIR}/../test/test-utils.c
-    ${CMAKE_SOURCE_DIR}/../test/test-utils.h
 )
 
 set (break_loader_SOURCES
@@ -28,15 +26,13 @@ set (break_loader_SOURCES
 
 set (test-shell-service_SOURCES
     ${CMAKE_SOURCE_DIR}/../test/test-shell-service.c
-    ${CMAKE_SOURCE_DIR}/../test/test-utils.c
-    ${CMAKE_SOURCE_DIR}/../test/test-utils.h
 )
 
-set (shell-test_SOURCES
+set (test-shell_SOURCES
         ${CMAKE_SOURCE_DIR}/../test/shell-test.c
 )
 
-set (spawn-test_SOURCES
+set (test-spawn_SOURCES
     ${CMAKE_SOURCE_DIR}/../test/spawn-test.c
 )
 
@@ -52,30 +48,44 @@ set (test-sleep-forever_SOURCES
     ${CMAKE_SOURCE_DIR}/../test/test-sleep-forever.c
 )
 
-add_executable(test-service ${test-service_SOURCES})
-target_link_libraries(test-service ${DBUS_INTERNAL_LIBRARIES})
+set (manual-tcp_SOURCES
+    ${CMAKE_SOURCE_DIR}/../test/manual-tcp.c
+)
 
-add_executable(test-names ${test-names_SOURCES})
-target_link_libraries(test-names ${DBUS_INTERNAL_LIBRARIES})
+add_helper_executable(test-service ${test-service_SOURCES} dbus-testutils)
+add_helper_executable(test-names ${test-names_SOURCES} dbus-testutils)
+add_test_executable(test-shell ${test-shell_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+add_test_executable(test-printf ${CMAKE_SOURCE_DIR}/../test/internals/printf.c dbus-testutils)
+add_helper_executable(test-shell-service ${test-shell-service_SOURCES} dbus-testutils)
+add_helper_executable(test-spawn ${test-spawn_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+add_helper_executable(test-exit ${test-exit_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+add_helper_executable(test-segfault ${test-segfault_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+add_helper_executable(test-sleep-forever ${test-sleep-forever_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+add_test_executable(manual-tcp ${manual-tcp_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 
-add_executable(shell-test ${shell-test_SOURCES})
-target_link_libraries(shell-test ${DBUS_INTERNAL_LIBRARIES})
-ADD_TEST(shell-test ${EXECUTABLE_OUTPUT_PATH}/shell-test${EXT})
+if(DBUS_WITH_GLIB)
+    message(STATUS "with glib test apps")
+    add_definitions(
+        ${GLIB2_DEFINITIONS}
+        ${GOBJECT_DEFINITIONS}
+    )
+    include_directories(
+        ${GLIB2_INCLUDE_DIR}
+        ${GOBJECT_INCLUDE_DIR}
+    )
+    set(TEST_LIBRARIES ${DBUS_INTERNAL_LIBRARIES} dbus-testutils ${GLIB2_LIBRARIES} ${GOBJECT_LIBRARIES})
 
-add_executable(test-shell-service ${test-shell-service_SOURCES})
-target_link_libraries(test-shell-service ${DBUS_INTERNAL_LIBRARIES})
-
-add_executable(spawn-test ${spawn-test_SOURCES})
-target_link_libraries(spawn-test ${DBUS_INTERNAL_LIBRARIES})
-
-add_executable(test-exit ${test-exit_SOURCES})
-target_link_libraries(test-exit ${DBUS_INTERNAL_LIBRARIES})
-
-add_executable(test-segfault ${test-segfault_SOURCES})
-target_link_libraries(test-segfault ${DBUS_INTERNAL_LIBRARIES})
-
-add_executable(test-sleep-forever ${test-sleep-forever_SOURCES})
-target_link_libraries(test-sleep-forever ${DBUS_INTERNAL_LIBRARIES})
+    add_test_executable(test-corrupt ${CMAKE_SOURCE_DIR}/../test/corrupt.c ${TEST_LIBRARIES})
+    add_test_executable(test-dbus-daemon ${CMAKE_SOURCE_DIR}/../test/dbus-daemon.c ${TEST_LIBRARIES})
+    add_test_executable(test-dbus-daemon-eavesdrop ${CMAKE_SOURCE_DIR}/../test/dbus-daemon-eavesdrop.c ${TEST_LIBRARIES})
+    add_test_executable(test-loopback ${CMAKE_SOURCE_DIR}/../test/loopback.c ${TEST_LIBRARIES})
+    add_test_executable(test-marshal ${CMAKE_SOURCE_DIR}/../test/marshal.c ${TEST_LIBRARIES})
+    add_test_executable(test-refs ${CMAKE_SOURCE_DIR}/../test/internals/refs.c ${TEST_LIBRARIES})
+    add_test_executable(test-relay ${CMAKE_SOURCE_DIR}/../test/relay.c ${TEST_LIBRARIES})
+    add_test_executable(test-syntax ${CMAKE_SOURCE_DIR}/../test/syntax.c ${TEST_LIBRARIES})
+    add_test_executable(test-syslog ${CMAKE_SOURCE_DIR}/../test/internals/syslog.c ${TEST_LIBRARIES})
+    add_helper_executable(manual-authz ${CMAKE_SOURCE_DIR}/../test/manual-authz.c ${TEST_LIBRARIES})
+endif()
 
 ### keep these in creation order, i.e. uppermost dirs first 
 set (TESTDIRS
@@ -87,6 +97,7 @@ set (TESTDIRS
     test/data/sha-1
     test/data/valid-config-files
     test/data/valid-config-files/basic.d
+    test/data/valid-config-files/session.d
     test/data/valid-config-files/system.d
     test/data/valid-config-files-system
     test/data/valid-introspection-files
@@ -134,10 +145,6 @@ FOREACH(FILE_TYPE *.conf.in *.service.in)
       GET_FILENAME_COMPONENT(FILENAME ${FILE} NAME)
       STRING(REGEX REPLACE "\\.in$" "" FILENAME ${FILENAME})
       SET (TARGET ${CMAKE_BINARY_DIR}/${DIR}/${FILENAME})
-      STRING(REGEX REPLACE "\\.in$" ".cmake" _file ${FILE})
-      IF (EXISTS ${_file})
-        SET (FILE ${_file})
-      ENDIF (EXISTS ${_file})
       configure_file(${FILE} ${TARGET} @ONLY IMMEDIATE)
       IF (CONFIG_VERBOSE)
         MESSAGE("${FILE}")
@@ -149,17 +156,18 @@ ENDFOREACH(FILE_TYPE)
 MESSAGE(STATUS "Copying generated bus config files to test directory")
 set (OUTDIR ${CMAKE_BINARY_DIR}/test/data/valid-config-files)
 
-FILE(GLOB FILES "${CMAKE_BINARY_DIR}/bus/*.conf" )
+FILE(GLOB FILES "${CMAKE_SOURCE_DIR}/../bus/*.conf.in" )
 FILE(MAKE_DIRECTORY ${OUTDIR})
 FOREACH(FILE ${FILES})
     GET_FILENAME_COMPONENT(FILENAME ${FILE} NAME)
+    STRING(REGEX REPLACE "\\.in$" "" FILENAME ${FILENAME})
     SET (TARGET ${OUTDIR}/${FILENAME})
-    configure_file(${FILE} ${TARGET} COPYONLY)
+    configure_file(${FILE} ${TARGET} @ONLY)
     IF (CONFIG_VERBOSE)
         MESSAGE("FROM: ${FILE}\nTO: ${TARGET}\n")
     ENDIF (CONFIG_VERBOSE)
 ENDFOREACH(FILE)
 
-# todo: for installation the TEST_..._BINARY variables must reflect the 
-#       installation dir or has to be defined relative
-#
+add_custom_target(check
+    COMMAND ctest -R ^test-.*
+)

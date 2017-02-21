@@ -39,6 +39,7 @@
 #include <dbus/dbus-hash.h>
 #include <dbus/dbus-credentials.h>
 #include <dbus/dbus-internals.h>
+#include <dbus/dbus-server-protected.h>
 
 #ifdef DBUS_CYGWIN
 #include <signal.h>
@@ -63,11 +64,13 @@ struct BusContext
   BusPolicy *policy;
   BusMatchmaker *matchmaker;
   BusLimits limits;
+  DBusRLimit *initial_fd_limit;
   unsigned int fork : 1;
   unsigned int syslog : 1;
   unsigned int keep_umask : 1;
   unsigned int allow_anonymous : 1;
   unsigned int systemd_activation : 1;
+  dbus_bool_t watches_enabled;
 };
 
 static dbus_int32_t server_data_slot = -1;
@@ -103,19 +106,6 @@ server_get_context (DBusServer *server)
 }
 
 static dbus_bool_t
-server_watch_callback (DBusWatch     *watch,
-                       unsigned int   condition,
-                       void          *data)
-{
-  /* FIXME this can be done in dbus-mainloop.c
-   * if the code in activation.c for the babysitter
-   * watch handler is fixed.
-   */
-
-  return dbus_watch_handle (watch, condition);
-}
-
-static dbus_bool_t
 add_server_watch (DBusWatch  *watch,
                   void       *data)
 {
@@ -124,9 +114,7 @@ add_server_watch (DBusWatch  *watch,
 
   context = server_get_context (server);
 
-  return _dbus_loop_add_watch (context->loop,
-                               watch, server_watch_callback, server,
-                               NULL);
+  return _dbus_loop_add_watch (context->loop, watch);
 }
 
 static void
@@ -138,17 +126,19 @@ remove_server_watch (DBusWatch  *watch,
 
   context = server_get_context (server);
 
-  _dbus_loop_remove_watch (context->loop,
-                           watch, server_watch_callback, server);
+  _dbus_loop_remove_watch (context->loop, watch);
 }
 
-
 static void
-server_timeout_callback (DBusTimeout   *timeout,
-                         void          *data)
+toggle_server_watch (DBusWatch  *watch,
+                     void       *data)
 {
-  /* can return FALSE on OOM but we just let it fire again later */
-  dbus_timeout_handle (timeout);
+  DBusServer *server = data;
+  BusContext *context;
+
+  context = server_get_context (server);
+
+  _dbus_loop_toggle_watch (context->loop, watch);
 }
 
 static dbus_bool_t
@@ -160,8 +150,7 @@ add_server_timeout (DBusTimeout *timeout,
 
   context = server_get_context (server);
 
-  return _dbus_loop_add_timeout (context->loop,
-                                 timeout, server_timeout_callback, server, NULL);
+  return _dbus_loop_add_timeout (context->loop, timeout);
 }
 
 static void
@@ -173,8 +162,7 @@ remove_server_timeout (DBusTimeout *timeout,
 
   context = server_get_context (server);
 
-  _dbus_loop_remove_timeout (context->loop,
-                             timeout, server_timeout_callback, server);
+  _dbus_loop_remove_timeout (context->loop, timeout);
 }
 
 static void
@@ -255,7 +243,7 @@ setup_server (BusContext *context,
   if (!dbus_server_set_watch_functions (server,
                                         add_server_watch,
                                         remove_server_watch,
-                                        NULL,
+                                        toggle_server_watch,
                                         server,
                                         NULL))
     {
@@ -284,7 +272,7 @@ static dbus_bool_t
 process_config_first_time_only (BusContext       *context,
 				BusConfigParser  *parser,
                                 const DBusString *address,
-                                dbus_bool_t      systemd_activation,
+                                BusContextFlags   flags,
 				DBusError        *error)
 {
   DBusString log_prefix;
@@ -300,17 +288,24 @@ process_config_first_time_only (BusContext       *context,
 
   retval = FALSE;
   auth_mechanisms = NULL;
+  pidfile = NULL;
 
-  _dbus_init_system_log ();
+  _dbus_init_system_log (TRUE);
 
-  context->systemd_activation = systemd_activation;
+  if (flags & BUS_CONTEXT_FLAG_SYSTEMD_ACTIVATION)
+    context->systemd_activation = TRUE;
+  else
+    context->systemd_activation = FALSE;
 
   /* Check for an existing pid file. Of course this is a race;
    * we'd have to use fcntl() locks on the pid file to
    * avoid that. But we want to check for the pid file
    * before overwriting any existing sockets, etc.
    */
-  pidfile = bus_config_parser_get_pidfile (parser);
+
+  if (flags & BUS_CONTEXT_FLAG_WRITE_PID_FILE)
+    pidfile = bus_config_parser_get_pidfile (parser);
+
   if (pidfile != NULL)
     {
       DBusString u;
@@ -509,7 +504,6 @@ process_config_every_time (BusContext      *context,
   DBusString full_address;
   DBusList *link;
   DBusList **dirs;
-  BusActivation *new_activation;
   char *addr;
   const char *servicehelper;
   char *s;
@@ -534,6 +528,18 @@ process_config_every_time (BusContext      *context,
     bus_policy_unref (context->policy);
   context->policy = bus_config_parser_steal_policy (parser);
   _dbus_assert (context->policy != NULL);
+
+  /* context->connections is NULL when creating new BusContext */
+  if (context->connections)
+    {
+      _dbus_verbose ("Reload policy rules for completed connections\n");
+      retval = bus_connections_reload_policy (context->connections, error);
+      if (!retval)
+        {
+          _DBUS_ASSERT_ERROR_IS_SET (error);
+          goto failed;
+        }
+    }
 
   /* We have to build the address backward, so that
    * <listen> later in the config file have priority
@@ -654,19 +660,38 @@ oom:
 static void
 raise_file_descriptor_limit (BusContext      *context)
 {
+#ifdef DBUS_UNIX
+  DBusError error = DBUS_ERROR_INIT;
 
-  /* I just picked this out of thin air; we need some extra
-   * descriptors for things like any internal pipes we create,
-   * inotify, connections to SELinux, etc.
+  /* we only do this once */
+  if (context->initial_fd_limit != NULL)
+    return;
+
+  context->initial_fd_limit = _dbus_rlimit_save_fd_limit (&error);
+
+  if (context->initial_fd_limit == NULL)
+    {
+      bus_context_log (context, DBUS_SYSTEM_LOG_INFO,
+                       "%s: %s", error.name, error.message);
+      dbus_error_free (&error);
+      return;
+    }
+
+  /* We used to compute a suitable rlimit based on the configured number
+   * of connections, but that breaks down as soon as we allow fd-passing,
+   * because each connection is allowed to pass 64 fds to us, and if
+   * they all did, we'd hit kernel limits. We now hard-code 64k as a
+   * good limit, like systemd does: that's enough to avoid DoS from
+   * anything short of multiple uids conspiring against us.
    */
-  unsigned int arbitrary_extra_fds = 32;
-  unsigned int limit;
-
-  limit = context->limits.max_completed_connections +
-    context->limits.max_incomplete_connections
-    + arbitrary_extra_fds;
-
-  _dbus_request_file_descriptor_limit (limit);
+  if (!_dbus_rlimit_raise_fd_limit_if_privileged (65536, &error))
+    {
+      bus_context_log (context, DBUS_SYSTEM_LOG_INFO,
+                       "%s: %s", error.name, error.message);
+      dbus_error_free (&error);
+      return;
+    }
+#endif
 }
 
 static dbus_bool_t
@@ -709,16 +734,17 @@ process_config_postinit (BusContext      *context,
 
 BusContext*
 bus_context_new (const DBusString *config_file,
-                 ForceForkSetting  force_fork,
+                 BusContextFlags   flags,
                  DBusPipe         *print_addr_pipe,
                  DBusPipe         *print_pid_pipe,
                  const DBusString *address,
-                 dbus_bool_t      systemd_activation,
                  DBusError        *error)
 {
-  DBusString log_prefix;
   BusContext *context;
   BusConfigParser *parser;
+
+  _dbus_assert ((flags & BUS_CONTEXT_FLAG_FORK_NEVER) == 0 ||
+                (flags & BUS_CONTEXT_FLAG_FORK_ALWAYS) == 0);
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -754,6 +780,8 @@ bus_context_new (const DBusString *config_file,
       goto failed;
     }
 
+  context->watches_enabled = TRUE;
+
   context->registry = bus_registry_new (context);
   if (context->registry == NULL)
     {
@@ -768,7 +796,7 @@ bus_context_new (const DBusString *config_file,
       goto failed;
     }
 
-  if (!process_config_first_time_only (context, parser, address, systemd_activation, error))
+  if (!process_config_first_time_only (context, parser, address, flags, error))
     {
       _DBUS_ASSERT_ERROR_IS_SET (error);
       goto failed;
@@ -863,7 +891,8 @@ bus_context_new (const DBusString *config_file,
     if (context->pidfile)
       _dbus_string_init_const (&u, context->pidfile);
 
-    if ((force_fork != FORK_NEVER && context->fork) || force_fork == FORK_ALWAYS)
+    if (((flags & BUS_CONTEXT_FLAG_FORK_NEVER) == 0 && context->fork) ||
+        (flags & BUS_CONTEXT_FLAG_FORK_ALWAYS))
       {
         _dbus_verbose ("Forking and becoming daemon\n");
 
@@ -901,7 +930,7 @@ bus_context_new (const DBusString *config_file,
 
   if (!bus_selinux_full_init ())
     {
-      bus_context_log (context, DBUS_SYSTEM_LOG_FATAL, "SELinux enabled but AVC initialization failed; check system log\n");
+      bus_context_log (context, DBUS_SYSTEM_LOG_FATAL, "SELinux enabled but D-Bus initialization failed; check system log\n");
     }
 
   if (!process_config_postinit (context, parser, error))
@@ -1121,6 +1150,10 @@ bus_context_unref (BusContext *context)
 
           dbus_free (context->pidfile);
 	}
+
+      if (context->initial_fd_limit)
+        _dbus_rlimit_free (context->initial_fd_limit);
+
       dbus_free (context);
 
       dbus_server_free_data_slot (&server_data_slot);
@@ -1232,6 +1265,12 @@ bus_context_get_auth_timeout (BusContext *context)
 }
 
 int
+bus_context_get_pending_fd_timeout (BusContext *context)
+{
+  return context->limits.pending_fd_timeout;
+}
+
+int
 bus_context_get_max_completed_connections (BusContext *context)
 {
   return context->limits.max_completed_connections;
@@ -1277,6 +1316,12 @@ int
 bus_context_get_reply_timeout (BusContext *context)
 {
   return context->limits.reply_timeout;
+}
+
+DBusRLimit *
+bus_context_get_initial_fd_limit (BusContext *context)
+{
+  return context->initial_fd_limit;
 }
 
 void
@@ -1421,9 +1466,6 @@ bus_context_check_security_policy (BusContext     *context,
   dbus_bool_t log;
   int type;
   dbus_bool_t requested_reply;
-  const char *sender_name;
-  const char *sender_loginfo;
-  const char *proposed_recipient_loginfo;
 
   type = dbus_message_get_type (message);
   dest = dbus_message_get_destination (message);
@@ -1589,9 +1631,6 @@ bus_context_check_security_policy (BusContext     *context,
                                          proposed_recipient,
                                          message, &toggles, &log))
     {
-      const char *msg = "Rejected send message, %d matched rules; "
-                        "type=\"%s\", sender=\"%s\" (%s) interface=\"%s\" member=\"%s\" error name=\"%s\" requested_reply=%d destination=\"%s\" (%s))";
-
       complain_about_message (context, DBUS_ERROR_ACCESS_DENIED,
           "Rejected send message", toggles,
           message, sender, proposed_recipient, requested_reply,
@@ -1621,7 +1660,7 @@ bus_context_check_security_policy (BusContext     *context,
       complain_about_message (context, DBUS_ERROR_ACCESS_DENIED,
           "Rejected receive message", toggles,
           message, sender, proposed_recipient, requested_reply,
-          (addressed_recipient == proposed_recipient), NULL);
+          (addressed_recipient == proposed_recipient), error);
       _dbus_verbose ("security policy disallowing message due to recipient policy\n");
       return FALSE;
     }
@@ -1658,4 +1697,37 @@ bus_context_check_security_policy (BusContext     *context,
 
   _dbus_verbose ("security policy allowing message\n");
   return TRUE;
+}
+
+void
+bus_context_check_all_watches (BusContext *context)
+{
+  DBusList *link;
+  dbus_bool_t enabled = TRUE;
+
+  if (bus_connections_get_n_incomplete (context->connections) >=
+      bus_context_get_max_incomplete_connections (context))
+    {
+      enabled = FALSE;
+    }
+
+  if (context->watches_enabled == enabled)
+    return;
+
+  context->watches_enabled = enabled;
+
+  for (link = _dbus_list_get_first_link (&context->servers);
+       link != NULL;
+       link = _dbus_list_get_next_link (&context->servers, link))
+    {
+      /* A BusContext might contains several DBusServer (if there are
+       * several <listen> configuration items) and a DBusServer might
+       * contain several DBusWatch in its DBusWatchList (if getaddrinfo
+       * returns several addresses on a dual IPv4-IPv6 stack or if
+       * systemd passes several fds).
+       * We want to enable/disable them all.
+       */
+      DBusServer *server = link->data;
+      _dbus_server_toggle_all_watches (server, enabled);
+    }
 }

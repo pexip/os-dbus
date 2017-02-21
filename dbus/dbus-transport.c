@@ -31,9 +31,8 @@
 #include "dbus-address.h"
 #include "dbus-credentials.h"
 #include "dbus-mainloop.h"
-#include "dbus-message-private.h"
-#include "dbus-marshal-header.h"
-#ifdef DBUS_BUILD_TESTS
+#include "dbus-message.h"
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include "dbus-server-debug-pipe.h"
 #endif
 
@@ -64,6 +63,7 @@ live_messages_notify (DBusCounter *counter,
 {
   DBusTransport *transport = user_data;
 
+  _dbus_connection_lock (transport->connection);
   _dbus_transport_ref (transport);
 
 #if 0
@@ -72,14 +72,17 @@ live_messages_notify (DBusCounter *counter,
   _dbus_verbose ("Unix FD counter value is now %d\n",
                  (int) _dbus_counter_get_unix_fd_value (counter));
 #endif
-  
+
   /* disable or re-enable the read watch for the transport if
    * required.
    */
   if (transport->vtable->live_messages_changed)
-    (* transport->vtable->live_messages_changed) (transport);
+    {
+      (* transport->vtable->live_messages_changed) (transport);
+    }
 
   _dbus_transport_unref (transport);
+  _dbus_connection_unlock (transport->connection);
 }
 
 /**
@@ -239,6 +242,7 @@ _dbus_transport_finalize_base (DBusTransport *transport)
  * opened DBusTransport object. If it isn't, returns #NULL
  * and sets @p error.
  *
+ * @param address the address to be checked.
  * @param error address where an error can be returned.
  * @returns a new transport, or #NULL on failure.
  */
@@ -250,7 +254,6 @@ check_address (const char *address, DBusError *error)
   int len, i;
 
   _dbus_assert (address != NULL);
-  _dbus_assert (*address != '\0');
 
   if (!dbus_parse_address (address, &entries, &len, error))
     return NULL;              /* not a valid address */
@@ -270,6 +273,7 @@ check_address (const char *address, DBusError *error)
  * Creates a new transport for the "autostart" method.
  * This creates a client-side of a transport.
  *
+ * @param scope scope of autolaunch (Windows only)
  * @param error address where an error can be returned.
  * @returns a new transport, or #NULL on failure.
  */
@@ -346,7 +350,7 @@ static const struct {
   { _dbus_transport_open_socket },
   { _dbus_transport_open_platform_specific },
   { _dbus_transport_open_autolaunch }
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   , { _dbus_transport_open_debug_pipe }
 #endif
 };
@@ -682,10 +686,33 @@ auth_via_default_rules (DBusTransport *transport)
   return allow;
 }
 
+/**
+ * Returns #TRUE if we have been authenticated. It will return #TRUE even if
+ * the transport is now disconnected, but was ever authenticated before
+ * disconnecting.
+ *
+ * This replaces the older _dbus_transport_get_is_authenticated() which
+ * had side-effects.
+ *
+ * @param transport the transport
+ * @returns whether we're authenticated
+ */
+dbus_bool_t
+_dbus_transport_peek_is_authenticated (DBusTransport *transport)
+{
+  return transport->authenticated;
+}
 
 /**
- * Returns #TRUE if we have been authenticated.  Will return #TRUE
- * even if the transport is disconnected.
+ * Returns #TRUE if we have been authenticated. It will return #TRUE even if
+ * the transport is now disconnected, but was ever authenticated before
+ * disconnecting.
+ *
+ * If we have not finished authenticating, but we have enough buffered input
+ * to finish the job, then this function will do so before it returns.
+ *
+ * This used to be called _dbus_transport_get_is_authenticated(), but that
+ * name seems inappropriate for a function with side-effects.
  *
  * @todo we drop connection->mutex when calling the unix_user_function,
  * and windows_user_function, which may not be safe really.
@@ -694,7 +721,7 @@ auth_via_default_rules (DBusTransport *transport)
  * @returns whether we're authenticated
  */
 dbus_bool_t
-_dbus_transport_get_is_authenticated (DBusTransport *transport)
+_dbus_transport_try_to_authenticate (DBusTransport *transport)
 {  
   if (transport->authenticated)
     return TRUE;
@@ -1018,9 +1045,7 @@ recover_unused_bytes (DBusTransport *transport)
                      orig_len);
       
       _dbus_message_loader_return_buffer (transport->loader,
-                                          buffer,
-                                          _dbus_string_get_length (buffer) -
-                                          orig_len);
+                                          buffer);
 
       _dbus_auth_delete_unused_bytes (transport->auth);
       
@@ -1050,9 +1075,7 @@ recover_unused_bytes (DBusTransport *transport)
                      orig_len);
       
       _dbus_message_loader_return_buffer (transport->loader,
-                                          buffer,
-                                          _dbus_string_get_length (buffer) -
-                                          orig_len);
+                                          buffer);
 
       if (succeeded)
         _dbus_auth_delete_unused_bytes (transport->auth);
@@ -1081,12 +1104,12 @@ _dbus_transport_get_dispatch_status (DBusTransport *transport)
       _dbus_counter_get_unix_fd_value (transport->live_messages) >= transport->max_live_messages_unix_fds)
     return DBUS_DISPATCH_COMPLETE; /* complete for now */
 
-  if (!_dbus_transport_get_is_authenticated (transport))
+  if (!_dbus_transport_try_to_authenticate (transport))
     {
       if (_dbus_auth_do_work (transport->auth) ==
           DBUS_AUTH_STATE_WAITING_FOR_MEMORY)
         return DBUS_DISPATCH_NEED_MEMORY;
-      else if (!_dbus_transport_get_is_authenticated (transport))
+      else if (!_dbus_transport_try_to_authenticate (transport))
         return DBUS_DISPATCH_COMPLETE;
     }
 
@@ -1144,6 +1167,13 @@ _dbus_transport_queue_messages (DBusTransport *transport)
         }
       else
         {
+          /* We didn't call the notify function when we added the counter, so
+           * catch up now. Since we have the connection's lock, it's desirable
+           * that we bypass the notify function and call this virtual method
+           * directly. */
+          if (transport->vtable->live_messages_changed)
+            (* transport->vtable->live_messages_changed) (transport);
+
           /* pass ownership of link and message ref to connection */
           _dbus_connection_queue_received_message_link (transport->connection,
                                                         link);
@@ -1328,7 +1358,7 @@ _dbus_transport_get_unix_process_id (DBusTransport *transport,
   if (_dbus_credentials_include (auth_identity,
                                  DBUS_CREDENTIAL_UNIX_PROCESS_ID))
     {
-      *pid = _dbus_credentials_get_unix_pid (auth_identity);
+      *pid = _dbus_credentials_get_pid (auth_identity);
       return TRUE;
     }
   else
@@ -1481,5 +1511,54 @@ _dbus_transport_set_allow_anonymous (DBusTransport              *transport,
 {
   transport->allow_anonymous = value != FALSE;
 }
+
+/**
+ * Return how many file descriptors are pending in the loader
+ *
+ * @param transport the transport
+ */
+int
+_dbus_transport_get_pending_fds_count (DBusTransport *transport)
+{
+  return _dbus_message_loader_get_pending_fds_count (transport->loader);
+}
+
+/**
+ * Register a function to be called whenever the number of pending file
+ * descriptors in the loader change.
+ *
+ * @param transport the transport
+ * @param callback the callback
+ */
+void
+_dbus_transport_set_pending_fds_function (DBusTransport *transport,
+                                           void (* callback) (void *),
+                                           void *data)
+{
+  _dbus_message_loader_set_pending_fds_function (transport->loader,
+                                                 callback, data);
+}
+
+#ifdef DBUS_ENABLE_STATS
+void
+_dbus_transport_get_stats (DBusTransport  *transport,
+                           dbus_uint32_t  *queue_bytes,
+                           dbus_uint32_t  *queue_fds,
+                           dbus_uint32_t  *peak_queue_bytes,
+                           dbus_uint32_t  *peak_queue_fds)
+{
+  if (queue_bytes != NULL)
+    *queue_bytes = _dbus_counter_get_size_value (transport->live_messages);
+
+  if (queue_fds != NULL)
+    *queue_fds = _dbus_counter_get_unix_fd_value (transport->live_messages);
+
+  if (peak_queue_bytes != NULL)
+    *peak_queue_bytes = _dbus_counter_get_peak_size_value (transport->live_messages);
+
+  if (peak_queue_fds != NULL)
+    *peak_queue_fds = _dbus_counter_get_peak_unix_fd_value (transport->live_messages);
+}
+#endif /* DBUS_ENABLE_STATS */
 
 /** @} */
