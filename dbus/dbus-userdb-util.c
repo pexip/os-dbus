@@ -21,12 +21,17 @@
  *
  */
 #include <config.h>
+#include <unistd.h>
 #define DBUS_USERDB_INCLUDES_PRIVATE 1
 #include "dbus-userdb.h"
 #include "dbus-test.h"
 #include "dbus-internals.h"
 #include "dbus-protocol.h"
 #include <string.h>
+
+#if HAVE_SYSTEMD
+#include <systemd/sd-login.h>
+#endif
 
 /**
  * @addtogroup DBusInternalsUtils
@@ -47,7 +52,29 @@ _dbus_is_console_user (dbus_uid_t uid,
 
   DBusUserDatabase *db;
   const DBusUserInfo *info;
-  dbus_bool_t result = FALSE; 
+  dbus_bool_t result = FALSE;
+
+#ifdef HAVE_SYSTEMD
+  /* check if we have logind */
+  if (access ("/run/systemd/seats/", F_OK) >= 0)
+    {
+      int r;
+
+      /* Check whether this user is logged in on at least one physical
+         seat */
+      r = sd_uid_get_seats (uid, 0, NULL);
+      if (r < 0)
+        {
+          dbus_set_error (error, _dbus_error_from_errno (-r),
+                          "Failed to determine seats of user \"" DBUS_UID_FORMAT "\": %s",
+                          uid,
+                          _dbus_strerror (-r));
+          return FALSE;
+        }
+
+      return (r > 0);
+    }
+#endif
 
 #ifdef HAVE_CONSOLE_OWNER_FILE
 
@@ -77,7 +104,11 @@ _dbus_is_console_user (dbus_uid_t uid,
 
 #endif /* HAVE_CONSOLE_OWNER_FILE */
 
-  _dbus_user_database_lock_system ();
+  if (!_dbus_user_database_lock_system ())
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
 
   db = _dbus_user_database_get_system ();
   if (db == NULL)
@@ -131,7 +162,10 @@ _dbus_get_group_id (const DBusString  *groupname,
 {
   DBusUserDatabase *db;
   const DBusGroupInfo *info;
-  _dbus_user_database_lock_system ();
+
+  /* FIXME: this can't distinguish ENOMEM from other errors */
+  if (!_dbus_user_database_lock_system ())
+    return FALSE;
 
   db = _dbus_user_database_get_system ();
   if (db == NULL)
@@ -168,7 +202,10 @@ _dbus_get_user_id_and_primary_group (const DBusString  *username,
 {
   DBusUserDatabase *db;
   const DBusUserInfo *info;
-  _dbus_user_database_lock_system ();
+
+  /* FIXME: this can't distinguish ENOMEM from other errors */
+  if (!_dbus_user_database_lock_system ())
+    return FALSE;
 
   db = _dbus_user_database_get_system ();
   if (db == NULL)
@@ -224,7 +261,6 @@ _dbus_user_database_lookup_group (DBusUserDatabase *db,
         gid = n;
     }
 
-#ifdef DBUS_ENABLE_USERDB_CACHE
   if (gid != DBUS_GID_UNSET)
     info = _dbus_hash_table_lookup_uintptr (db->groups, gid);
   else
@@ -237,9 +273,6 @@ _dbus_user_database_lookup_group (DBusUserDatabase *db,
       return info;
     }
   else
-#else
-  if (1)
-#endif
     {
       if (gid != DBUS_GID_UNSET)
 	_dbus_verbose ("No cache for GID "DBUS_GID_FORMAT"\n",
@@ -361,7 +394,9 @@ _dbus_groups_from_uid (dbus_uid_t         uid,
   *group_ids = NULL;
   *n_group_ids = 0;
 
-  _dbus_user_database_lock_system ();
+  /* FIXME: this can't distinguish ENOMEM from other errors */
+  if (!_dbus_user_database_lock_system ())
+    return FALSE;
 
   db = _dbus_user_database_get_system ();
   if (db == NULL)
@@ -398,7 +433,7 @@ _dbus_groups_from_uid (dbus_uid_t         uid,
 }
 /** @} */
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include <stdio.h>
 
 /**
@@ -414,6 +449,7 @@ _dbus_userdb_test (const char *test_data_dir)
   dbus_uid_t uid;
   unsigned long *group_ids;
   int n_group_ids, i;
+  DBusError error;
 
   if (!_dbus_username_from_current_process (&username))
     _dbus_assert_not_reached ("didn't get username");
@@ -435,9 +471,19 @@ _dbus_userdb_test (const char *test_data_dir)
       printf(" %ld", group_ids[i]);
 
   printf ("\n");
- 
+
+  dbus_error_init (&error);
+  printf ("Is Console user: %i\n",
+          _dbus_is_console_user (uid, &error));
+  printf ("Invocation was OK: %s\n", error.message ? error.message : "yes");
+  dbus_error_free (&error);
+  printf ("Is Console user 4711: %i\n",
+          _dbus_is_console_user (4711, &error));
+  printf ("Invocation was OK: %s\n", error.message ? error.message : "yes");
+  dbus_error_free (&error);
+
   dbus_free (group_ids);
 
   return TRUE;
 }
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

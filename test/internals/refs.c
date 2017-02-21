@@ -27,8 +27,8 @@
 #include <config.h>
 
 #include <glib.h>
+#include <glib-object.h>
 
-#define DBUS_COMPILATION    /* this test uses libdbus-internal */
 #include <dbus/dbus.h>
 #include <dbus/dbus-connection-internal.h>
 #include <dbus/dbus-mainloop.h>
@@ -76,6 +76,11 @@ typedef struct {
   VoidFunc lock;
   VoidFunc unlock;
 } Thread;
+
+/* provide backwards compatibility shim when building with a glib <= 2.30.x */
+#if !GLIB_CHECK_VERSION(2,31,0)
+#define g_thread_new(name,func,data) g_thread_create(func,data,TRUE,NULL)
+#endif
 
 static gpointer
 ref_thread (gpointer data)
@@ -181,7 +186,6 @@ new_conn_cb (DBusServer *server,
     void *data)
 {
   Fixture *f = data;
-  dbus_bool_t have_mem;
 
   g_assert (f->server_connection == NULL);
   f->server_connection = dbus_connection_ref (server_connection);
@@ -277,10 +281,9 @@ test_connection (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (ref_thread, &public_api, TRUE, NULL);
+        f->threads[i] = g_thread_new (NULL, ref_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (ref_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, ref_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -290,11 +293,9 @@ test_connection (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (cycle_thread, &public_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, cycle_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (cycle_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, cycle_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -304,11 +305,9 @@ test_connection (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (unref_thread, &public_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, unref_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (unref_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, unref_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -361,10 +360,9 @@ test_server (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (ref_thread, &public_api, TRUE, NULL);
+        f->threads[i] = g_thread_new (NULL, ref_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (ref_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, ref_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -374,11 +372,9 @@ test_server (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (cycle_thread, &public_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, cycle_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (cycle_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, cycle_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -388,11 +384,9 @@ test_server (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (unref_thread, &public_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, unref_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (unref_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, unref_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -427,7 +421,7 @@ test_message (Fixture *f,
 
   for (i = 0; i < N_THREADS; i++)
     {
-      f->threads[i] = g_thread_create (ref_thread, &public_api, TRUE, NULL);
+      f->threads[i] = g_thread_new (NULL, ref_thread, &public_api);
       g_assert (f->threads[i] != NULL);
     }
 
@@ -435,7 +429,7 @@ test_message (Fixture *f,
 
   for (i = 0; i < N_THREADS; i++)
     {
-      f->threads[i] = g_thread_create (cycle_thread, &public_api, TRUE, NULL);
+      f->threads[i] = g_thread_new (NULL, cycle_thread, &public_api);
       g_assert (f->threads[i] != NULL);
     }
 
@@ -443,7 +437,7 @@ test_message (Fixture *f,
 
   for (i = 0; i < N_THREADS; i++)
     {
-      f->threads[i] = g_thread_create (unref_thread, &public_api, TRUE, NULL);
+      f->threads[i] = g_thread_new (NULL, unref_thread, &public_api);
       g_assert (f->threads[i] != NULL);
     }
 
@@ -501,10 +495,9 @@ test_pending_call (Fixture *f,
   for (i = 0; i < N_THREADS; i++)
     {
       if ((i % 2) == 0)
-        f->threads[i] = g_thread_create (ref_thread, &public_api, TRUE, NULL);
+        f->threads[i] = g_thread_new (NULL, ref_thread, &public_api);
       else
-        f->threads[i] = g_thread_create (ref_thread, &internal_api, TRUE,
-            NULL);
+        f->threads[i] = g_thread_new (NULL, ref_thread, &internal_api);
 
       g_assert (f->threads[i] != NULL);
     }
@@ -516,16 +509,14 @@ test_pending_call (Fixture *f,
       switch (i % 3)
         {
           case 0:
-            f->threads[i] = g_thread_create (cycle_thread, &public_api, TRUE,
-                NULL);
+            f->threads[i] = g_thread_new (NULL, cycle_thread, &public_api);
             break;
           case 1:
-            f->threads[i] = g_thread_create (cycle_thread, &internal_api, TRUE,
-                NULL);
+            f->threads[i] = g_thread_new (NULL, cycle_thread, &internal_api);
             break;
           default:
-            f->threads[i] = g_thread_create (cycle_thread,
-                &unref_and_unlock_api, TRUE, NULL);
+            f->threads[i] = g_thread_new (NULL, cycle_thread,
+                &unref_and_unlock_api);
         }
 
       g_assert (f->threads[i] != NULL);
@@ -538,16 +529,14 @@ test_pending_call (Fixture *f,
       switch (i % 3)
         {
           case 0:
-            f->threads[i] = g_thread_create (unref_thread, &public_api, TRUE,
-                NULL);
+            f->threads[i] = g_thread_new (NULL, unref_thread, &public_api);
             break;
           case 1:
-            f->threads[i] = g_thread_create (unref_thread, &internal_api, TRUE,
-                NULL);
+            f->threads[i] = g_thread_new (NULL, unref_thread, &internal_api);
             break;
           default:
-            f->threads[i] = g_thread_create (unref_thread,
-                &unref_and_unlock_api, TRUE, NULL);
+            f->threads[i] = g_thread_new (NULL, unref_thread,
+                &unref_and_unlock_api);
         }
 
       g_assert (f->threads[i] != NULL);
@@ -596,7 +585,12 @@ int
 main (int argc,
     char **argv)
 {
-  g_thread_init (NULL);
+  /* In GLib >= 2.24, < 2.31 this acts like g_thread_init() but avoids
+   * the deprecation of that function. In GLib >= 2.32 this is not
+   * necessary at all.
+   */
+  g_type_init ();
+
   g_test_init (&argc, &argv, NULL);
   g_test_bug_base ("https://bugs.freedesktop.org/show_bug.cgi?id=");
 

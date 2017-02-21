@@ -23,7 +23,7 @@
 
 #include <config.h>
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 
 #include "dbus-marshal-recursive.h"
 #include "dbus-marshal-basic.h"
@@ -34,13 +34,7 @@
 static void
 basic_value_zero (DBusBasicValue *value)
 {
-
-#ifdef DBUS_HAVE_INT64
   value->u64 = 0;
-#else
-  value->u64.first32 = 0;
-  value->u64.second32 = 0;
-#endif
 }
 
 static dbus_bool_t
@@ -56,12 +50,7 @@ basic_value_equal (int             type,
     }
   else
     {
-#ifdef DBUS_HAVE_INT64
       return lhs->u64 == rhs->u64;
-#else
-      return lhs->u64.first32 == rhs->u64.first32 &&
-        lhs->u64.second32 == rhs->u64.second32;
-#endif
     }
 }
 
@@ -1785,10 +1774,13 @@ make_and_run_test_nodes (void)
   start_next_test ("All values in one big toplevel %d iteration\n", 1);
   {
     TestTypeNode *nodes[N_VALUES];
+    TestTypeNode *node;
 
     i = 0;
-    while ((nodes[i] = value_generator (&i)))
-      ;
+    while ((node = value_generator (&i)))
+      {
+        nodes[i - 1] = node;
+      }
 
     run_test_nodes (nodes, N_VALUES);
 
@@ -1924,6 +1916,14 @@ make_and_run_test_nodes (void)
     node_destroy (node);
   }
 
+  if (_dbus_getenv ("DBUS_TEST_SLOW") == NULL ||
+      atoi (_dbus_getenv ("DBUS_TEST_SLOW")) < 1)
+    {
+      fprintf (stderr, "skipping remaining marshal-recursive tests, "
+          "run with DBUS_TEST_SLOW=1 (or more) to enable\n");
+      goto out;
+    }
+
   start_next_test ("Each container of each container of each value %d iterations\n",
                    N_CONTAINERS * N_CONTAINERS * N_VALUES);
   for (i = 0; i < N_CONTAINERS; i++)
@@ -1996,8 +1996,15 @@ make_and_run_test_nodes (void)
       node_destroy (outer_container);
     }
 
-#if 0
-  /* This one takes a really long time, so comment it out for now */
+  /* This one takes a really long time (10 minutes on a Core2), so only enable
+   * it if you're really sure */
+  if (atoi (_dbus_getenv ("DBUS_TEST_SLOW")) < 2)
+    {
+      fprintf (stderr, "skipping really slow marshal-recursive test, "
+          "run with DBUS_TEST_SLOW=2 (or more) to enable\n");
+      goto out;
+    }
+
   start_next_test ("Each value,value,value triplet combination as toplevel, in all orders %d iterations\n",
                    N_VALUES * N_VALUES * N_VALUES);
   {
@@ -2021,8 +2028,8 @@ make_and_run_test_nodes (void)
         node_destroy (nodes[0]);
       }
   }
-#endif /* #if 0 expensive test */
 
+out:
   fprintf (stderr, "%d total iterations of recursive marshaling tests\n",
            n_iterations_completed_total);
   fprintf (stderr, "each iteration ran at initial offsets 0 through %d in both big and little endian\n",
@@ -2322,7 +2329,6 @@ int32_read_multi (TestTypeNode   *node,
   return TRUE;
 }
 
-#ifdef DBUS_HAVE_INT64
 static dbus_int64_t
 int64_from_seed (int seed)
 {
@@ -2336,7 +2342,6 @@ int64_from_seed (int seed)
 
   return v;
 }
-#endif
 
 static dbus_bool_t
 int64_write_value (TestTypeNode   *node,
@@ -2344,7 +2349,6 @@ int64_write_value (TestTypeNode   *node,
                    DBusTypeWriter *writer,
                    int             seed)
 {
-#ifdef DBUS_HAVE_INT64
   /* also used for uint64 */
   dbus_int64_t v;
 
@@ -2353,9 +2357,6 @@ int64_write_value (TestTypeNode   *node,
   return _dbus_type_writer_write_basic (writer,
                                         node->klass->typecode,
                                         &v);
-#else
-  return TRUE;
-#endif
 }
 
 static dbus_bool_t
@@ -2363,7 +2364,6 @@ int64_read_value (TestTypeNode   *node,
                   DBusTypeReader *reader,
                   int             seed)
 {
-#ifdef DBUS_HAVE_INT64
   /* also used for uint64 */
   dbus_int64_t v;
 
@@ -2375,9 +2375,6 @@ int64_read_value (TestTypeNode   *node,
   _dbus_assert (v == int64_from_seed (seed));
 
   return TRUE;
-#else
-  return TRUE;
-#endif
 }
 
 static dbus_bool_t
@@ -2386,7 +2383,6 @@ int64_set_value (TestTypeNode   *node,
                  DBusTypeReader *realign_root,
                  int             seed)
 {
-#ifdef DBUS_HAVE_INT64
   /* also used for uint64 */
   dbus_int64_t v;
 
@@ -2395,9 +2391,6 @@ int64_set_value (TestTypeNode   *node,
   return _dbus_type_reader_set_basic (reader,
                                       &v,
                                       realign_root);
-#else
-  return TRUE;
-#endif
 }
 
 #define MAX_SAMPLE_STRING_LEN 10
@@ -3326,7 +3319,6 @@ dict_write_value (TestTypeNode   *node,
   DBusString dict_entry_signature;
   int i;
   int n_entries;
-  int entry_value_type;
   TestTypeNode *child;
 
   n_entries = node->klass->subclass_detail;
@@ -3363,9 +3355,7 @@ dict_write_value (TestTypeNode   *node,
   if (!_dbus_string_append_byte (&dict_entry_signature,
                                  DBUS_DICT_ENTRY_END_CHAR))
     goto oom;
-  
-  entry_value_type = _dbus_first_type_in_signature (&entry_value_signature, 0);
-  
+
   if (!_dbus_type_writer_recurse (writer, DBUS_TYPE_ARRAY,
                                   &dict_entry_signature, 0,
                                   &sub))
@@ -3562,4 +3552,4 @@ container_destroy (TestTypeNode *node)
 
 #endif /* !DOXYGEN_SHOULD_SKIP_THIS */
 
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

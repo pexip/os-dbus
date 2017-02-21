@@ -57,8 +57,6 @@
 
 #endif /* HAVE_BYTESWAP_H */
 
-#ifdef DBUS_HAVE_INT64
-
 #ifdef HAVE_BYTESWAP_H
 #define DBUS_UINT64_SWAP_LE_BE_CONSTANT(val) bswap_64(val)
 #else /* HAVE_BYTESWAP_H */
@@ -80,7 +78,6 @@
 	(dbus_uint64_t) DBUS_UINT64_CONSTANT (0x00ff000000000000)) >> 40) |    \
       (((dbus_uint64_t) (val) &                                                 \
 	(dbus_uint64_t) DBUS_UINT64_CONSTANT (0xff00000000000000)) >> 56)))
-#endif /* DBUS_HAVE_INT64 */
 
 #endif /* HAVE_BYTESWAP_H */
 
@@ -90,10 +87,8 @@
 #define DBUS_UINT32_SWAP_LE_BE(val) (DBUS_UINT32_SWAP_LE_BE_CONSTANT (val))
 #define DBUS_INT32_SWAP_LE_BE(val)  ((dbus_int32_t)DBUS_UINT32_SWAP_LE_BE_CONSTANT (val))
 
-#ifdef DBUS_HAVE_INT64
-#  define DBUS_UINT64_SWAP_LE_BE(val) (DBUS_UINT64_SWAP_LE_BE_CONSTANT (val))
-#  define DBUS_INT64_SWAP_LE_BE(val)  ((dbus_int64_t)DBUS_UINT64_SWAP_LE_BE_CONSTANT (val))
-#endif /* DBUS_HAVE_INT64 */
+#define DBUS_UINT64_SWAP_LE_BE(val) (DBUS_UINT64_SWAP_LE_BE_CONSTANT (val))
+#define DBUS_INT64_SWAP_LE_BE(val)  ((dbus_int64_t)DBUS_UINT64_SWAP_LE_BE_CONSTANT (val))
 
 #ifdef WORDS_BIGENDIAN
 
@@ -105,12 +100,10 @@
 #  define DBUS_UINT32_TO_BE(val)	((dbus_uint32_t) (val))
 #  define DBUS_INT32_TO_LE(val)	(DBUS_INT32_SWAP_LE_BE (val))
 #  define DBUS_UINT32_TO_LE(val)	(DBUS_UINT32_SWAP_LE_BE (val))
-#  ifdef DBUS_HAVE_INT64
-#    define DBUS_INT64_TO_BE(val)	((dbus_int64_t) (val))
-#    define DBUS_UINT64_TO_BE(val)	((dbus_uint64_t) (val))
-#    define DBUS_INT64_TO_LE(val)	(DBUS_INT64_SWAP_LE_BE (val))
-#    define DBUS_UINT64_TO_LE(val)	(DBUS_UINT64_SWAP_LE_BE (val))
-#  endif /* DBUS_HAVE_INT64 */
+#  define DBUS_INT64_TO_BE(val)	((dbus_int64_t) (val))
+#  define DBUS_UINT64_TO_BE(val)	((dbus_uint64_t) (val))
+#  define DBUS_INT64_TO_LE(val)	(DBUS_INT64_SWAP_LE_BE (val))
+#  define DBUS_UINT64_TO_LE(val)	(DBUS_UINT64_SWAP_LE_BE (val))
 
 #else /* WORDS_BIGENDIAN */
 
@@ -122,12 +115,10 @@
 #  define DBUS_UINT32_TO_LE(val)	((dbus_uint32_t) (val))
 #  define DBUS_INT32_TO_BE(val)	((dbus_int32_t) DBUS_UINT32_SWAP_LE_BE (val))
 #  define DBUS_UINT32_TO_BE(val)	(DBUS_UINT32_SWAP_LE_BE (val))
-#  ifdef DBUS_HAVE_INT64
-#    define DBUS_INT64_TO_LE(val)	((dbus_int64_t) (val))
-#    define DBUS_UINT64_TO_LE(val)	((dbus_uint64_t) (val))
-#    define DBUS_INT64_TO_BE(val)	((dbus_int64_t) DBUS_UINT64_SWAP_LE_BE (val))
-#    define DBUS_UINT64_TO_BE(val)	(DBUS_UINT64_SWAP_LE_BE (val))
-#  endif /* DBUS_HAVE_INT64 */
+#  define DBUS_INT64_TO_LE(val)	((dbus_int64_t) (val))
+#  define DBUS_UINT64_TO_LE(val)	((dbus_uint64_t) (val))
+#  define DBUS_INT64_TO_BE(val)	((dbus_int64_t) DBUS_UINT64_SWAP_LE_BE (val))
+#  define DBUS_UINT64_TO_BE(val)	(DBUS_UINT64_SWAP_LE_BE (val))
 #endif
 
 /* The transformation is symmetric, so the FROM just maps to the TO. */
@@ -139,46 +130,10 @@
 #define DBUS_UINT32_FROM_LE(val) (DBUS_UINT32_TO_LE (val))
 #define DBUS_INT32_FROM_BE(val)	 (DBUS_INT32_TO_BE (val))
 #define DBUS_UINT32_FROM_BE(val) (DBUS_UINT32_TO_BE (val))
-#ifdef DBUS_HAVE_INT64
-#  define DBUS_INT64_FROM_LE(val)	 (DBUS_INT64_TO_LE (val))
-#  define DBUS_UINT64_FROM_LE(val) (DBUS_UINT64_TO_LE (val))
-#  define DBUS_INT64_FROM_BE(val)	 (DBUS_INT64_TO_BE (val))
-#  define DBUS_UINT64_FROM_BE(val) (DBUS_UINT64_TO_BE (val))
-#endif /* DBUS_HAVE_INT64 */
-
-#ifndef DBUS_HAVE_INT64
-/**
- * An 8-byte struct you could use to access int64 without having
- * int64 support
- */
-typedef struct
-{
-  dbus_uint32_t first32;  /**< first 32 bits in the 8 bytes (beware endian issues) */
-  dbus_uint32_t second32; /**< second 32 bits in the 8 bytes (beware endian issues) */
-} DBus8ByteStruct;
-#endif /* DBUS_HAVE_INT64 */
-
-/**
- * A simple 8-byte value union that lets you access 8 bytes as if they
- * were various types; useful when dealing with basic types via
- * void pointers and varargs.
- */
-typedef union
-{
-  dbus_int16_t  i16;   /**< as int16 */
-  dbus_uint16_t u16;   /**< as int16 */
-  dbus_int32_t  i32;   /**< as int32 */
-  dbus_uint32_t u32;   /**< as int32 */
-#ifdef DBUS_HAVE_INT64
-  dbus_int64_t  i64;   /**< as int64 */
-  dbus_uint64_t u64;   /**< as int64 */
-#else
-  DBus8ByteStruct u64; /**< as 8-byte-struct */
-#endif
-  double dbl;          /**< as double */
-  unsigned char byt;   /**< as byte */
-  char *str;           /**< as char* */
-} DBusBasicValue;
+#define DBUS_INT64_FROM_LE(val)	 (DBUS_INT64_TO_LE (val))
+#define DBUS_UINT64_FROM_LE(val) (DBUS_UINT64_TO_LE (val))
+#define DBUS_INT64_FROM_BE(val)	 (DBUS_INT64_TO_BE (val))
+#define DBUS_UINT64_FROM_BE(val) (DBUS_UINT64_TO_BE (val))
 
 #ifdef DBUS_DISABLE_ASSERT
 #define _dbus_unpack_uint16(byte_order, data)           \
@@ -254,9 +209,7 @@ dbus_uint32_t _dbus_marshal_read_uint32       (const DBusString *str,
                                                int               pos,
                                                int               byte_order,
                                                int              *new_pos);
-dbus_bool_t   _dbus_type_is_valid             (int               typecode);
 int           _dbus_type_get_alignment        (int               typecode);
-dbus_bool_t   _dbus_type_is_fixed             (int               typecode);
 int           _dbus_type_get_alignment        (int               typecode);
 const char*   _dbus_type_to_string            (int               typecode);
 

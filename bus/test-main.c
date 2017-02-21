@@ -28,10 +28,10 @@
 #include <dbus/dbus-string.h>
 #include <dbus/dbus-sysdeps.h>
 #include <dbus/dbus-internals.h>
-#include <dbus/dbus-message-private.h>
+#include <dbus/dbus-message-internal.h>
 #include "selinux.h"
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 static void
 die (const char *failure)
 {
@@ -52,7 +52,7 @@ check_memleaks (const char *name)
       die ("memleaks");
     }
 }
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
 static DBusInitialFDs *initial_fds = NULL;
 
@@ -84,7 +84,7 @@ test_post_hook (void)
 int
 main (int argc, char **argv)
 {
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   const char *dir;
   const char *only;
   DBusString test_data_dir;
@@ -127,15 +127,6 @@ main (int argc, char **argv)
       printf ("%s: Running config file parser test\n", argv[0]);
       if (!bus_config_parser_test (&test_data_dir))
         die ("parser");
-      test_post_hook ();
-    }
-
-  if (only == NULL || strcmp (only, "policy") == 0)
-    {
-      test_pre_hook ();
-      printf ("%s: Running policy test\n", argv[0]);
-      if (!bus_policy_test (&test_data_dir))
-        die ("policy");
       test_post_hook ();
     }
 
@@ -190,7 +181,7 @@ main (int argc, char **argv)
 
   
   return 0;
-#else /* DBUS_BUILD_TESTS */
+#else /* DBUS_ENABLE_EMBEDDED_TESTS */
 
   printf ("Not compiled with test support\n");
   

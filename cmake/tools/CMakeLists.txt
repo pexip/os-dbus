@@ -1,5 +1,3 @@
-project(tools)
-
 set (dbus_send_SOURCES
 	../../tools/dbus-print-message.c			
 	../../tools/dbus-print-message.h			
@@ -31,14 +29,6 @@ endif(DBUS_BUILD_X11)
 
 set (dbus_cleanup_sockets_SOURCES
 	../../tools/dbus-cleanup-sockets.c
-)
-
-set (dbus_viewer_SOURCES
-	../../tools/dbus-names-model.c			
-	../../tools/dbus-names-model.h			
-	../../tools/dbus-tree-view.c			
-	../../tools/dbus-tree-view.h			
-	../../tools/dbus-viewer.c
 )
 
 add_executable(dbus-send ${dbus_send_SOURCES})

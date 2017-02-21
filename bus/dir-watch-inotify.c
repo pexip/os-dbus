@@ -22,11 +22,15 @@
  *
  */
 
+/* Be careful, this file is not Linux-only: QNX also uses it */
+
 #include <config.h>
 
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
+/* QNX's inotify is broken, and requires stdint.h to be manually included first */
+#include <stdint.h>
 #include <sys/inotify.h>
 #include <sys/types.h>
 #include <signal.h>
@@ -50,43 +54,35 @@ static DBusWatch *watch = NULL;
 static DBusLoop *loop = NULL;
 
 static dbus_bool_t
-_inotify_watch_callback (DBusWatch *watch, unsigned int condition, void *data)
-{
-  return dbus_watch_handle (watch, condition);
-}
-
-static dbus_bool_t
 _handle_inotify_watch (DBusWatch *passed_watch, unsigned int flags, void *data)
 {
   char buffer[INOTIFY_BUF_LEN];
   ssize_t ret = 0;
   int i = 0;
-  pid_t pid;
-  dbus_bool_t have_change = FALSE;
 
   ret = read (inotify_fd, buffer, INOTIFY_BUF_LEN);
   if (ret < 0)
     _dbus_verbose ("Error reading inotify event: '%s'\n", _dbus_strerror(errno));
   else if (!ret)
     _dbus_verbose ("Error reading inotify event: buffer too small\n");
+  else
+    {
+      _dbus_verbose ("Sending SIGHUP signal on reception of %ld inotify event(s)\n", (long) ret);
+      (void) kill (_dbus_getpid (), SIGHUP);
+    }
 
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   while (i < ret)
     {
       struct inotify_event *ev;
-      pid = _dbus_getpid ();
 
       ev = (struct inotify_event *) &buffer[i];
       i += INOTIFY_EVENT_SIZE + ev->len;
-#ifdef DBUS_ENABLE_VERBOSE_MODE
       if (ev->len)
         _dbus_verbose ("event name: '%s'\n", ev->name);
       _dbus_verbose ("inotify event: wd=%d mask=%u cookie=%u len=%u\n", ev->wd, ev->mask, ev->cookie, ev->len);
-#endif
-      _dbus_verbose ("Sending SIGHUP signal on reception of a inotify event\n");
-      have_change = TRUE;
     }
-  if (have_change)
-    (void) kill (pid, SIGHUP);
+#endif
 
   return TRUE;
 }
@@ -204,16 +200,18 @@ _shutdown_inotify (void *data)
 
   _set_watched_dirs_internal (&empty);
 
-  close (inotify_fd);
-  inotify_fd = -1;
   if (watch != NULL)
     {
-      _dbus_loop_remove_watch (loop, watch, _inotify_watch_callback, NULL);
+      _dbus_loop_remove_watch (loop, watch);
+      _dbus_watch_invalidate (watch);
       _dbus_watch_unref (watch);
       _dbus_loop_unref (loop);
     }
   watch = NULL;
   loop = NULL;
+
+  close (inotify_fd);
+  inotify_fd = -1;
 }
 
 static int
@@ -250,8 +248,7 @@ _init_inotify (BusContext *context)
           goto out;
         }
 
-      if (!_dbus_loop_add_watch (loop, watch, _inotify_watch_callback,
-                                 NULL, NULL))
+      if (!_dbus_loop_add_watch (loop, watch))
         {
           _dbus_warn ("Unable to add reload watch to main loop");
           _dbus_watch_unref (watch);

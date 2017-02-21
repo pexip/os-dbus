@@ -35,8 +35,8 @@
  * Types and functions related to DBusList.
  */
 
+/* Protected by _DBUS_LOCK (list) */
 static DBusMemPool *list_pool;
-_DBUS_DEFINE_GLOBAL_LOCK (list);
 
 /**
  * @defgroup DBusListInternals Linked list implementation details
@@ -56,7 +56,8 @@ alloc_link (void *data)
 {
   DBusList *link;
 
-  _DBUS_LOCK (list);
+  if (!_DBUS_LOCK (list))
+    return FALSE;
 
   if (list_pool == NULL)
     {      
@@ -93,7 +94,10 @@ alloc_link (void *data)
 static void
 free_link (DBusList *link)
 {  
-  _DBUS_LOCK (list);
+  if (!_DBUS_LOCK (list))
+    _dbus_assert_not_reached ("we should have initialized global locks "
+        "before we allocated a linked-list link");
+
   if (_dbus_mem_pool_dealloc (list_pool, link))
     {
       _dbus_mem_pool_free (list_pool);
@@ -145,6 +149,25 @@ link_after (DBusList **list,
       link->next->prev = link;
     }
 }
+
+#ifdef DBUS_ENABLE_STATS
+void
+_dbus_list_get_stats     (dbus_uint32_t *in_use_p,
+                          dbus_uint32_t *in_free_list_p,
+                          dbus_uint32_t *allocated_p)
+{
+  if (!_DBUS_LOCK (list))
+    {
+      *in_use_p = 0;
+      *in_free_list_p = 0;
+      *allocated_p = 0;
+      return;
+    }
+
+  _dbus_mem_pool_get_stats (list_pool, in_use_p, in_free_list_p, allocated_p);
+  _DBUS_UNLOCK (list);
+}
+#endif
 
 /** @} */
 
@@ -312,37 +335,6 @@ _dbus_list_prepend_link (DBusList **list,
 {
   link_before (list, *list, link);
 }
-
-#ifdef DBUS_BUILD_TESTS
-/**
- * Inserts data into the list before the given existing link.
- * 
- * @param list the list to modify
- * @param before_this_link existing link to insert before, or #NULL to append
- * @param data the value to insert
- * @returns #TRUE on success, #FALSE if memory allocation fails
- */
-dbus_bool_t
-_dbus_list_insert_before (DBusList **list,
-                          DBusList  *before_this_link,
-                          void      *data)
-{
-  DBusList *link;
-  
-  if (before_this_link == NULL)
-    return _dbus_list_append (list, data);
-  else
-    {
-      link = alloc_link (data);
-      if (link == NULL)
-        return FALSE;
-  
-      link_before (list, before_this_link, link);
-    }
-  
-  return TRUE;
-}
-#endif /* DBUS_BUILD_TESTS */
 
 /**
  * Inserts data into the list after the given existing link.
@@ -692,29 +684,6 @@ _dbus_list_pop_last (DBusList **list)
   return data;
 }
 
-#ifdef DBUS_BUILD_TESTS
-/**
- * Removes the last link in the list and returns it.  This is a
- * constant-time operation.
- *
- * @param list address of the list head.
- * @returns the last link in the list, or #NULL for an empty list.
- */
-DBusList*
-_dbus_list_pop_last_link (DBusList **list)
-{
-  DBusList *link;
-  
-  link = _dbus_list_get_last_link (list);
-  if (link == NULL)
-    return NULL;
-
-  _dbus_list_unlink (list, link);
-
-  return link;
-}
-#endif /* DBUS_BUILD_TESTS */
-
 /**
  * Copies a list. This is a linear-time operation.  If there isn't
  * enough memory to copy the entire list, the destination list will be
@@ -819,7 +788,7 @@ _dbus_list_length_is_one (DBusList **list)
 
 /** @} */
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include "dbus-test.h"
 #include <stdio.h>
 
@@ -1076,25 +1045,25 @@ _dbus_list_test (void)
       DBusList *got_link1;
       DBusList *got_link2;
 
-      DBusList *link1;
       DBusList *link2;
       
+      void *data1_indirect;
       void *data1;
       void *data2;
       
       got_link1 = _dbus_list_get_last_link (&list1);
       got_link2 = _dbus_list_get_first_link (&list2);
-      
-      link1 = _dbus_list_pop_last_link (&list1);
+
       link2 = _dbus_list_pop_first_link (&list2);
 
-      _dbus_assert (got_link1 == link1);
       _dbus_assert (got_link2 == link2);
 
-      data1 = link1->data;
+      data1_indirect = got_link1->data;
+      /* this call makes got_link1 invalid */
+      data1 = _dbus_list_pop_last (&list1);
+      _dbus_assert (data1 == data1_indirect);
       data2 = link2->data;
 
-      _dbus_list_free_link (link1);
       _dbus_list_free_link (link2);
       
       _dbus_assert (_DBUS_POINTER_TO_INT (data1) == i);
@@ -1337,31 +1306,6 @@ _dbus_list_test (void)
 
   _dbus_list_clear (&list1);
   _dbus_list_clear (&list2);
-  
-  /* insert_before on empty list */
-  _dbus_list_insert_before (&list1, NULL,
-                            _DBUS_INT_TO_POINTER (0));
-  verify_list (&list1);
-
-  /* inserting before first element */
-  _dbus_list_insert_before (&list1, list1,
-                            _DBUS_INT_TO_POINTER (2));
-  verify_list (&list1);
-  _dbus_assert (is_descending_sequence (&list1));
-
-  /* inserting in the middle */
-  _dbus_list_insert_before (&list1, list1->next,
-                            _DBUS_INT_TO_POINTER (1));
-  verify_list (&list1);
-  _dbus_assert (is_descending_sequence (&list1));  
-
-  /* using insert_before to append */
-  _dbus_list_insert_before (&list1, NULL,
-                            _DBUS_INT_TO_POINTER (-1));
-  verify_list (&list1);
-  _dbus_assert (is_descending_sequence (&list1));
-  
-  _dbus_list_clear (&list1);
 
   /* insert_after on empty list */
   _dbus_list_insert_after (&list1, NULL,

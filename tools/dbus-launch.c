@@ -43,6 +43,47 @@
 extern Display *xdisplay;
 #endif
 
+/* PROCESSES
+ *
+ * If you are in a shell and run "dbus-launch myapp", here is what happens:
+ *
+ * shell [*]
+ *   \- main()               --exec--> myapp[*]
+ *      \- "intermediate parent"
+ *         \- bus-runner     --exec--> dbus-daemon --fork
+ *         \- babysitter[*]            \- final dbus-daemon[*]
+ *
+ * Processes marked [*] survive the initial flurry of activity.
+ *
+ * If you run "dbus-launch --sh-syntax" then the diagram is the same, except
+ * that main() prints variables and exits 0 instead of exec'ing myapp.
+ *
+ * PIPES
+ *
+ * dbus-daemon --print-pid     -> bus_pid_to_launcher_pipe     -> main
+ * dbus-daemon --print-address -> bus_address_to_launcher_pipe -> main
+ * main                        -> bus_pid_to_babysitter_pipe   -> babysitter
+ *
+ * The intermediate parent looks pretty useless at first glance. Its purpose
+ * is to avoid the bus-runner becoming a zombie: when the intermediate parent
+ * terminates, the bus-runner and babysitter are reparented to init, which
+ * reaps them if they have finished. We can't rely on main() to reap arbitrary
+ * children because it might exec myapp, after which it can't be relied on to
+ * reap its children. We *can* rely on main() to reap the intermediate parent,
+ * because that happens before it execs myapp.
+ *
+ * It's unclear why dbus-daemon needs to fork, but we explicitly tell it to
+ * for some reason, then wait for it. If we left it undefined, a forking
+ * dbus-daemon would get the parent process reparented to init and reaped
+ * when the intermediate parent terminated, and a non-forking dbus-daemon
+ * would get reparented to init and carry on there.
+ *
+ * myapp is exec'd by the process that initially ran main() so that it's
+ * the shell's child, so the shell knows how to do job control and stuff.
+ * This is desirable for the "dbus-launch an application" use-case, less so
+ * for the "dbus-launch a test suite in an isolated session" use-case.
+ */
+
 static char* machine_uuid = NULL;
 
 const char*
@@ -64,6 +105,7 @@ save_machine_uuid (const char *uuid_arg)
   machine_uuid = xstrdup (uuid_arg);
 }
 
+#ifdef DBUS_BUILD_X11
 #define UUID_MAXLEN 40
 /* Read the machine uuid from file if needed. Returns TRUE if machine_uuid is
  * set after this function */
@@ -90,7 +132,7 @@ read_machine_uuid_if_needed (void)
     goto out;
 
   /* rstrip the read uuid */
-  while (len > 31 && isspace(uuid[len - 1]))
+  while (len > 31 && isspace((int) uuid[len - 1]))
     len--;
 
   if (len != 32)
@@ -105,12 +147,13 @@ out:
   fclose(f);
   return ret;
 }
-
+#endif /* DBUS_BUILD_X11 */
 
 void
 verbose (const char *format,
          ...)
 {
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   va_list args;
   static int verbose = TRUE;
   static int verbose_initted = FALSE;
@@ -135,12 +178,16 @@ verbose (const char *format,
   va_start (args, format);
   vfprintf (stderr, format, args);
   va_end (args);
+#endif /* DBUS_ENABLE_VERBOSE_MODE */
 }
 
 static void
 usage (int ecode)
 {
-  fprintf (stderr, "dbus-launch [--version] [--help] [--sh-syntax] [--csh-syntax] [--auto-syntax] [--exit-with-session]\n");
+  fprintf (stderr, "dbus-launch [--version] [--help] [--sh-syntax]"
+           " [--csh-syntax] [--auto-syntax] [--binary-syntax] [--close-stderr]"
+           " [--exit-with-session] [--autolaunch=MACHINEID]"
+           " [--config-file=FILENAME] [PROGRAM] [ARGS...]\n");
   exit (ecode);
 }
 
@@ -173,6 +220,26 @@ xstrdup (const char *str)
   memcpy (copy, str, len + 1);
   
   return copy;
+}
+
+static char *
+concat2 (const char *a,
+    const char *b)
+{
+  size_t la, lb;
+  char *ret;
+
+  la = strlen (a);
+  lb = strlen (b);
+
+  ret = malloc (la + lb + 1);
+
+  if (ret == NULL)
+    return NULL;
+
+  memcpy (ret, a, la);
+  memcpy (ret + la, b, lb + 1);
+  return ret;
 }
 
 typedef enum
@@ -339,6 +406,9 @@ static pid_t bus_pid_to_kill = -1;
 static void
 kill_bus(void)
 {
+  if (bus_pid_to_kill <= 0)
+    return;
+
   verbose ("Killing message bus and exiting babysitter\n");
   kill (bus_pid_to_kill, SIGTERM);
   sleep (3);
@@ -404,9 +474,7 @@ signal_handler (int sig)
 {
   switch (sig)
     {
-#ifdef SIGHUP
     case SIGHUP:
-#endif
     case SIGINT:
     case SIGTERM:
       got_sighup = TRUE;
@@ -451,15 +519,24 @@ kill_bus_when_session_ends (void)
   else
     tty_fd = -1;
 
-  if (tty_fd >= 0)
-    verbose ("stdin isatty(), monitoring it\n");
+  if (x_fd >= 0)
+    {
+      verbose ("session lifetime is defined by X, not monitoring stdin\n");
+      tty_fd = -1;
+    }
+  else if (tty_fd >= 0)
+    {
+      verbose ("stdin isatty(), monitoring it\n");
+    }
   else
-    verbose ("stdin was not a TTY, not monitoring it\n");  
-  
+    {
+      verbose ("stdin was not a TTY, not monitoring it\n");
+    }
+
   if (tty_fd < 0 && x_fd < 0)
     {
       fprintf (stderr, "No terminal on standard input and no X display; cannot attach message bus to session lifetime\n");
-      exit (1);
+      kill_bus_and_exit (1);
     }
   
   while (TRUE)
@@ -583,6 +660,7 @@ babysit (int   exit_with_session,
       s = getenv ("DBUS_DEBUG_OUTPUT");
       if (s == NULL || *s == '\0')
         dup2 (dev_null_fd, 2);
+      close (dev_null_fd);
     }
   else
     {
@@ -704,31 +782,35 @@ pass_info (const char *runprog, const char *bus_address, pid_t bus_pid,
       if (envvar == NULL || args == NULL)
         goto oom;
 
-     args[0] = xstrdup (runprog);
+      args[0] = xstrdup (runprog);
       if (!args[0])
         goto oom;
-     for (i = 1; i <= (argc-remaining_args); i++)
-      {
-        size_t len = strlen (argv[remaining_args+i-1])+1;
-        args[i] = malloc (len);
-        if (!args[i])
-          goto oom;
-        strncpy (args[i], argv[remaining_args+i-1], len);
-       }
-     args[i] = NULL;
+      for (i = 1; i <= (argc-remaining_args); i++)
+        {
+          size_t len = strlen (argv[remaining_args+i-1])+1;
+          args[i] = malloc (len);
+          if (!args[i])
+	    {
+              while (i > 1)
+                free (args[--i]);
+              goto oom;
+	    }
+          strncpy (args[i], argv[remaining_args+i-1], len);
+        }
+      args[i] = NULL;
 
-     strcpy (envvar, "DBUS_SESSION_BUS_ADDRESS=");
-     strcat (envvar, bus_address);
-     putenv (envvar);
+      strcpy (envvar, "DBUS_SESSION_BUS_ADDRESS=");
+      strcat (envvar, bus_address);
+      putenv (envvar);
 
-     execvp (runprog, args);
-     fprintf (stderr, "Couldn't exec %s: %s\n", runprog, strerror (errno));
-     exit (1);
+      execvp (runprog, args);
+      fprintf (stderr, "Couldn't exec %s: %s\n", runprog, strerror (errno));
+      exit (1);
     }
    else
     {
       print_variables (bus_address, bus_pid, bus_wid, c_shell_syntax,
-         bourne_shell_syntax, binary_syntax);
+          bourne_shell_syntax, binary_syntax);
     }
   verbose ("dbus-launch exiting\n");
 
@@ -1049,24 +1131,41 @@ main (int argc, char **argv)
 
       verbose ("Calling exec()\n");
  
-#ifdef DBUS_BUILD_TESTS 
-      /* exec from testdir */
-      if (getenv("DBUS_USE_TEST_BINARY") != NULL)
-        {
-          execl (TEST_BUS_BINARY,
-                 TEST_BUS_BINARY,
-                 "--fork",
-                 "--print-pid", write_pid_fd_as_string,
-                 "--print-address", write_address_fd_as_string,
-                 config_file ? "--config-file" : "--session",
-                 config_file, /* has to be last in this varargs list */
-                 NULL); 
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+      {
+        const char *test_daemon;
+        /* exec from testdir */
+        if (getenv ("DBUS_USE_TEST_BINARY") != NULL &&
+            (test_daemon = getenv ("DBUS_TEST_DAEMON")) != NULL)
+          {
+            if (config_file == NULL && getenv ("DBUS_TEST_DATA") != NULL)
+              {
+                config_file = concat2 (getenv ("DBUS_TEST_DATA"),
+                    "/valid-config-files/session.conf");
 
-          fprintf (stderr,
-                   "Failed to execute test message bus daemon %s: %s. Will try again with the system path.\n",
-                   TEST_BUS_BINARY, strerror (errno));
-        }
- #endif /* DBUS_BUILD_TESTS */
+                if (config_file == NULL)
+                  {
+                    fprintf (stderr, "Out of memory\n");
+                    exit (1);
+                  }
+              }
+
+            execl (test_daemon,
+                   test_daemon,
+                   "--fork",
+                   "--print-pid", write_pid_fd_as_string,
+                   "--print-address", write_address_fd_as_string,
+                   config_file ? "--config-file" : "--session",
+                   config_file, /* has to be last in this varargs list */
+                   NULL);
+
+            fprintf (stderr,
+                     "Failed to execute test message bus daemon %s: %s.\n",
+                     test_daemon, strerror (errno));
+            exit (1);
+          }
+      }
+ #endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
       execl (DBUS_DAEMONDIR"/dbus-daemon",
              DBUS_DAEMONDIR"/dbus-daemon",
@@ -1111,7 +1210,6 @@ main (int argc, char **argv)
       char *end;
       long wid = 0;
       long val;
-      int ret2;
 
       verbose ("=== Parent dbus-launch continues\n");
       
@@ -1180,11 +1278,17 @@ main (int argc, char **argv)
 
       bus_pid = val;
 
+      /* Have to initialize bus_pid_to_kill ASAP, so that the
+         X error callback can kill it if an error happens. */
+      bus_pid_to_kill = bus_pid;
+
       close (bus_pid_to_launcher_pipe[READ_END]);
 
 #ifdef DBUS_ENABLE_X11_AUTOLAUNCH
       if (xdisplay != NULL)
         {
+          int ret2;
+
           verbose("Saving x11 address\n");
           ret2 = x11_save_address (bus_address, bus_pid, &wid);
           /* Only get an existing dbus session when autolaunching */
@@ -1194,7 +1298,6 @@ main (int argc, char **argv)
                 {
                   char *address = NULL;
                   /* another window got added. Return its address */
-                  bus_pid_to_kill = bus_pid;
                   if (x11_get_address (&address, &bus_pid, &wid)
                        && address != NULL)
                     {

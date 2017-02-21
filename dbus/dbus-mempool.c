@@ -24,6 +24,7 @@
 #include <config.h>
 #include "dbus-mempool.h"
 #include "dbus-internals.h"
+#include "dbus-valgrind-internal.h"
 
 /**
  * @defgroup DBusMemPool memory pools
@@ -171,7 +172,9 @@ _dbus_mem_pool_new (int element_size,
 
   _dbus_assert ((pool->block_size %
                  pool->element_size) == 0);
-  
+
+  VALGRIND_CREATE_MEMPOOL (pool, 0, zero_elements);
+
   return pool;
 }
 
@@ -184,6 +187,8 @@ void
 _dbus_mem_pool_free (DBusMemPool *pool)
 {
   DBusMemBlock *block;
+
+  VALGRIND_DESTROY_MEMPOOL (pool);
 
   block = pool->blocks;
   while (block != NULL)
@@ -208,7 +213,7 @@ _dbus_mem_pool_free (DBusMemPool *pool)
 void*
 _dbus_mem_pool_alloc (DBusMemPool *pool)
 {
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   if (_dbus_disable_mem_pools ())
     {
       DBusMemBlock *block;
@@ -235,6 +240,8 @@ _dbus_mem_pool_alloc (DBusMemPool *pool)
           pool->blocks = block;
           pool->allocated_elements += 1;
 
+          VALGRIND_MEMPOOL_ALLOC (pool, (void *) &block->elements[0],
+              pool->element_size);
           return (void*) &block->elements[0];
         }
       else
@@ -254,11 +261,13 @@ _dbus_mem_pool_alloc (DBusMemPool *pool)
 
           pool->free_elements = pool->free_elements->next;
 
+          VALGRIND_MEMPOOL_ALLOC (pool, element, pool->element_size);
+
           if (pool->zero_elements)
             memset (element, '\0', pool->element_size);
 
           pool->allocated_elements += 1;
-          
+
           return element;
         }
       else
@@ -271,7 +280,7 @@ _dbus_mem_pool_alloc (DBusMemPool *pool)
               /* Need a new block */
               DBusMemBlock *block;
               int alloc_size;
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
               int saved_counter;
 #endif
           
@@ -285,7 +294,7 @@ _dbus_mem_pool_alloc (DBusMemPool *pool)
 
               alloc_size = sizeof (DBusMemBlock) - ELEMENT_PADDING + pool->block_size;
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
               /* We save/restore the counter, so that memory pools won't
                * cause a given function to have different number of
                * allocations on different invocations. i.e.  when testing
@@ -301,7 +310,7 @@ _dbus_mem_pool_alloc (DBusMemPool *pool)
               else
                 block = dbus_malloc (alloc_size);
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
               _dbus_set_fail_alloc_counter (saved_counter);
               _dbus_assert (saved_counter == _dbus_get_fail_alloc_counter ());
 #endif
@@ -319,7 +328,8 @@ _dbus_mem_pool_alloc (DBusMemPool *pool)
           pool->blocks->used_so_far += pool->element_size;
 
           pool->allocated_elements += 1;
-          
+
+          VALGRIND_MEMPOOL_ALLOC (pool, element, pool->element_size);
           return element;
         }
     }
@@ -337,7 +347,9 @@ dbus_bool_t
 _dbus_mem_pool_dealloc (DBusMemPool *pool,
                         void        *element)
 {
-#ifdef DBUS_BUILD_TESTS
+  VALGRIND_MEMPOOL_FREE (pool, element);
+
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   if (_dbus_disable_mem_pools ())
     {
       DBusMemBlock *block;
@@ -380,6 +392,9 @@ _dbus_mem_pool_dealloc (DBusMemPool *pool,
       DBusFreedElement *freed;
       
       freed = element;
+      /* used for internal mempool administration */
+      VALGRIND_MAKE_MEM_UNDEFINED (freed, sizeof (*freed));
+
       freed->next = pool->free_elements;
       pool->free_elements = freed;
       
@@ -390,9 +405,51 @@ _dbus_mem_pool_dealloc (DBusMemPool *pool,
     }
 }
 
+#ifdef DBUS_ENABLE_STATS
+void
+_dbus_mem_pool_get_stats (DBusMemPool   *pool,
+                          dbus_uint32_t *in_use_p,
+                          dbus_uint32_t *in_free_list_p,
+                          dbus_uint32_t *allocated_p)
+{
+  DBusMemBlock *block;
+  DBusFreedElement *freed;
+  dbus_uint32_t in_use = 0;
+  dbus_uint32_t in_free_list = 0;
+  dbus_uint32_t allocated = 0;
+
+  if (pool != NULL)
+    {
+      in_use = pool->element_size * pool->allocated_elements;
+
+      for (freed = pool->free_elements; freed != NULL; freed = freed->next)
+        {
+          in_free_list += pool->element_size;
+        }
+
+      for (block = pool->blocks; block != NULL; block = block->next)
+        {
+          if (block == pool->blocks)
+            allocated += pool->block_size;
+          else
+            allocated += block->used_so_far;
+        }
+    }
+
+  if (in_use_p != NULL)
+    *in_use_p = in_use;
+
+  if (in_free_list_p != NULL)
+    *in_free_list_p = in_free_list;
+
+  if (allocated_p != NULL)
+    *allocated_p = allocated;
+}
+#endif /* DBUS_ENABLE_STATS */
+
 /** @} */
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include "dbus-test.h"
 #include <stdio.h>
 #include <time.h>
@@ -402,8 +459,10 @@ time_for_size (int size)
 {
   int i;
   int j;
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   clock_t start;
   clock_t end;
+#endif
 #define FREE_ARRAY_SIZE 512
 #define N_ITERATIONS FREE_ARRAY_SIZE * 512
   void *to_free[FREE_ARRAY_SIZE];
@@ -413,8 +472,10 @@ time_for_size (int size)
   
   _dbus_verbose (" malloc\n");
   
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   start = clock ();
-  
+#endif
+
   i = 0;
   j = 0;
   while (i < N_ITERATIONS)
@@ -439,6 +500,7 @@ time_for_size (int size)
       ++i;
     }
 
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   end = clock ();
 
   _dbus_verbose ("  created/destroyed %d elements in %g seconds\n",
@@ -449,6 +511,7 @@ time_for_size (int size)
   _dbus_verbose (" mempools\n");
   
   start = clock ();
+#endif
 
   pool = _dbus_mem_pool_new (size, FALSE);
   
@@ -478,6 +541,7 @@ time_for_size (int size)
 
   _dbus_mem_pool_free (pool);
   
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   end = clock ();
 
   _dbus_verbose ("  created/destroyed %d elements in %g seconds\n",
@@ -486,6 +550,7 @@ time_for_size (int size)
   _dbus_verbose (" zeroed malloc\n");
     
   start = clock ();
+#endif
   
   i = 0;
   j = 0;
@@ -511,6 +576,7 @@ time_for_size (int size)
       ++i;
     }
 
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   end = clock ();
 
   _dbus_verbose ("  created/destroyed %d elements in %g seconds\n",
@@ -519,6 +585,7 @@ time_for_size (int size)
   _dbus_verbose (" zeroed mempools\n");
   
   start = clock ();
+#endif
 
   pool = _dbus_mem_pool_new (size, TRUE);
   
@@ -548,10 +615,12 @@ time_for_size (int size)
 
   _dbus_mem_pool_free (pool);
   
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   end = clock ();
 
   _dbus_verbose ("  created/destroyed %d elements in %g seconds\n",
                  N_ITERATIONS, (end - start) / (double) CLOCKS_PER_SEC);
+#endif
 }
 
 /**
@@ -575,4 +644,4 @@ _dbus_mem_pool_test (void)
   return TRUE;
 }
 
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

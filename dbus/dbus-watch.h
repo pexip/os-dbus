@@ -37,6 +37,8 @@ DBUS_BEGIN_DECLS
 
 typedef struct DBusWatchList DBusWatchList;
 
+#define _DBUS_WATCH_NVAL (1<<4)
+
 /** function to run when the watch is handled */
 typedef dbus_bool_t (* DBusWatchHandler) (DBusWatch    *watch,
                                           unsigned int  flags,
@@ -74,7 +76,13 @@ void           _dbus_watch_list_remove_watch  (DBusWatchList           *watch_li
 void           _dbus_watch_list_toggle_watch  (DBusWatchList           *watch_list,
                                                DBusWatch               *watch,
                                                dbus_bool_t              enabled);
+void           _dbus_watch_list_toggle_all_watches (DBusWatchList      *watch_list,
+                                               dbus_bool_t              enabled);
 dbus_bool_t    _dbus_watch_get_enabled        (DBusWatch              *watch);
+
+dbus_bool_t    _dbus_watch_get_oom_last_time  (DBusWatch               *watch);
+void           _dbus_watch_set_oom_last_time  (DBusWatch               *watch,
+                                               dbus_bool_t              oom);
 
 /** @} */
 

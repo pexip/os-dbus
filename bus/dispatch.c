@@ -34,6 +34,7 @@
 #include "signals.h"
 #include "test.h"
 #include <dbus/dbus-internals.h>
+#include <dbus/dbus-misc.h>
 #include <string.h>
 
 #ifdef HAVE_UNIX_FD_PASSING
@@ -41,17 +42,10 @@
 #include <unistd.h>
 #endif
 
-#ifndef TEST_CONNECTION
-/*
- TODO autotools:
-  move to build system as already done for cmake
-*/
-#ifdef DBUS_UNIX
-#define TEST_CONNECTION "debug-pipe:name=test-server"
-#else
-#define TEST_CONNECTION "tcp:host=localhost,port=1234"
-#endif
-#endif
+/* This is hard-coded in the files in valid-config-files-*. We have to use
+ * the debug-pipe transport because the tests in this file require that
+ * dbus_connection_open_private() does not block. */
+#define TEST_DEBUG_PIPE "debug-pipe:name=test-server"
 
 static dbus_bool_t
 send_one_message (DBusConnection *connection,
@@ -139,7 +133,7 @@ bus_dispatch_matches (BusTransaction *transaction,
     }
 
   /* Now dispatch to others who look interested in this message */
-  connections = bus_transaction_get_connections (transaction);
+  connections = bus_context_get_connections (context);
   dbus_error_init (&tmp_error);
   matchmaker = bus_context_get_matchmaker (context);
 
@@ -435,7 +429,7 @@ bus_dispatch_remove_connection (DBusConnection *connection)
                                  NULL);
 }
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 
 #include <stdio.h>
 
@@ -1313,9 +1307,15 @@ check_get_connection_unix_process_id (BusContext     *context,
 #endif
       else
         {
+#if defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || \
+          defined(__linux__) || \
+          defined(__OpenBSD__)
           warn_unexpected (connection, message, "not this error");
 
           goto out;
+#else
+          _dbus_verbose ("does not support GetConnectionUnixProcessID but perhaps that's OK?\n");
+#endif
         }
     }
   else
@@ -1532,7 +1532,7 @@ check_hello_connection (BusContext *context)
 
   dbus_error_init (&error);
 
-  connection = dbus_connection_open_private (TEST_CONNECTION, &error);
+  connection = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (connection == NULL)
     {
       _DBUS_ASSERT_ERROR_IS_SET (&error);
@@ -4473,7 +4473,7 @@ setenv_TEST_LAUNCH_HELPER_CONFIG(const DBusString *test_data_dir,
   _dbus_verbose ("Setting TEST_LAUNCH_HELPER_CONFIG to '%s'\n",
                  _dbus_string_get_const_data (&full));
 
-  _dbus_setenv ("TEST_LAUNCH_HELPER_CONFIG", _dbus_string_get_const_data (&full));
+  dbus_setenv ("TEST_LAUNCH_HELPER_CONFIG", _dbus_string_get_const_data (&full));
 
   _dbus_string_free (&full);
 
@@ -4501,7 +4501,7 @@ bus_dispatch_test_conf (const DBusString *test_data_dir,
   if (context == NULL)
     return FALSE;
 
-  foo = dbus_connection_open_private (TEST_CONNECTION, &error);
+  foo = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (foo == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4519,7 +4519,7 @@ bus_dispatch_test_conf (const DBusString *test_data_dir,
   if (!check_add_match_all (context, foo))
     _dbus_assert_not_reached ("AddMatch message failed");
 
-  bar = dbus_connection_open_private (TEST_CONNECTION, &error);
+  bar = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (bar == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4534,7 +4534,7 @@ bus_dispatch_test_conf (const DBusString *test_data_dir,
   if (!check_add_match_all (context, bar))
     _dbus_assert_not_reached ("AddMatch message failed");
 
-  baz = dbus_connection_open_private (TEST_CONNECTION, &error);
+  baz = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (baz == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4650,7 +4650,7 @@ bus_dispatch_test_conf_fail (const DBusString *test_data_dir,
   if (context == NULL)
     return FALSE;
 
-  foo = dbus_connection_open_private (TEST_CONNECTION, &error);
+  foo = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (foo == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4733,7 +4733,7 @@ bus_dispatch_sha1_test (const DBusString *test_data_dir)
   if (context == NULL)
     return FALSE;
 
-  foo = dbus_connection_open_private (TEST_CONNECTION, &error);
+  foo = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (foo == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4773,7 +4773,6 @@ bus_unix_fds_passing_test(const DBusString *test_data_dir)
   DBusConnection *foo, *bar;
   DBusError error;
   DBusMessage *m;
-  dbus_bool_t b;
   int one[2], two[2], x, y, z;
   char r;
 
@@ -4783,7 +4782,7 @@ bus_unix_fds_passing_test(const DBusString *test_data_dir)
   if (context == NULL)
     _dbus_assert_not_reached ("could not alloc context");
 
-  foo = dbus_connection_open_private (TEST_CONNECTION, &error);
+  foo = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (foo == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4798,7 +4797,7 @@ bus_unix_fds_passing_test(const DBusString *test_data_dir)
   if (!check_add_match_all (context, foo))
     _dbus_assert_not_reached ("AddMatch message failed");
 
-  bar = dbus_connection_open_private (TEST_CONNECTION, &error);
+  bar = dbus_connection_open_private (TEST_DEBUG_PIPE, &error);
   if (bar == NULL)
     _dbus_assert_not_reached ("could not alloc connection");
 
@@ -4915,4 +4914,4 @@ bus_unix_fds_passing_test(const DBusString *test_data_dir)
 }
 #endif
 
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

@@ -2,51 +2,62 @@ Source: dbus
 Section: admin
 Priority: optional
 Maintainer: Pexip AS <packaging@pexip.com>
-XSBC-Pexip-Original-Maintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>
-XSBC-Original-Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>
+XSBC-Pexip-Original-Maintainer: Utopia Maintenance Team <pkg-utopia-maintainers@lists.alioth.debian.org>
 XSBC-Pexip-Original-Uploaders: Sjoerd Simons <sjoerd@debian.org>,
            Sebastian Dröge <slomo@debian.org>,
            Michael Biebl <biebl@debian.org>,
            Loic Minier <lool@dooz.org>,
            Simon McVittie <smcv@debian.org>
-# The following packages can be omitted for bootstrapping:
+# The following packages can be omitted for bootstrapping, but provide extra
+# features:
+#   libaudit-dev
+#   libcap-ng-dev
+#   libsystemd-dev (circular dependency)
+# The following packages can be omitted for bootstrapping, but provide extra
+# debugging support in /usr/lib/*/dbus-1.0/debug-build:
+#   valgrind
+# The following packages can be omitted for bootstrapping, but improve test
+# coverage:
 #   libdbus-glib-1-dev (circular dependency)
 #   libglib2.0-dev
 #   python
 #   python-dbus (circular dependency)
 #   python-gobject
-# but if you have them in Build-Depends, more tests can be run
 Build-Depends: automake (>= 1:1.10),
                autotools-dev,
-               debhelper (>= 8.1.3),
+               debhelper (>= 9),
                dh-autoreconf,
                doxygen,
-               dpkg-dev (>= 1.16.0~ubuntu4),
-               hardening-includes,
+               dpkg-dev (>= 1.16.1),
+               libaudit-dev [linux-any],
+               libcap-ng-dev [linux-any],
                libexpat-dev,
                libdbus-glib-1-dev,
-               libglib2.0-dev (>= 2.31.4),
+               libglib2.0-dev,
                libselinux1-dev [linux-any],
+               libsystemd-dev (>= 209) [linux-any],
                libx11-dev,
                python (>= 2.6),
                python-dbus,
                python-gobject,
+               valgrind [amd64 armhf i386 mips mipsel powerpc ppc64 s390x],
                xmlto,
                xsltproc
-Standards-Version: 3.9.2
+Standards-Version: 3.9.5
 Vcs-Git: git://anonscm.debian.org/pkg-utopia/dbus.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-utopia/dbus.git
 Homepage: http://dbus.freedesktop.org/
+XS-Testsuite: autopkgtest
 XS-Pexip-Upstream: http://ftp.debian.org/debian/ jessie
 
 Package: dbus
 Architecture: any
+Priority: standard
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
          lsb-base (>= 3.2-14),
-         upstart (>= 0.6.3-6),
-         netbase (>= 4.45ubuntu3),
+         netbase (>= 4.45ubuntu3)
 Suggests: dbus-x11
 Multi-Arch: foreign
 Description: simple interprocess messaging system (daemon and utilities)
@@ -66,6 +77,20 @@ Description: simple interprocess messaging system (daemon and utilities)
  .
  The client-side library can be found in the libdbus-1-3 package, as it is no
  longer contained in this package.
+
+Package: dbus-udeb
+Section: debian-installer
+Priority: extra
+Package-Type: udeb
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Description: simple interprocess messaging system (minimal runtime)
+ D-Bus is a message bus, used for sending messages between applications.
+ .
+ This package is a minimal version of the dbus and dbus-x11 packages,
+ for use in the Debian installer. It can run a session bus, but is not
+ suitable for use as a system bus.
 
 Package: dbus-x11
 Architecture: any
@@ -110,6 +135,19 @@ Description: simple interprocess messaging system (library)
  .
  The daemon can be found in the dbus package.
 
+Package: libdbus-1-3-udeb
+Section: debian-installer
+Priority: extra
+Package-Type: udeb
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends}
+Description: simple interprocess messaging system (minimal library)
+ D-Bus is a message bus, used for sending messages between applications.
+ .
+ This package is a minimal version of the libdbus-1-3 package,
+ for use in the Debian installer.
+
 Package: dbus-1-doc
 Section: doc
 Architecture: all
@@ -127,6 +165,7 @@ Description: simple interprocess messaging system (documentation)
 
 Package: libdbus-1-dev
 Section: libdevel
+Multi-Arch: same
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libdbus-1-3 (= ${binary:Version}),
@@ -143,6 +182,7 @@ Description: simple interprocess messaging system (development headers)
 Package: dbus-1-dbg
 Section: debug
 Priority: extra
+Multi-Arch: same
 Architecture: any
 Pre-Depends: ${misc:Pre-Depends}
 Depends: libdbus-1-3 (= ${binary:Version}),

@@ -26,7 +26,7 @@
 #include "dbus-server-unix.h"
 #include "dbus-server-socket.h"
 #include "dbus-string.h"
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include "dbus-server-debug-pipe.h"
 #endif
 #include "dbus-address.h"
@@ -52,6 +52,20 @@
  *
  * @{
  */
+
+#ifndef _dbus_server_trace_ref
+void
+_dbus_server_trace_ref (DBusServer *server,
+    int old_refcount,
+    int new_refcount,
+    const char *why)
+{
+  static int enabled = -1;
+
+  _dbus_trace_ref ("DBusServer", server, old_refcount, new_refcount, why,
+      "DBUS_SERVER_TRACE", &enabled);
+}
+#endif
 
 /* this is a little fragile since it assumes the address doesn't
  * already have a guid, but it shouldn't
@@ -128,7 +142,7 @@ _dbus_server_init_base (DBusServer             *server,
   if (server->address == NULL)
     goto failed;
   
-  _dbus_mutex_new_at_location (&server->mutex);
+  _dbus_rmutex_new_at_location (&server->mutex);
   if (server->mutex == NULL)
     goto failed;
   
@@ -147,7 +161,7 @@ _dbus_server_init_base (DBusServer             *server,
   return TRUE;
 
  failed:
-  _dbus_mutex_free_at_location (&server->mutex);
+  _dbus_rmutex_free_at_location (&server->mutex);
   server->mutex = NULL;
   if (server->watches)
     {
@@ -194,7 +208,7 @@ _dbus_server_finalize_base (DBusServer *server)
   _dbus_watch_list_free (server->watches);
   _dbus_timeout_list_free (server->timeouts);
 
-  _dbus_mutex_free_at_location (&server->mutex);
+  _dbus_rmutex_free_at_location (&server->mutex);
   
   dbus_free (server->address);
 
@@ -298,26 +312,17 @@ _dbus_server_remove_watch  (DBusServer *server,
 }
 
 /**
- * Toggles a watch and notifies app via server's
- * DBusWatchToggledFunction if available. It's an error to call this
- * function on a watch that was not previously added.
+ * Toggles all watch and notifies app via server's
+ * DBusWatchToggledFunction if available.
  *
  * @param server the server.
- * @param watch the watch to toggle.
  * @param enabled whether to enable or disable
  */
 void
-_dbus_server_toggle_watch (DBusServer  *server,
-                           DBusWatch   *watch,
-                           dbus_bool_t  enabled)
+_dbus_server_toggle_all_watches (DBusServer  *server,
+                                dbus_bool_t  enabled)
 {
-  _dbus_assert (watch != NULL);
-
-  HAVE_LOCK_CHECK (server);
-  protected_change_watch (server, watch,
-                          NULL, NULL,
-                          _dbus_watch_list_toggle_watch,
-                          enabled);
+  _dbus_watch_list_toggle_all_watches (server->watches, enabled);
 }
 
 /** Function to be called in protected_change_timeout() with refcount held */
@@ -442,18 +447,15 @@ _dbus_server_toggle_timeout (DBusServer  *server,
 void
 _dbus_server_ref_unlocked (DBusServer *server)
 {
+  dbus_int32_t old_refcount;
+
   _dbus_assert (server != NULL);
   HAVE_LOCK_CHECK (server);
 
-#ifdef DBUS_DISABLE_ASSERT
-  _dbus_atomic_inc (&server->refcount);
-#else
-    {
-      dbus_int32_t old_refcount = _dbus_atomic_inc (&server->refcount);
-
-      _dbus_assert (old_refcount > 0);
-    }
-#endif
+  old_refcount = _dbus_atomic_inc (&server->refcount);
+  _dbus_assert (old_refcount > 0);
+  _dbus_server_trace_ref (server, old_refcount, old_refcount + 1,
+      "ref_unlocked");
 }
 
 /**
@@ -474,6 +476,9 @@ _dbus_server_unref_unlocked (DBusServer *server)
 
   old_refcount = _dbus_atomic_dec (&server->refcount);
   _dbus_assert (old_refcount > 0);
+
+  _dbus_server_trace_ref (server, old_refcount, old_refcount - 1,
+      "unref_unlocked");
 
   if (old_refcount == 1)
     {
@@ -515,7 +520,7 @@ static const struct {
 } listen_funcs[] = {
   { _dbus_server_listen_socket }
   , { _dbus_server_listen_platform_specific }
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   , { _dbus_server_listen_debug_pipe }
 #endif
 };
@@ -681,28 +686,24 @@ dbus_server_listen (const char     *address,
 DBusServer *
 dbus_server_ref (DBusServer *server)
 {
+  dbus_int32_t old_refcount;
+
   _dbus_return_val_if_fail (server != NULL, NULL);
 
-#ifdef DBUS_DISABLE_CHECKS
-  _dbus_atomic_inc (&server->refcount);
-#else
+  old_refcount = _dbus_atomic_inc (&server->refcount);
+
+#ifndef DBUS_DISABLE_CHECKS
+  if (_DBUS_UNLIKELY (old_refcount <= 0))
     {
-      dbus_int32_t old_refcount;
-
-      /* can't get the refcount without a side-effect */
-      old_refcount = _dbus_atomic_inc (&server->refcount);
-
-      if (_DBUS_UNLIKELY (old_refcount <= 0))
-        {
-          /* undo side-effect first */
-          _dbus_atomic_dec (&server->refcount);
-          _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,
-                                   _DBUS_FUNCTION_NAME, "old_refcount > 0",
-                                   __FILE__, __LINE__);
-          return NULL;
-        }
+      _dbus_atomic_dec (&server->refcount);
+      _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,
+                               _DBUS_FUNCTION_NAME, "old_refcount > 0",
+                               __FILE__, __LINE__);
+      return NULL;
     }
 #endif
+
+  _dbus_server_trace_ref (server, old_refcount, old_refcount + 1, "ref");
 
   return server;
 }
@@ -724,13 +725,18 @@ dbus_server_unref (DBusServer *server)
 
   _dbus_return_if_fail (server != NULL);
 
-  /* can't get the refcount without a side-effect */
   old_refcount = _dbus_atomic_dec (&server->refcount);
 
 #ifndef DBUS_DISABLE_CHECKS
   if (_DBUS_UNLIKELY (old_refcount <= 0))
     {
-      /* undo side-effect first */
+      /* undo side-effect first
+       * please do not try to simplify the code here by using
+       * _dbus_atomic_get(), why we don't use it is
+       * because it issues another atomic operation even though
+       * DBUS_DISABLE_CHECKS defined.
+       * Bug: https://bugs.freedesktop.org/show_bug.cgi?id=68303
+       */
       _dbus_atomic_inc (&server->refcount);
       _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,
                                _DBUS_FUNCTION_NAME, "old_refcount > 0",
@@ -738,6 +744,8 @@ dbus_server_unref (DBusServer *server)
       return;
     }
 #endif
+
+  _dbus_server_trace_ref (server, old_refcount, old_refcount - 1, "unref");
 
   if (old_refcount == 1)
     {
@@ -763,16 +771,7 @@ dbus_server_disconnect (DBusServer *server)
 {
   _dbus_return_if_fail (server != NULL);
 
-#ifdef DBUS_DISABLE_CHECKS
-  _dbus_atomic_inc (&server->refcount);
-#else
-    {
-      dbus_int32_t old_refcount = _dbus_atomic_inc (&server->refcount);
-
-      _dbus_return_if_fail (old_refcount > 0);
-    }
-#endif
-
+  dbus_server_ref (server);
   SERVER_LOCK (server);
 
   _dbus_assert (server->vtable->disconnect != NULL);
@@ -1044,7 +1043,10 @@ dbus_server_set_auth_mechanisms (DBusServer  *server,
     {
       copy = _dbus_dup_string_array (mechanisms);
       if (copy == NULL)
-        return FALSE;
+        {
+          SERVER_UNLOCK (server);
+          return FALSE;
+        }
     }
   else
     copy = NULL;
@@ -1057,9 +1059,8 @@ dbus_server_set_auth_mechanisms (DBusServer  *server,
   return TRUE;
 }
 
-
-static DBusDataSlotAllocator slot_allocator;
-_DBUS_DEFINE_GLOBAL_LOCK (server_slots);
+static DBusDataSlotAllocator slot_allocator =
+  _DBUS_DATA_SLOT_ALLOCATOR_INIT (_DBUS_LOCK_NAME (server_slots));
 
 /**
  * Allocates an integer ID to be used for storing application-specific
@@ -1079,7 +1080,6 @@ dbus_bool_t
 dbus_server_allocate_data_slot (dbus_int32_t *slot_p)
 {
   return _dbus_data_slot_allocator_alloc (&slot_allocator,
-                                          (DBusMutex **)&_DBUS_LOCK_NAME (server_slots),
                                           slot_p);
 }
 
@@ -1176,7 +1176,7 @@ dbus_server_get_data (DBusServer   *server,
 
 /** @} */
 
-#ifdef DBUS_BUILD_TESTS
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include "dbus-test.h"
 #include <string.h>
 
@@ -1232,4 +1232,4 @@ _dbus_server_test (void)
   return TRUE;
 }
 
-#endif /* DBUS_BUILD_TESTS */
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

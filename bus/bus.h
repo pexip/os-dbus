@@ -54,6 +54,7 @@ typedef struct
   long max_message_unix_fds;        /**< Max number of unix fds of a single message*/
   int activation_timeout;           /**< How long to wait for an activation to time out */
   int auth_timeout;                 /**< How long to wait for an authentication to time out */
+  int pending_fd_timeout;           /**< How long to wait for a D-Bus message with a fd to time out */
   int max_completed_connections;    /**< Max number of authorized connections */
   int max_incomplete_connections;   /**< Max number of incomplete connections */
   int max_connections_per_user;     /**< Max number of connections auth'd as same user */
@@ -66,17 +67,18 @@ typedef struct
 
 typedef enum
 {
-  FORK_FOLLOW_CONFIG_FILE,
-  FORK_ALWAYS,
-  FORK_NEVER
-} ForceForkSetting;
+  BUS_CONTEXT_FLAG_NONE = 0,
+  BUS_CONTEXT_FLAG_FORK_ALWAYS = (1 << 1),
+  BUS_CONTEXT_FLAG_FORK_NEVER = (1 << 2),
+  BUS_CONTEXT_FLAG_WRITE_PID_FILE = (1 << 3),
+  BUS_CONTEXT_FLAG_SYSTEMD_ACTIVATION = (1 << 4)
+} BusContextFlags;
 
 BusContext*       bus_context_new                                (const DBusString *config_file,
-                                                                  ForceForkSetting  force_fork,
+                                                                  BusContextFlags   flags,
                                                                   DBusPipe         *print_addr_pipe,
                                                                   DBusPipe         *print_pid_pipe,
                                                                   const DBusString *address,
-                                                                  dbus_bool_t      systemd_activation,
                                                                   DBusError        *error);
 dbus_bool_t       bus_context_reload_config                      (BusContext       *context,
 								  DBusError        *error);
@@ -105,6 +107,7 @@ BusClientPolicy*  bus_context_create_client_policy               (BusContext    
                                                                   DBusError        *error);
 int               bus_context_get_activation_timeout             (BusContext       *context);
 int               bus_context_get_auth_timeout                   (BusContext       *context);
+int               bus_context_get_pending_fd_timeout             (BusContext       *context);
 int               bus_context_get_max_completed_connections      (BusContext       *context);
 int               bus_context_get_max_incomplete_connections     (BusContext       *context);
 int               bus_context_get_max_connections_per_user       (BusContext       *context);
@@ -113,6 +116,7 @@ int               bus_context_get_max_services_per_connection    (BusContext    
 int               bus_context_get_max_match_rules_per_connection (BusContext       *context);
 int               bus_context_get_max_replies_per_connection     (BusContext       *context);
 int               bus_context_get_reply_timeout                  (BusContext       *context);
+DBusRLimit *      bus_context_get_initial_fd_limit               (BusContext       *context);
 void              bus_context_log                                (BusContext       *context,
                                                                   DBusSystemLogSeverity severity,
                                                                   const char       *msg,
@@ -124,5 +128,6 @@ dbus_bool_t       bus_context_check_security_policy              (BusContext    
                                                                   DBusConnection   *proposed_recipient,
                                                                   DBusMessage      *message,
                                                                   DBusError        *error);
+void              bus_context_check_all_watches                  (BusContext       *context);
 
 #endif /* BUS_BUS_H */

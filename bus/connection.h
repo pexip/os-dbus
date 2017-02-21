@@ -45,6 +45,8 @@ void            bus_connections_foreach_active    (BusConnections               
                                                    void                         *data);
 BusContext*     bus_connections_get_context       (BusConnections               *connections);
 void            bus_connections_increment_stamp   (BusConnections               *connections);
+dbus_bool_t     bus_connections_reload_policy     (BusConnections               *connections,
+                                                   DBusError                    *error);
 BusContext*     bus_connection_get_context        (DBusConnection               *connection);
 BusConnections* bus_connection_get_connections    (DBusConnection               *connection);
 BusRegistry*    bus_connection_get_registry       (DBusConnection               *connection);
@@ -120,7 +122,6 @@ typedef void (* BusTransactionCancelFunction) (void *data);
 
 BusTransaction* bus_transaction_new              (BusContext                   *context);
 BusContext*     bus_transaction_get_context      (BusTransaction               *transaction);
-BusConnections* bus_transaction_get_connections  (BusTransaction               *transaction);
 dbus_bool_t     bus_transaction_send             (BusTransaction               *transaction,
                                                   DBusConnection               *connection,
                                                   DBusMessage                  *message);
@@ -137,5 +138,19 @@ dbus_bool_t     bus_transaction_add_cancel_hook  (BusTransaction               *
                                                   BusTransactionCancelFunction  cancel_function,
                                                   void                         *data,
                                                   DBusFreeFunction              free_data_function);
+
+int bus_connections_get_n_active                  (BusConnections *connections);
+int bus_connections_get_n_incomplete              (BusConnections *connections);
+
+/* called by stats.c, only present if DBUS_ENABLE_STATS */
+int bus_connections_get_total_match_rules         (BusConnections *connections);
+int bus_connections_get_peak_match_rules          (BusConnections *connections);
+int bus_connections_get_peak_match_rules_per_conn (BusConnections *connections);
+int bus_connections_get_total_bus_names           (BusConnections *connections);
+int bus_connections_get_peak_bus_names            (BusConnections *connections);
+int bus_connections_get_peak_bus_names_per_conn   (BusConnections *connections);
+
+int bus_connection_get_peak_match_rules           (DBusConnection *connection);
+int bus_connection_get_peak_bus_names             (DBusConnection *connection);
 
 #endif /* BUS_CONNECTION_H */

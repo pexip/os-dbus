@@ -38,7 +38,8 @@ DBusTransport*     _dbus_transport_ref                    (DBusTransport        
 void               _dbus_transport_unref                  (DBusTransport              *transport);
 void               _dbus_transport_disconnect             (DBusTransport              *transport);
 dbus_bool_t        _dbus_transport_get_is_connected       (DBusTransport              *transport);
-dbus_bool_t        _dbus_transport_get_is_authenticated   (DBusTransport              *transport);
+dbus_bool_t        _dbus_transport_peek_is_authenticated  (DBusTransport              *transport);
+dbus_bool_t        _dbus_transport_try_to_authenticate    (DBusTransport              *transport);
 dbus_bool_t        _dbus_transport_get_is_anonymous       (DBusTransport              *transport);
 dbus_bool_t        _dbus_transport_can_pass_unix_fd       (DBusTransport              *transport);
 
@@ -96,7 +97,17 @@ dbus_bool_t        _dbus_transport_set_auth_mechanisms    (DBusTransport        
                                                            const char                **mechanisms);
 void               _dbus_transport_set_allow_anonymous    (DBusTransport              *transport,
                                                            dbus_bool_t                 value);
+int                _dbus_transport_get_pending_fds_count  (DBusTransport              *transport);
+void               _dbus_transport_set_pending_fds_function (DBusTransport *transport,
+                                                             void (* callback) (void *),
+                                                             void *data);
 
+/* if DBUS_ENABLE_STATS */
+void _dbus_transport_get_stats (DBusTransport  *transport,
+                                dbus_uint32_t  *queue_bytes,
+                                dbus_uint32_t  *queue_fds,
+                                dbus_uint32_t  *peak_queue_bytes,
+                                dbus_uint32_t  *peak_queue_fds);
 
 DBUS_END_DECLS
 
