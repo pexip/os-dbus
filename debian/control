@@ -37,7 +37,7 @@ Standards-Version: 3.9.2
 Vcs-Git: git://anonscm.debian.org/pkg-utopia/dbus.git
 Vcs-Browser: http://anonscm.debian.org/gitweb/?p=pkg-utopia/dbus.git
 Homepage: http://dbus.freedesktop.org/
-XS-Pexip-Upstream: http://archive.ubuntu.com/ubuntu/ precise
+XS-Pexip-Upstream: http://ftp.debian.org/debian/ jessie
 
 Package: dbus
 Architecture: any
