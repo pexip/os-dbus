@@ -56,8 +56,7 @@ Priority: standard
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          adduser,
-         lsb-base (>= 3.2-14),
-         netbase (>= 4.45ubuntu3)
+         lsb-base (>= 3.2-14)
 Suggests: dbus-x11
 Multi-Arch: foreign
 Description: simple interprocess messaging system (daemon and utilities)

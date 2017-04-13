@@ -6,8 +6,6 @@ dbus (1.8.22-0+deb8u1pexip1) pexip; urgency=low
       + Add debian/dbus.upstart and debian/dbus.user-session.upstart
       + debian/dbus.postinst: Use upstart call instead of invoking the init.d
         script for checking if we are already running. 
-      + debian/control: versioned dependency on netbase that emits the new
-        deconfiguring-networking event used in upstart script.
     - 20_system_conf_limit.patch: Increase max_match_rules_per_connection for
       the system bus to 5000 (LP #454093)
     - 81-session.conf-timeout.patch: Raise the service startup timeout from 25
