@@ -17,6 +17,8 @@ dbus (1.8.22-0+deb8u1pexip1) pexip; urgency=low
       (LP: #1235649, LP: #1252317).
     - debian/dbus-Xsession: Don't start a session bus if there already is
       one, i. e. $DBUS_SESSION_BUS_ADDRESS is already set. (Closes: #681241)
+  * debian/dbus.preinst: Prepare transition of /etc/init.d/dbus from
+    symlink to conffile
 
  -- John-Mark Bell <jmb@pexip.com>  Tue, 21 Feb 2017 16:49:12 +0000
 
