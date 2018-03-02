@@ -22,6 +22,9 @@
  */
 
 #include <config.h>
+
+#include <string.h>
+
 #include "signals.h"
 #include "services.h"
 #include "utils.h"
@@ -118,10 +121,46 @@ bus_match_rule_unref (BusMatchRule *rule)
     }
 }
 
-#ifdef DBUS_ENABLE_VERBOSE_MODE
-/* Note this function does not do escaping, so it's only
- * good for debug spew at the moment
- */
+#if defined(DBUS_ENABLE_VERBOSE_MODE) || defined(DBUS_ENABLE_STATS)
+static dbus_bool_t
+append_key_and_escaped_value (DBusString *str, const char *token, const char *value)
+{
+  const char *p = value;
+
+  if (!_dbus_string_append_printf (str, "%s='", token))
+    return FALSE;
+
+  while (*p != '\0')
+    {
+      const char *next = strchr (p, '\'');
+
+      if (next)
+        {
+          if (!_dbus_string_append_printf (str, "%.*s", (int) (next - p), p))
+            return FALSE;
+          /* Horrible escape sequence: single quote cannot be escaped inside
+           * a single quoted string. So we close the single quote, escape the
+           * single quote, and reopen a single quote.
+           */
+          if (!_dbus_string_append_printf (str, "'\\''"))
+            return FALSE;
+          p = next + 1;
+        }
+      else
+        {
+          if (!_dbus_string_append_printf (str, "%s", p))
+            return FALSE;
+          break;
+        }
+    }
+
+  if (!_dbus_string_append_byte (str, '\''))
+    return FALSE;
+
+  return TRUE;
+}
+
+/* returns NULL if no memory */
 static char*
 match_rule_to_string (BusMatchRule *rule)
 {
@@ -130,15 +169,12 @@ match_rule_to_string (BusMatchRule *rule)
   
   if (!_dbus_string_init (&str))
     {
-      char *s;
-      while ((s = _dbus_strdup ("nomem")) == NULL)
-        ; /* only OK for debug spew... */
-      return s;
+      return NULL;
     }
   
   if (rule->flags & BUS_MATCH_MESSAGE_TYPE)
     {
-      if (!_dbus_string_append_printf (&str, "type='%s'",
+      if (!append_key_and_escaped_value (&str, "type",
             dbus_message_type_to_string (rule->message_type)))
         goto nomem;
     }
@@ -151,7 +187,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
       
-      if (!_dbus_string_append_printf (&str, "interface='%s'", rule->interface))
+      if (!append_key_and_escaped_value (&str, "interface", rule->interface))
         goto nomem;
     }
 
@@ -163,7 +199,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
       
-      if (!_dbus_string_append_printf (&str, "member='%s'", rule->member))
+      if (!append_key_and_escaped_value (&str, "member", rule->member))
         goto nomem;
     }
 
@@ -175,7 +211,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
       
-      if (!_dbus_string_append_printf (&str, "path='%s'", rule->path))
+      if (!append_key_and_escaped_value (&str, "path", rule->path))
         goto nomem;
     }
 
@@ -187,7 +223,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
 
-      if (!_dbus_string_append_printf (&str, "path_namespace='%s'", rule->path))
+      if (!append_key_and_escaped_value (&str, "path_namespace", rule->path))
         goto nomem;
     }
 
@@ -199,7 +235,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
       
-      if (!_dbus_string_append_printf (&str, "sender='%s'", rule->sender))
+      if (!append_key_and_escaped_value (&str, "sender", rule->sender))
         goto nomem;
     }
 
@@ -211,7 +247,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
       
-      if (!_dbus_string_append_printf (&str, "destination='%s'", rule->destination))
+      if (!append_key_and_escaped_value (&str, "destination", rule->destination))
         goto nomem;
     }
 
@@ -223,7 +259,7 @@ match_rule_to_string (BusMatchRule *rule)
             goto nomem;
         }
 
-      if (!_dbus_string_append_printf (&str, "eavesdrop='%s'",
+      if (!append_key_and_escaped_value (&str, "eavesdrop",
             (rule->flags & BUS_MATCH_CLIENT_IS_EAVESDROPPING) ?
             "true" : "false"))
         goto nomem;
@@ -252,11 +288,12 @@ match_rule_to_string (BusMatchRule *rule)
               is_namespace = (rule->arg_lens[i] & BUS_MATCH_ARG_NAMESPACE) != 0;
               
               if (!_dbus_string_append_printf (&str,
-                                               "arg%d%s='%s'",
+                                               "arg%d%s",
                                                i,
                                                is_path ? "path" :
-                                               is_namespace ? "namespace" : "",
-                                               rule->args[i]))
+                                               is_namespace ? "namespace" : ""))
+                goto nomem;
+              if (!append_key_and_escaped_value (&str, "", rule->args[i]))
                 goto nomem;
             }
           
@@ -272,14 +309,9 @@ match_rule_to_string (BusMatchRule *rule)
   
  nomem:
   _dbus_string_free (&str);
-  {
-    char *s;
-    while ((s = _dbus_strdup ("nomem")) == NULL)
-      ;  /* only OK for debug spew... */
-    return s;
-  }
+  return NULL;
 }
-#endif /* DBUS_ENABLE_VERBOSE_MODE */
+#endif /* defined(DBUS_ENABLE_VERBOSE_MODE) || defined(DBUS_ENABLE_STATS) */
 
 dbus_bool_t
 bus_match_rule_set_message_type (BusMatchRule *rule,
@@ -376,6 +408,15 @@ bus_match_rule_set_client_is_eavesdropping (BusMatchRule *rule,
     rule->flags |= BUS_MATCH_CLIENT_IS_EAVESDROPPING;
   else
     rule->flags &= ~(BUS_MATCH_CLIENT_IS_EAVESDROPPING);
+}
+
+dbus_bool_t
+bus_match_rule_get_client_is_eavesdropping (BusMatchRule *rule)
+{
+  if (rule->flags & BUS_MATCH_CLIENT_IS_EAVESDROPPING)
+    return TRUE;
+  else
+    return FALSE;
 }
 
 dbus_bool_t
@@ -807,7 +848,8 @@ bus_match_rule_parse_arg_match (BusMatchRule     *rule,
 
   if (end != length)
     {
-      if ((end + strlen ("path")) == length &&
+      int len1 = strlen ("path");
+      if ((end + len1) == length &&
           _dbus_string_ends_with_c_str (&key_str, "path"))
         {
           is_path = TRUE;
@@ -1141,6 +1183,74 @@ struct BusMatchmaker
   RulePool rules_by_type[DBUS_NUM_MESSAGE_TYPES];
 };
 
+#ifdef DBUS_ENABLE_STATS
+dbus_bool_t
+bus_match_rule_dump (BusMatchmaker *matchmaker,
+                     DBusConnection *conn_filter,
+                     DBusMessageIter *arr_iter)
+{
+  int i;
+
+  for (i = 0 ; i < DBUS_NUM_MESSAGE_TYPES ; i++)
+    {
+      DBusHashIter iter;
+      DBusList **list;
+      DBusList *link;
+
+      _dbus_hash_iter_init (matchmaker->rules_by_type[i].rules_by_iface, &iter);
+      while (_dbus_hash_iter_next (&iter))
+        {
+          list =  _dbus_hash_iter_get_value (&iter);
+          for (link = _dbus_list_get_first_link (list);
+               link != NULL;
+               link = _dbus_list_get_next_link (list, link))
+            {
+              BusMatchRule *rule = link->data;
+
+              if (rule->matches_go_to == conn_filter)
+                {
+                  char *s = match_rule_to_string (rule);
+
+                  if (s == NULL)
+                    return FALSE;
+
+                  if (!dbus_message_iter_append_basic (arr_iter, DBUS_TYPE_STRING, &s))
+                    {
+                      dbus_free (s);
+                      return FALSE;
+                    }
+                  dbus_free (s);
+                }
+            }
+        }
+      list = &matchmaker->rules_by_type[i].rules_without_iface;
+      for (link = _dbus_list_get_first_link (list);
+           link != NULL;
+           link = _dbus_list_get_next_link (list, link))
+        {
+          BusMatchRule *rule = link->data;
+
+          if (rule->matches_go_to == conn_filter)
+            {
+              char *s = match_rule_to_string (rule);
+
+              if (s == NULL)
+                return FALSE;
+
+              if (!dbus_message_iter_append_basic (arr_iter, DBUS_TYPE_STRING, &s))
+                {
+                  dbus_free (s);
+                  return FALSE;
+                }
+              dbus_free (s);
+            }
+        }
+    }
+
+  return TRUE;
+}
+#endif
+
 static void
 rule_list_free (DBusList **rules)
 {
@@ -1359,7 +1469,7 @@ bus_matchmaker_add_rule (BusMatchmaker   *matchmaker,
     char *s = match_rule_to_string (rule);
 
     _dbus_verbose ("Added match rule %s to connection %p\n",
-                   s, rule->matches_go_to);
+                   s ? s : "nomem", rule->matches_go_to);
     dbus_free (s);
   }
 #endif
@@ -1452,7 +1562,7 @@ bus_matchmaker_remove_rule_link (DBusList       **rules,
     char *s = match_rule_to_string (rule);
 
     _dbus_verbose ("Removed match rule %s for connection %p\n",
-                   s, rule->matches_go_to);
+                   s ? s : "nomem", rule->matches_go_to);
     dbus_free (s);
   }
 #endif
@@ -1489,7 +1599,7 @@ bus_matchmaker_remove_rule (BusMatchmaker   *matchmaker,
     char *s = match_rule_to_string (rule);
 
     _dbus_verbose ("Removed match rule %s for connection %p\n",
-                   s, rule->matches_go_to);
+                   s ? s : "nomem", rule->matches_go_to);
     dbus_free (s);
   }
 #endif
@@ -1777,9 +1887,18 @@ match_rule_matches (BusMatchRule    *rule,
         return FALSE;
 
       if (addressed_recipient == NULL)
-        {          
-          if (strcmp (rule->destination,
-                      DBUS_SERVICE_DBUS) != 0)
+        {
+          /* If the message is going to be delivered to the dbus-daemon
+           * itself, its destination will be "org.freedesktop.DBus",
+           * which we again match against the rule (see bus_dispatch()
+           * in bus/dispatch.c, which checks for o.fd.DBus first).
+           *
+           * If we are monitoring and we don't know who is going to receive
+           * the message (for instance because they haven't been activated yet),
+           * assume they will own the requested destination name and no other,
+           * and match the rule's destination against that.
+           */
+          if (strcmp (rule->destination, destination) != 0)
             return FALSE;
         }
       else
@@ -1966,7 +2085,7 @@ get_recipients_from_list (DBusList       **rules,
         char *s = match_rule_to_string (rule);
 
         _dbus_verbose ("Checking whether message matches rule %s for connection %p\n",
-                       s, rule->matches_go_to);
+                       s ? s : "nomem", rule->matches_go_to);
         dbus_free (s);
       }
 #endif
@@ -2239,7 +2358,7 @@ test_parsing (void *data)
   rule = check_parse (TRUE, "arg7path='/foo'");
   if (rule != NULL)
     {
-      _dbus_assert (rule->flags = BUS_MATCH_ARGS);
+      _dbus_assert (rule->flags == BUS_MATCH_ARGS);
       _dbus_assert (rule->args != NULL);
       _dbus_assert (rule->args_len == 8);
       _dbus_assert (rule->args[7] != NULL);
@@ -2401,7 +2520,12 @@ static struct {
   { "type='method_call',arg3='foosh'", "arg3='foosh',type='method_call'" },
   { "arg3='fool'", "arg3='fool'" },
   { "arg0namespace='fool'", "arg0namespace='fool'" },
-  { "member='food'", "member='food'" }
+  { "member='food'", "member='food'" },
+  { "member=escape", "member='escape'" },
+  { "member=icecream", "member=ice'cream'" },
+  { "arg0='comma,type=comma',type=signal", "type=signal,arg0='comma,type=comma'" },
+  { "arg0=escap\\e", "arg0='escap\\e'" },
+  { "arg0=Time: 8 o\\'clock", "arg0='Time: 8 o'\\''clock'" },
 };
 
 static void
@@ -2414,6 +2538,8 @@ test_equality (void)
     {
       BusMatchRule *first;
       BusMatchRule *second;
+      char *first_str, *second_str;
+      BusMatchRule *first_reparsed, *second_reparsed;
       int j;
       
       first = check_parse (TRUE, equality_tests[i].first);
@@ -2428,6 +2554,21 @@ test_equality (void)
                       equality_tests[i].second);
           exit (1);
         }
+
+      /* Check match_rule_to_string */
+      first_str = match_rule_to_string (first);
+      _dbus_assert (first_str != NULL);
+      second_str = match_rule_to_string (second);
+      _dbus_assert (second_str != NULL);
+      _dbus_assert (strcmp (first_str, second_str) == 0);
+      first_reparsed = check_parse (TRUE, first_str);
+      second_reparsed = check_parse (TRUE, second_str);
+      _dbus_assert (match_rule_equal (first, first_reparsed));
+      _dbus_assert (match_rule_equal (second, second_reparsed));
+      bus_match_rule_unref (first_reparsed);
+      bus_match_rule_unref (second_reparsed);
+      dbus_free (first_str);
+      dbus_free (second_str);
 
       bus_match_rule_unref (second);
 

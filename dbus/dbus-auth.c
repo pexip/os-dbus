@@ -37,7 +37,7 @@
  * @brief DBusAuth object
  *
  * DBusAuth manages the authentication negotiation when a connection
- * is first established, and also manage any encryption used over a
+ * is first established, and also manages any encryption used over a
  * connection.
  *
  * @todo some SASL profiles require sending the empty string as a
@@ -282,6 +282,9 @@ static const DBusAuthStateData client_state_need_send_auth = {
 static const DBusAuthStateData client_state_waiting_for_data = {
   "WaitingForData", handle_client_state_waiting_for_data
 };
+/* The WaitingForOK state doesn't appear to be used.
+ * See https://bugs.freedesktop.org/show_bug.cgi?id=97298 */
+_DBUS_GNUC_UNUSED
 static const DBusAuthStateData client_state_waiting_for_ok = {
   "WaitingForOK", handle_client_state_waiting_for_ok
 };
@@ -524,10 +527,8 @@ sha1_handle_first_client_response (DBusAuth         *auth,
    */
   DBusString tmp;
   DBusString tmp2;
-  dbus_bool_t retval;
-  DBusError error;
-  
-  retval = FALSE;
+  dbus_bool_t retval = FALSE;
+  DBusError error = DBUS_ERROR_INIT;
 
   _dbus_string_set_length (&auth->challenge, 0);
   
@@ -578,7 +579,6 @@ sha1_handle_first_client_response (DBusAuth         *auth,
   
   if (auth->keyring == NULL)
     {
-      dbus_error_init (&error);
       auth->keyring = _dbus_keyring_new_for_credentials (auth->desired_identity,
                                                          &auth->context,
                                                          &error);
@@ -610,7 +610,6 @@ sha1_handle_first_client_response (DBusAuth         *auth,
 
   _dbus_assert (auth->keyring != NULL);
 
-  dbus_error_init (&error);
   auth->cookie_id = _dbus_keyring_get_best_key (auth->keyring, &error);
   if (auth->cookie_id < 0)
     {
@@ -640,8 +639,25 @@ sha1_handle_first_client_response (DBusAuth         *auth,
   if (!_dbus_string_append (&tmp2, " "))
     goto out;  
   
-  if (!_dbus_generate_random_bytes (&tmp, N_CHALLENGE_BYTES))
-    goto out;
+  if (!_dbus_generate_random_bytes (&tmp, N_CHALLENGE_BYTES, &error))
+    {
+      if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
+        {
+          dbus_error_free (&error);
+          goto out;
+        }
+      else
+        {
+          _DBUS_ASSERT_ERROR_IS_SET (&error);
+          _dbus_verbose ("%s: Error generating challenge: %s\n",
+                         DBUS_AUTH_NAME (auth), error.message);
+          if (send_rejected (auth))
+            retval = TRUE; /* retval is only about mem */
+
+          dbus_error_free (&error);
+          goto out;
+        }
+    }
 
   _dbus_string_set_length (&auth->challenge, 0);
   if (!_dbus_string_hex_encode (&tmp, 0, &auth->challenge, 0))
@@ -826,7 +842,7 @@ handle_client_data_cookie_sha1_mech (DBusAuth         *auth,
    * name, the cookie ID, and the server challenge, separated by
    * spaces. We send back our challenge string and the correct hash.
    */
-  dbus_bool_t retval;
+  dbus_bool_t retval = FALSE;
   DBusString context;
   DBusString cookie_id_str;
   DBusString server_challenge;
@@ -835,9 +851,8 @@ handle_client_data_cookie_sha1_mech (DBusAuth         *auth,
   DBusString tmp;
   int i, j;
   long val;
-  
-  retval = FALSE;                 
-  
+  DBusError error = DBUS_ERROR_INIT;
+
   if (!_dbus_string_find_blank (data, 0, &i))
     {
       if (send_error (auth,
@@ -903,9 +918,6 @@ handle_client_data_cookie_sha1_mech (DBusAuth         *auth,
 
   if (auth->keyring == NULL)
     {
-      DBusError error;
-
-      dbus_error_init (&error);
       auth->keyring = _dbus_keyring_new_for_credentials (NULL,
                                                          &context,
                                                          &error);
@@ -942,9 +954,28 @@ handle_client_data_cookie_sha1_mech (DBusAuth         *auth,
   
   if (!_dbus_string_init (&tmp))
     goto out_3;
-  
-  if (!_dbus_generate_random_bytes (&tmp, N_CHALLENGE_BYTES))
-    goto out_4;
+
+  if (!_dbus_generate_random_bytes (&tmp, N_CHALLENGE_BYTES, &error))
+    {
+      if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
+        {
+          dbus_error_free (&error);
+          goto out_4;
+        }
+      else
+        {
+          _DBUS_ASSERT_ERROR_IS_SET (&error);
+
+          _dbus_verbose ("%s: Failed to generate challenge: %s\n",
+                         DBUS_AUTH_NAME (auth), error.message);
+
+          if (send_error (auth, "Failed to generate challenge"))
+            retval = TRUE; /* retval is only about mem */
+
+          dbus_error_free (&error);
+          goto out_4;
+        }
+    }
 
   if (!_dbus_string_init (&client_challenge))
     goto out_4;
@@ -1102,20 +1133,23 @@ handle_server_data_external_mech (DBusAuth         *auth,
                                               auth->desired_identity))
         return FALSE;
 
-      /* also copy process ID from the socket credentials
+      /* also copy misc process info from the socket credentials
        */
       if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                              DBUS_CREDENTIAL_UNIX_PROCESS_ID,
                                              auth->credentials))
         return FALSE;
 
-      /* also copy audit data from the socket credentials
-       */
       if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                              DBUS_CREDENTIAL_ADT_AUDIT_DATA_ID,
                                              auth->credentials))
         return FALSE;
-      
+
+      if (!_dbus_credentials_add_credential (auth->authorized_identity,
+                                             DBUS_CREDENTIAL_LINUX_SECURITY_LABEL,
+                                             auth->credentials))
+        return FALSE;
+
       if (!send_ok (auth))
         return FALSE;
 

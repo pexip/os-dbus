@@ -24,47 +24,58 @@ Copyright:
  © 2008 Colin Walters
  © 2009 Klaralvdalens Datakonsult AB, a KDAB Group company
  © 2011-2012 Nokia Corporation
- © 2012-2013 Collabora Ltd.
+ © 2012-2017 Collabora Ltd.
  © 2013 Intel Corporation
  "modified code from libassuan, (C) FSF"
 License: GPL-2+ or AFL-2.1
 
 Files:
+ doc/dbus-test-tool.1.xml.in
  tools/dbus-cleanup-sockets.c
  tools/dbus-monitor.c
  tools/dbus-send.c
  tools/dbus-print-message.?
  tools/dbus-uuidgen.c
+ tools/test-tool.c
+ tools/tool-common.?
 Copyright:
  © 2002 Michael Meeks
  © 2003-2006 Red Hat, Inc.
  © 2003 Philip Blundell
+ © 2011 Nokia Corporation
+ © 2014-2017 Collabora Ltd.
 License: GPL-2+
 
 Files:
  dbus/dbus-server-launchd.?
- dbus/sd-daemon.?
+ doc/dbus-update-activation-environment.1.xml.in
  test/corrupt.c
  test/dbus-daemon-eavesdrop.c
  test/dbus-daemon.c
+ test/fdpass.c
  test/internals/printf.c
  test/internals/refs.c
  test/internals/syslog.c
  test/loopback.c
  test/manual-authz.c
  test/marshal.c
+ test/monitor.c
  test/relay.c
+ test/sd-activation.c
  test/syntax.c
+ test/uid-permissions.c
+ test/test-utils-glib.?
+ tools/dbus-update-activation-environment.c
  tools/lcov.am
 Copyright:
  © 2007 Tanner Lovelace
  © 2008-2009 Benjamin Reed
  © 2008 Colin Walters
  © 2009 Jonas Bähr
- © 2010 Lennart Poettering
  © 2008-2012 Nokia Corporation
- © 2008-2012 Collabora Ltd
+ © 2008-2017 Collabora Ltd
  © 2013 Intel Corporation
+ © 2017 Shin-ichi MORITA
 License: Expat
 
 Files: tools/strto*ll.c
@@ -92,16 +103,6 @@ License: GPL-2+ or AFL-2.1, and Tcl-BSDish
 Comment:
  The Tcl license appears to be compatible with either the GPL-2+
  or the AFL-2.1, so the effective license is "GPL-2+ or AFL-2.1".
-
-Files: dbus/dbus-sysdeps-util-win.c
-Copyright:
- © 2000 Werner Almesberger
- © 2002-2005 Red Hat, Inc
- © 2003 CodeFactory AB
-License: GPL-2+ or AFL-2.1, and LGPL-2+
-Comment:
- The presence of LGPL code in this file makes its effective license GPL-2+.
- It is not used in the shared library, or on Unix platforms.
 
 Files: dbus/versioninfo.rc.in
 Copyright: © 2005 g10 Code GmbH
@@ -193,25 +194,6 @@ License: Tcl-BSDish
  foregoing, the authors grant the U.S. Government and others acting
  in its behalf permission to use and distribute the software in
  accordance with the terms specified in this license.
-
-License: LGPL-2+
- This program is free software; you can redistribute it and/or
- modify it under the terms of the GNU Library General Public
- License as published by the Free Software Foundation; either
- version 2 of the License, or (at your option) any later version.
- .
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- Library General Public License for more details.
- .
- You should have received a copy of the GNU Library General Public License
- along with this program; see the file COPYING.  If not, write to
- the Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
- Boston, MA 02110-1301, USA.
-Comment:
- On Debian systems, see /usr/share/common-licenses/LGPL-2 for the full
- text of the LGPL version 2.
 
 License: BSD-3-clause
  Redistribution and use in source and binary forms, with or without

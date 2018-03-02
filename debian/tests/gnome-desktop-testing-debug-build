@@ -1,0 +1,16 @@
+#!/bin/sh
+
+set -e
+
+unset DISPLAY
+
+DBUS_TEST_HOMEDIR="$ADTTMP"
+export DBUS_TEST_HOMEDIR
+
+prefix="/usr/lib/$(dpkg-architecture -qDEB_HOST_MULTIARCH)/dbus-1.0/debug-build"
+XDG_DATA_DIRS="${prefix}/share:${XDG_DATA_DIRS:-"/usr/local/share:/usr/share"}"
+export XDG_DATA_DIRS
+
+exec 2>&1
+
+exec gnome-desktop-testing-runner dbus-debug-build

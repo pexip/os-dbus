@@ -1,24 +1,43 @@
 include(CheckIncludeFile)
+include(CheckIncludeFiles)
 include(CheckSymbolExists)
 include(CheckStructMember)
 include(CheckTypeSize)
 
+check_include_file(alloca.h     HAVE_ALLOCA_H)
+check_include_file(byteswap.h     HAVE_BYTESWAP_H)
+check_include_file(crt/externs.h     HAVE_CRT_EXTERNS_H)
 check_include_file(dirent.h     HAVE_DIRENT_H)  # dbus-sysdeps-util.c
-check_include_file(io.h         HAVE_IO_H)      # internal
+check_include_file(dlfcn.h     HAVE_DLFCN_H)
+check_include_file(execinfo.h     HAVE_EXECINFO_H)
+check_include_file(errno.h     HAVE_ERRNO_H)    # dbus-sysdeps.c
+check_include_file(expat.h     HAVE_EXPAT_H)
 check_include_file(grp.h        HAVE_GRP_H)     # dbus-sysdeps-util-win.c
+check_include_file(inttypes.h     HAVE_INTTYPES_H)   # dbus-pipe.h
+check_include_file(io.h         HAVE_IO_H)      # internal
+check_include_file(locale.h     HAVE_LOCALE_H)
+check_include_file(memory.h     HAVE_MEMORY_H)
+check_include_file(signal.h     HAVE_SIGNAL_H)
+check_include_file(stdint.h     HAVE_STDINT_H)   # dbus-pipe.h
+check_include_file(stdlib.h     HAVE_STDLIB_H)
+check_include_file(stdio.h      HAVE_STDIO_H)   # dbus-sysdeps.h
+check_include_file(string.h     HAVE_STRING_H)
+check_include_file(strings.h     HAVE_STRINGS_H)
+check_include_file(syslog.h     HAVE_SYSLOG_H)
+check_include_files("stdint.h;sys/types.h;sys/event.h" HAVE_SYS_EVENT_H)
+check_include_file(sys/inotify.h     HAVE_SYS_INOTIFY_H)
+check_include_file(sys/resource.h     HAVE_SYS_RESOURCE_H)
+check_include_file(sys/stat.h     HAVE_SYS_STAT_H)
+check_include_file(sys/types.h     HAVE_SYS_TYPES_H)
+check_include_file(sys/uio.h     HAVE_SYS_UIO_H)
 check_include_file(sys/poll.h   HAVE_POLL)      # dbus-sysdeps.c, dbus-sysdeps-win.c
+check_include_file(sys/prctl.h  HAVE_SYS_PRCTL_H)
+check_include_file(sys/syslimits.h    HAVE_SYS_SYSLIMITS_H)   # dbus-sysdeps-unix.c
 check_include_file(sys/time.h   HAVE_SYS_TIME_H)# dbus-sysdeps-win.c
 check_include_file(sys/wait.h   HAVE_SYS_WAIT_H)# dbus-sysdeps-win.c
 check_include_file(time.h       HAVE_TIME_H)    # dbus-sysdeps-win.c
 check_include_file(ws2tcpip.h   HAVE_WS2TCPIP_H)# dbus-sysdeps-win.c
 check_include_file(unistd.h     HAVE_UNISTD_H)  # dbus-sysdeps-util-win.c
-check_include_file(stdio.h      HAVE_STDIO_H)   # dbus-sysdeps.h
-check_include_file(sys/syslimits.h    HAVE_SYS_SYSLIMITS_H)   # dbus-sysdeps-unix.c
-check_include_file(errno.h     HAVE_ERRNO_H)    # dbus-sysdeps.c
-check_include_file(signal.h     HAVE_SIGNAL_H)
-check_include_file(locale.h     HAVE_LOCALE_H)
-check_include_file(inttypes.h     HAVE_INTTYPES_H)   # dbus-pipe.h
-check_include_file(stdint.h     HAVE_STDINT_H)   # dbus-pipe.h
 
 check_symbol_exists(backtrace    "execinfo.h"       HAVE_BACKTRACE)          #  dbus-sysdeps.c, dbus-sysdeps-win.c
 check_symbol_exists(getgrouplist "grp.h"            HAVE_GETGROUPLIST)       #  dbus-sysdeps.c
@@ -31,11 +50,21 @@ check_symbol_exists(clearenv     "stdlib.h"         HAVE_CLEARENV)           #  
 check_symbol_exists(writev       "sys/uio.h"        HAVE_WRITEV)             #  dbus-sysdeps.c, dbus-sysdeps-win.c
 check_symbol_exists(setrlimit    "sys/resource.h"   HAVE_SETRLIMIT)          #  dbus-sysdeps.c, dbus-sysdeps-win.c, test/test-segfault.c
 check_symbol_exists(socketpair   "sys/socket.h"     HAVE_SOCKETPAIR)         #  dbus-sysdeps.c
-check_symbol_exists(socklen_t    "sys/socket.h"     HAVE_SOCKLEN_T)          #  dbus-sysdeps-unix.c
 check_symbol_exists(setlocale    "locale.h"         HAVE_SETLOCALE)          #  dbus-test-main.c
 check_symbol_exists(localeconv   "locale.h"         HAVE_LOCALECONV)         #  dbus-sysdeps.c
 check_symbol_exists(strtoll      "stdlib.h"         HAVE_STRTOLL)            #  dbus-send.c
 check_symbol_exists(strtoull     "stdlib.h"         HAVE_STRTOULL)           #  dbus-send.c
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+check_symbol_exists(pipe2        "fcntl.h;unistd.h"         HAVE_PIPE2)
+check_symbol_exists(accept4      "sys/socket.h"             HAVE_ACCEPT4)
+check_symbol_exists(dirfd        "dirent.h"                 HAVE_DIRFD)
+check_symbol_exists(inotify_init1 "sys/inotify.h"           HAVE_INOTIFY_INIT1)
+check_symbol_exists(SCM_RIGHTS    "sys/types.h;sys/socket.h;sys/un.h" HAVE_UNIX_FD_PASSING)
+check_symbol_exists(prctl        "sys/prctl.h"              HAVE_PRCTL)
+check_symbol_exists(raise        "signal.h"                 HAVE_RAISE)
+check_symbol_exists(getrlimit    "sys/resource.h;sys/time.h" HAVE_GETRLIMIT)
+check_symbol_exists(prlimit      "sys/resource.h;sys/time.h" HAVE_PRLIMIT)
+check_symbol_exists(setrlimit    "sys/resource.h;sys/time.h" HAVE_SETRLIMIT)
 
 check_struct_member(cmsgcred cmcred_pid "sys/types.h sys/socket.h" HAVE_CMSGCRED)   #  dbus-sysdeps.c
 
@@ -48,6 +77,9 @@ check_type_size("int"       SIZEOF_INT)
 check_type_size("long"      SIZEOF_LONG)
 check_type_size("long long" SIZEOF_LONG_LONG)
 check_type_size("__int64"   SIZEOF___INT64)
+set(CMAKE_EXTRA_INCLUDE_FILES "sys/socket.h")
+check_type_size("socklen_t" SOCKLEN_T)          #  dbus-sysdeps-unix.c
+set(CMAKE_EXTRA_INCLUDE_FILES)
 
 # DBUS_INT64_TYPE
 if(SIZEOF_INT EQUAL 8)

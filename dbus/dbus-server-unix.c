@@ -66,25 +66,75 @@ _dbus_server_listen_platform_specific (DBusAddressEntry *entry,
       const char *path = dbus_address_entry_get_value (entry, "path");
       const char *tmpdir = dbus_address_entry_get_value (entry, "tmpdir");
       const char *abstract = dbus_address_entry_get_value (entry, "abstract");
+      const char *runtime = dbus_address_entry_get_value (entry, "runtime");
+      int mutually_exclusive_modes = 0;
 
-      if (path == NULL && tmpdir == NULL && abstract == NULL)
+      mutually_exclusive_modes = (path != NULL) + (tmpdir != NULL) +
+        (abstract != NULL) + (runtime != NULL);
+
+      if (mutually_exclusive_modes < 1)
         {
           _dbus_set_bad_address(error, "unix",
-                                "path or tmpdir or abstract",
+                                "path or tmpdir or abstract or runtime",
                                 NULL);
           return DBUS_SERVER_LISTEN_BAD_ADDRESS;
         }
 
-      if ((path && tmpdir) ||
-          (path && abstract) ||
-          (tmpdir && abstract))
+      if (mutually_exclusive_modes > 1)
         {
           _dbus_set_bad_address(error, NULL, NULL,
-                                "cannot specify two of \"path\" and \"tmpdir\" and \"abstract\" at the same time");
+                                "cannot specify two of \"path\", \"tmpdir\", \"abstract\" and \"runtime\" at the same time");
           return DBUS_SERVER_LISTEN_BAD_ADDRESS;
         }
 
-      if (tmpdir != NULL)
+      if (runtime != NULL)
+        {
+          DBusString full_path;
+          DBusString filename;
+          const char *runtimedir;
+
+          if (strcmp (runtime, "yes") != 0)
+            {
+              _dbus_set_bad_address(error, NULL, NULL,
+                  "if given, the only value allowed for \"runtime\" is \"yes\"");
+              return DBUS_SERVER_LISTEN_BAD_ADDRESS;
+            }
+
+          runtimedir = _dbus_getenv ("XDG_RUNTIME_DIR");
+
+          if (runtimedir == NULL)
+            {
+              dbus_set_error (error,
+                  DBUS_ERROR_NOT_SUPPORTED, "\"XDG_RUNTIME_DIR\" is not set");
+              return DBUS_SERVER_LISTEN_DID_NOT_CONNECT;
+            }
+
+          _dbus_string_init_const (&filename, "bus");
+
+          if (!_dbus_string_init (&full_path))
+            {
+              _DBUS_SET_OOM (error);
+              return DBUS_SERVER_LISTEN_DID_NOT_CONNECT;
+            }
+
+          if (!_dbus_string_append (&full_path, runtimedir) ||
+              !_dbus_concat_dir_and_file (&full_path, &filename))
+            {
+              _dbus_string_free (&full_path);
+              _DBUS_SET_OOM (error);
+              return DBUS_SERVER_LISTEN_DID_NOT_CONNECT;
+            }
+
+          /* We can safely use filesystem sockets in the runtime directory,
+           * and they are preferred because they can be bind-mounted between
+           * Linux containers. */
+          *server_p = _dbus_server_new_for_domain_socket (
+              _dbus_string_get_const_data (&full_path),
+              FALSE, error);
+
+          _dbus_string_free (&full_path);
+        }
+      else if (tmpdir != NULL)
         {
           DBusString full_path;
           DBusString filename;
@@ -102,10 +152,22 @@ _dbus_server_listen_platform_specific (DBusAddressEntry *entry,
               return DBUS_SERVER_LISTEN_DID_NOT_CONNECT;
             }
 
-          if (!_dbus_string_append (&filename,
-                                    "dbus-") ||
-              !_dbus_generate_random_ascii (&filename, 10) ||
-              !_dbus_string_append (&full_path, tmpdir) ||
+          if (!_dbus_string_append (&filename, "dbus-"))
+            {
+              _dbus_string_free (&full_path);
+              _dbus_string_free (&filename);
+              dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
+              return DBUS_SERVER_LISTEN_DID_NOT_CONNECT;
+            }
+
+          if (!_dbus_generate_random_ascii (&filename, 10, error))
+            {
+              _dbus_string_free (&full_path);
+              _dbus_string_free (&filename);
+              return DBUS_SERVER_LISTEN_DID_NOT_CONNECT;
+            }
+
+          if (!_dbus_string_append (&full_path, tmpdir) ||
               !_dbus_concat_dir_and_file (&full_path, &filename))
             {
               _dbus_string_free (&full_path);
@@ -149,7 +211,8 @@ _dbus_server_listen_platform_specific (DBusAddressEntry *entry,
     }
   else if (strcmp (method, "systemd") == 0)
     {
-      int i, n, *fds;
+      int i, n;
+      DBusSocket *fds;
       DBusString address;
 
       n = _dbus_listen_systemd_sockets (&fds, error);
@@ -173,13 +236,14 @@ _dbus_server_listen_platform_specific (DBusAddressEntry *entry,
             goto systemd_err;
         }
 
-      *server_p = _dbus_server_new_for_socket (fds, n, &address, NULL);
+      *server_p = _dbus_server_new_for_socket (fds, n, &address, NULL, error);
       if (*server_p == NULL)
-        goto systemd_oom;
+        goto systemd_err;
 
       dbus_free (fds);
 
       return DBUS_SERVER_LISTEN_OK;
+
   systemd_oom:
       _DBUS_SET_OOM (error);
   systemd_err:
@@ -239,7 +303,7 @@ _dbus_server_new_for_domain_socket (const char     *path,
                                     DBusError      *error)
 {
   DBusServer *server;
-  int listen_fd;
+  DBusSocket listen_fd;
   DBusString address;
   char *path_copy;
   DBusString path_str;
@@ -277,18 +341,17 @@ _dbus_server_new_for_domain_socket (const char     *path,
         }
     }
 
-  listen_fd = _dbus_listen_unix_socket (path, abstract, error);
+  listen_fd.fd = _dbus_listen_unix_socket (path, abstract, error);
 
-  if (listen_fd < 0)
+  if (listen_fd.fd < 0)
     {
       _DBUS_ASSERT_ERROR_IS_SET (error);
       goto failed_1;
     }
 
-  server = _dbus_server_new_for_socket (&listen_fd, 1, &address, 0);
+  server = _dbus_server_new_for_socket (&listen_fd, 1, &address, 0, error);
   if (server == NULL)
     {
-      dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
       goto failed_2;
     }
 

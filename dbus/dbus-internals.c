@@ -363,6 +363,16 @@ _dbus_is_verbose_real (void)
   return verbose;
 }
 
+void _dbus_set_verbose (dbus_bool_t state)
+{
+    verbose = state;
+}
+
+dbus_bool_t _dbus_get_verbose (void)
+{
+    return verbose;
+}
+
 /**
  * Prints a warning message to stderr
  * if the user has enabled verbose mode.
@@ -636,11 +646,17 @@ _dbus_string_array_contains (const char **array,
  * there's some text about it in the spec that should also change.
  *
  * @param uuid the uuid to initialize
+ * @param error location to store reason for failure
+ * @returns #TRUE on success
  */
-void
-_dbus_generate_uuid (DBusGUID *uuid)
+dbus_bool_t
+_dbus_generate_uuid (DBusGUID  *uuid,
+                     DBusError *error)
 {
+  DBusError rand_error;
   long now;
+
+  dbus_error_init (&rand_error);
 
   /* don't use monotonic time because the UUID may be saved to disk, e.g.
    * it may persist across reboots
@@ -649,7 +665,17 @@ _dbus_generate_uuid (DBusGUID *uuid)
 
   uuid->as_uint32s[DBUS_UUID_LENGTH_WORDS - 1] = DBUS_UINT32_TO_BE (now);
   
-  _dbus_generate_random_bytes_buffer (uuid->as_bytes, DBUS_UUID_LENGTH_BYTES - 4);
+  if (!_dbus_generate_random_bytes_buffer (uuid->as_bytes,
+                                           DBUS_UUID_LENGTH_BYTES - 4,
+                                           &rand_error))
+    {
+      dbus_set_error (error, rand_error.name,
+                      "Failed to generate UUID: %s", rand_error.message);
+      dbus_error_free (&rand_error);
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
 /**
@@ -831,7 +857,10 @@ _dbus_read_uuid_file (const DBusString *filename,
   else
     {
       dbus_error_free (&read_error);
-      _dbus_generate_uuid (uuid);
+
+      if (!_dbus_generate_uuid (uuid, error))
+        return FALSE;
+
       return _dbus_write_uuid_file (filename, uuid, error);
     }
 }
@@ -848,22 +877,27 @@ static DBusGUID machine_uuid;
  * machine is reconfigured or its hardware is modified.
  * 
  * @param uuid_str string to append hex-encoded machine uuid to
- * @returns #FALSE if no memory
+ * @param error location to store reason for failure
+ * @returns #TRUE if successful
  */
 dbus_bool_t
-_dbus_get_local_machine_uuid_encoded (DBusString *uuid_str)
+_dbus_get_local_machine_uuid_encoded (DBusString *uuid_str,
+                                      DBusError  *error)
 {
-  dbus_bool_t ok;
+  dbus_bool_t ok = TRUE;
   
   if (!_DBUS_LOCK (machine_uuid))
-    return FALSE;
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
 
   if (machine_uuid_initialized_generation != _dbus_current_generation)
     {
-      DBusError error = DBUS_ERROR_INIT;
+      DBusError local_error = DBUS_ERROR_INIT;
 
       if (!_dbus_read_local_machine_uuid (&machine_uuid, FALSE,
-                                          &error))
+                                          &local_error))
         {          
 #ifndef DBUS_ENABLE_EMBEDDED_TESTS
           /* For the test suite, we may not be installed so just continue silently
@@ -872,16 +906,23 @@ _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str)
            */
           _dbus_warn_check_failed ("D-Bus library appears to be incorrectly set up; failed to read machine uuid: %s\n"
                                    "See the manual page for dbus-uuidgen to correct this issue.\n",
-                                   error.message);
+                                   local_error.message);
 #endif
           
-          dbus_error_free (&error);
+          dbus_error_free (&local_error);
           
-          _dbus_generate_uuid (&machine_uuid);
+          ok = _dbus_generate_uuid (&machine_uuid, error);
         }
     }
 
-  ok = _dbus_uuid_encode (&machine_uuid, uuid_str);
+  if (ok)
+    {
+      if (!_dbus_uuid_encode (&machine_uuid, uuid_str))
+        {
+          ok = FALSE;
+          _DBUS_SET_OOM (error);
+        }
+    }
 
   _DBUS_UNLOCK (machine_uuid);
 
@@ -1023,6 +1064,12 @@ _dbus_test_oom_handling (const char             *description,
   else
     {
       max_failures_to_try = 4;
+    }
+
+  if (max_failures_to_try < 1)
+    {
+      _dbus_verbose ("not testing OOM handling\n");
+      return TRUE;
     }
 
   i = setting ? max_failures_to_try - 1 : 1;

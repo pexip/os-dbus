@@ -6,18 +6,9 @@
 
 #include <dbus/dbus.h>
 
-#ifdef DBUS_TEST_USE_INTERNAL
-
-# include <dbus/dbus-mainloop.h>
-# include <dbus/dbus-internals.h>
-  typedef DBusLoop TestMainContext;
-
-#else /* !DBUS_TEST_USE_INTERNAL */
-
-# include <glib.h>
-  typedef GMainContext TestMainContext;
-
-#endif /* !DBUS_TEST_USE_INTERNAL */
+#include <dbus/dbus-mainloop.h>
+#include <dbus/dbus-internals.h>
+typedef DBusLoop TestMainContext;
 
 TestMainContext *test_main_context_get            (void);
 TestMainContext *test_main_context_ref            (TestMainContext *ctx);
@@ -34,5 +25,7 @@ dbus_bool_t test_server_setup                     (TestMainContext *ctx,
                                                    DBusServer    *server);
 void        test_server_shutdown                  (TestMainContext *ctx,
                                                    DBusServer    *server);
+void        test_pending_call_store_reply         (DBusPendingCall *pc,
+                                                   void *data);
 
 #endif

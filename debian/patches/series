@@ -1,1 +1,3 @@
-01_no-fatal-warnings.patch
+backports/Replace-DBUS_USE_TEST_BINARY-with-DBUS_TEST_DBUS_LAUNCH.patch
+debian/Don-t-abort-on-fatal-warnings-by-default.patch
+debian/session.conf-system.conf-include-legacy-files-as-.dpkg-ba.patch

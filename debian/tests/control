@@ -1,5 +1,22 @@
 Tests: installed-tests
-Depends: dbus, libdbus-1-3, dbus-1-dbg
+Depends: dbus, dbus-tests
+
+Tests: installed-tests-debug-build
+Depends: dbus, dbus-1-dbg
+
+Tests: gnome-desktop-testing
+Depends: dbus, dbus-tests, gnome-desktop-testing
+
+Tests: gnome-desktop-testing-debug-build
+Depends: dbus, dbus-1-dbg, dpkg-dev, gcc, gnome-desktop-testing
+
+Tests: root
+Restrictions: allow-stderr, needs-root
+Depends: dbus, dbus-tests
+
+Tests: root-debug-build
+Restrictions: needs-root
+Depends: dbus, dbus-1-dbg
 
 Tests: build
 Depends: libdbus-1-dev, dbus, build-essential
