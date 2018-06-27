@@ -29,12 +29,12 @@ common_configure_flags := \
 ifeq ($(filter stage1,$(DEB_BUILD_PROFILES)),)
 ifeq ($(DEB_HOST_ARCH_OS),linux)
 # Non-bootstrap build on Linux: add Linux-specifics
-#with_systemd = yes
-#		--enable-systemd
-#		--with-systemdsystemunitdir=/lib/systemd/system
+with_systemd = yes
 common_configure_flags += \
 		--enable-libaudit \
 		--enable-selinux \
+		--enable-systemd \
+		--with-systemdsystemunitdir=/lib/systemd/system \
 		$(NULL)
 endif
 endif
