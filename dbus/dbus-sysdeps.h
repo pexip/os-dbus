@@ -25,7 +25,10 @@
 #ifndef DBUS_SYSDEPS_H
 #define DBUS_SYSDEPS_H
 
+#ifndef VERSION
+#warning Please include config.h before dbus-sysdeps.h
 #include "config.h"
+#endif
 
 #ifdef HAVE_STDINT_H
 #include <stdint.h>
@@ -59,6 +62,10 @@
 #include "dbus-sysdeps-wince-glue.h"
 #endif
 
+#ifdef DBUS_WIN
+#include <ws2tcpip.h>
+#endif
+
 DBUS_BEGIN_DECLS
 
 #ifdef DBUS_WIN
@@ -88,7 +95,9 @@ typedef struct DBusPipe DBusPipe;
 void _dbus_abort (void) _DBUS_GNUC_NORETURN;
 
 dbus_bool_t _dbus_check_setuid (void);
+DBUS_PRIVATE_EXPORT
 const char* _dbus_getenv (const char *varname);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_clearenv (void);
 char **     _dbus_get_environment (void);
 
@@ -113,27 +122,71 @@ typedef unsigned long dbus_gid_t;
 /** an appropriate printf format for dbus_gid_t */
 #define DBUS_GID_FORMAT "%lu"
 
-
 /**
  * Socket interface
- *
- *  @todo Use for the file descriptors a struct
- *           - struct DBusSocket{ int d; }; -
- *        instead of int to get type-safety which 
- *        will be checked by the compiler.
- * 
  */
+#ifdef DBUS_WIN
 
-dbus_bool_t _dbus_close_socket     (int               fd,
+typedef struct { SOCKET sock; } DBusSocket;
+# define DBUS_SOCKET_FORMAT "Iu"
+# define DBUS_SOCKET_INIT { INVALID_SOCKET }
+
+static inline SOCKET
+_dbus_socket_printable (DBusSocket s) { return s.sock; }
+
+static inline dbus_bool_t
+_dbus_socket_is_valid (DBusSocket s) { return s.sock != INVALID_SOCKET; }
+
+static inline void
+_dbus_socket_invalidate (DBusSocket *s) { s->sock = INVALID_SOCKET; }
+
+static inline int
+_dbus_socket_get_int (DBusSocket s) { return (int)s.sock; }
+
+#else /* not DBUS_WIN */
+
+typedef struct { int fd; } DBusSocket;
+# define DBUS_SOCKET_FORMAT "d"
+# define DBUS_SOCKET_INIT { -1 }
+
+static inline int
+_dbus_socket_printable (DBusSocket s) { return s.fd; }
+
+static inline dbus_bool_t
+_dbus_socket_is_valid (DBusSocket s) { return s.fd >= 0; }
+
+static inline void
+_dbus_socket_invalidate (DBusSocket *s) { s->fd = -1; }
+
+static inline int
+_dbus_socket_get_int (DBusSocket s) { return s.fd; }
+
+#endif /* not DBUS_WIN */
+
+static inline DBusSocket
+_dbus_socket_get_invalid (void)
+{
+  DBusSocket s = DBUS_SOCKET_INIT;
+
+  return s;
+}
+
+dbus_bool_t _dbus_set_socket_nonblocking (DBusSocket      fd,
+                                          DBusError      *error);
+
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_close_socket     (DBusSocket        fd,
                                     DBusError        *error);
-int         _dbus_read_socket      (int               fd,
+DBUS_PRIVATE_EXPORT
+int         _dbus_read_socket      (DBusSocket        fd,
                                     DBusString       *buffer,
                                     int               count);
-int         _dbus_write_socket     (int               fd,
+DBUS_PRIVATE_EXPORT
+int         _dbus_write_socket     (DBusSocket        fd,
                                     const DBusString *buffer,
                                     int               start,
                                     int               len);
-int         _dbus_write_socket_two (int               fd,
+int         _dbus_write_socket_two (DBusSocket        fd,
                                     const DBusString *buffer1,
                                     int               start1,
                                     int               len1,
@@ -141,18 +194,19 @@ int         _dbus_write_socket_two (int               fd,
                                     int               start2,
                                     int               len2);
 
-int _dbus_read_socket_with_unix_fds      (int               fd,
+int _dbus_read_socket_with_unix_fds      (DBusSocket        fd,
                                           DBusString       *buffer,
                                           int               count,
                                           int              *fds,
                                           int              *n_fds);
-int _dbus_write_socket_with_unix_fds     (int               fd,
+DBUS_PRIVATE_EXPORT
+int _dbus_write_socket_with_unix_fds     (DBusSocket        fd,
                                           const DBusString *buffer,
                                           int               start,
                                           int               len,
                                           const int        *fds,
                                           int               n_fds);
-int _dbus_write_socket_with_unix_fds_two (int               fd,
+int _dbus_write_socket_with_unix_fds_two (DBusSocket        fd,
                                           const DBusString *buffer1,
                                           int               start1,
                                           int               len1,
@@ -162,35 +216,33 @@ int _dbus_write_socket_with_unix_fds_two (int               fd,
                                           const int        *fds,
                                           int               n_fds);
 
-dbus_bool_t _dbus_socket_is_invalid (int              fd);
-
-int _dbus_connect_tcp_socket  (const char     *host,
-                               const char     *port,
-                               const char     *family,
-                               DBusError      *error);
-int _dbus_connect_tcp_socket_with_nonce  (const char     *host,
-                                          const char     *port,
-                                          const char     *family,
-                                          const char     *noncefile,
-                                          DBusError      *error);
+DBusSocket _dbus_connect_tcp_socket  (const char     *host,
+                                      const char     *port,
+                                      const char     *family,
+                                      DBusError      *error);
+DBusSocket _dbus_connect_tcp_socket_with_nonce  (const char     *host,
+                                                 const char     *port,
+                                                 const char     *family,
+                                                 const char     *noncefile,
+                                                 DBusError      *error);
 int _dbus_listen_tcp_socket   (const char     *host,
                                const char     *port,
                                const char     *family,
                                DBusString     *retport,
-                               int           **fds_p,
+                               DBusSocket    **fds_p,
                                DBusError      *error);
-int _dbus_accept              (int             listen_fd);
+DBusSocket _dbus_accept       (DBusSocket      listen_fd);
 
-
-dbus_bool_t _dbus_read_credentials_socket (int               client_fd,
+dbus_bool_t _dbus_read_credentials_socket (DBusSocket        client_fd,
                                            DBusCredentials  *credentials,
                                            DBusError        *error);
-dbus_bool_t _dbus_send_credentials_socket (int              server_fd,
+dbus_bool_t _dbus_send_credentials_socket (DBusSocket       server_fd,
                                            DBusError       *error);
 
 dbus_bool_t _dbus_credentials_add_from_user            (DBusCredentials  *credentials,
                                                         const DBusString *username);
 dbus_bool_t _dbus_credentials_add_from_current_process (DBusCredentials  *credentials);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_append_user_from_current_process     (DBusString        *str);
 
 dbus_bool_t _dbus_parse_unix_user_from_config   (const DBusString  *username,
@@ -214,7 +266,7 @@ dbus_bool_t _dbus_daemon_publish_session_bus_address (const char* address, const
 
 void _dbus_daemon_unpublish_session_bus_address (void);
 
-dbus_bool_t _dbus_socket_can_pass_unix_fd(int fd);
+dbus_bool_t _dbus_socket_can_pass_unix_fd(DBusSocket fd);
 
 /** Opaque type representing an atomically-modifiable integer
  * that can be used from multiple threads.
@@ -243,53 +295,95 @@ struct DBusAtomic
 #   undef DBUS_HAVE_ATOMIC_INT
 #endif
 
+DBUS_PRIVATE_EXPORT
 dbus_int32_t _dbus_atomic_inc (DBusAtomic *atomic);
+DBUS_PRIVATE_EXPORT
 dbus_int32_t _dbus_atomic_dec (DBusAtomic *atomic);
+DBUS_PRIVATE_EXPORT
 dbus_int32_t _dbus_atomic_get (DBusAtomic *atomic);
 
+#ifdef DBUS_WIN
 
-/* AIX uses different values for poll */
+/* On Windows, you can only poll sockets. We emulate Unix poll() using
+ * select(), so it doesn't matter what precise type we put in DBusPollFD;
+ * use DBusSocket so that the compiler can check we are doing it right.
+ */
+typedef DBusSocket DBusPollable;
+# define DBUS_POLLABLE_FORMAT "Iu"
 
-#ifdef _AIX
+static inline DBusPollable
+_dbus_socket_get_pollable (DBusSocket s) { return s; }
+
+static inline SOCKET
+_dbus_pollable_printable (DBusPollable p) { return p.sock; }
+
+static inline dbus_bool_t
+_dbus_pollable_is_valid (DBusPollable p) { return _dbus_socket_is_valid (p); }
+
+static inline void
+_dbus_pollable_invalidate (DBusPollable *p) { _dbus_socket_invalidate (p); }
+
+static inline dbus_bool_t
+_dbus_pollable_equals (DBusPollable a, DBusPollable b) { return a.sock == b.sock; }
+
+#else /* !DBUS_WIN */
+
+/* On Unix, you can poll sockets, pipes, etc., and we must put exactly
+ * "int" in DBusPollFD because we're relying on its layout exactly matching
+ * struct pollfd. (This is silly, and one day we should use a better
+ * abstraction.)
+ */
+typedef int DBusPollable;
+# define DBUS_POLLABLE_FORMAT "d"
+
+static inline DBusPollable
+_dbus_socket_get_pollable (DBusSocket s) { return s.fd; }
+
+static inline int
+_dbus_pollable_printable (DBusPollable p) { return p; }
+
+static inline dbus_bool_t
+_dbus_pollable_is_valid (DBusPollable p) { return p >= 0; }
+
+static inline void
+_dbus_pollable_invalidate (DBusPollable *p) { *p = -1; }
+
+static inline dbus_bool_t
+_dbus_pollable_equals (DBusPollable a, DBusPollable b) { return a == b; }
+
+#endif /* !DBUS_WIN */
+
+#if defined(HAVE_POLL) && !defined(BROKEN_POLL)
+/**
+ * A portable struct pollfd wrapper, or an emulation of struct pollfd
+ * on platforms where poll() is missing or broken.
+ */
+typedef struct pollfd DBusPollFD;
+
 /** There is data to read */
-#define _DBUS_POLLIN      0x0001
+#define _DBUS_POLLIN      POLLIN
 /** There is urgent data to read */
-#define _DBUS_POLLPRI     0x0004
+#define _DBUS_POLLPRI     POLLPRI
 /** Writing now will not block */
-#define _DBUS_POLLOUT     0x0002
+#define _DBUS_POLLOUT     POLLOUT
 /** Error condition */
-#define _DBUS_POLLERR     0x4000
+#define _DBUS_POLLERR     POLLERR
 /** Hung up */
-#define _DBUS_POLLHUP     0x2000
+#define _DBUS_POLLHUP     POLLHUP
 /** Invalid request: fd not open */
-#define _DBUS_POLLNVAL    0x8000
-#elif defined(__HAIKU__)
-/** There is data to read */
-#define _DBUS_POLLIN      0x0001
-/** Writing now will not block */
-#define _DBUS_POLLOUT     0x0002
-/** Error condition */
-#define _DBUS_POLLERR     0x0004
-/** There is urgent data to read */
-#define _DBUS_POLLPRI     0x0020
-/** Hung up */
-#define _DBUS_POLLHUP     0x0080
-/** Invalid request: fd not open */
-#define _DBUS_POLLNVAL    0x1000
-#elif defined(__QNX__)
-/** Writing now will not block */
-#define _DBUS_POLLOUT     0x0002
-/** There is data to read */
-#define _DBUS_POLLIN      0x0005
-/** There is urgent data to read */
-#define _DBUS_POLLPRI     0x0008
-/** Error condition */
-#define _DBUS_POLLERR     0x0020
-/** Hung up */
-#define _DBUS_POLLHUP     0x0040
-/** Invalid request: fd not open */
-#define _DBUS_POLLNVAL    0x1000
+#define _DBUS_POLLNVAL    POLLNVAL
 #else
+/* Emulate poll() via select(). Because we aren't really going to call
+ * poll(), any similarly-shaped struct is acceptable, and any power of 2
+ * will do for the events/revents; these values happen to match Linux
+ * and *BSD. */
+typedef struct
+{
+  DBusPollable fd;   /**< File descriptor */
+  short events;      /**< Events to poll for */
+  short revents;     /**< Events that occurred */
+} DBusPollFD;
+
 /** There is data to read */
 #define _DBUS_POLLIN      0x0001
 /** There is urgent data to read */
@@ -304,40 +398,41 @@ dbus_int32_t _dbus_atomic_get (DBusAtomic *atomic);
 #define _DBUS_POLLNVAL    0x0020
 #endif
 
-/**
- * A portable struct pollfd wrapper. 
- */
-typedef struct
-{
-  int fd;            /**< File descriptor */
-  short events;      /**< Events to poll for */
-  short revents;     /**< Events that occurred */
-} DBusPollFD;
-
+DBUS_PRIVATE_EXPORT
 int _dbus_poll (DBusPollFD *fds,
                 int         n_fds,
                 int         timeout_milliseconds);
 
+DBUS_PRIVATE_EXPORT
 void _dbus_sleep_milliseconds (int milliseconds);
 
+DBUS_PRIVATE_EXPORT
 void _dbus_get_monotonic_time (long *tv_sec,
                                long *tv_usec);
 
+DBUS_PRIVATE_EXPORT
 void _dbus_get_real_time (long *tv_sec,
                           long *tv_usec);
 
 /**
  * directory interface
  */
+DBUS_PRIVATE_EXPORT
 dbus_bool_t    _dbus_create_directory        (const DBusString *filename,
                                               DBusError        *error);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t    _dbus_ensure_directory        (const DBusString *filename,
+                                              DBusError        *error);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t    _dbus_delete_directory        (const DBusString *filename,
 					      DBusError        *error);
 
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_concat_dir_and_file (DBusString       *dir,
                                        const DBusString *next_component);
 dbus_bool_t _dbus_string_get_dirname  (const DBusString *filename,
                                        DBusString       *dirname);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_path_is_absolute    (const DBusString *filename);
 
 dbus_bool_t _dbus_get_standard_session_servicedirs (DBusList **dirs);
@@ -359,39 +454,46 @@ void         _dbus_directory_close         (DBusDirIter      *iter);
 dbus_bool_t  _dbus_check_dir_is_private_to_user    (DBusString *dir,
                                                     DBusError *error);
 
-void _dbus_fd_set_close_on_exec (intptr_t fd);
-
+DBUS_PRIVATE_EXPORT
 const char* _dbus_get_tmpdir      (void);
 
 /**
  * Random numbers 
  */
-void        _dbus_generate_pseudorandom_bytes_buffer (char *buffer,
-                                                      int   n_bytes);
-void        _dbus_generate_random_bytes_buffer (char       *buffer,
-                                                int         n_bytes);
+_DBUS_GNUC_WARN_UNUSED_RESULT
+dbus_bool_t _dbus_generate_random_bytes_buffer (char       *buffer,
+                                                int         n_bytes,
+                                                DBusError  *error);
 dbus_bool_t _dbus_generate_random_bytes        (DBusString *str,
-                                                int         n_bytes);
+                                                int         n_bytes,
+                                                DBusError  *error);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_generate_random_ascii        (DBusString *str,
-                                                int         n_bytes);
+                                                int         n_bytes,
+                                                DBusError  *error);
 
+DBUS_PRIVATE_EXPORT
 const char* _dbus_error_from_errno (int error_number);
+DBUS_PRIVATE_EXPORT
 const char* _dbus_error_from_system_errno (void);
 
+int         _dbus_save_socket_errno                  (void);
+void        _dbus_restore_socket_errno               (int saved_errno);
 void        _dbus_set_errno_to_zero                  (void);
-dbus_bool_t _dbus_get_is_errno_nonzero               (void);
-dbus_bool_t _dbus_get_is_errno_eagain_or_ewouldblock (void);
-dbus_bool_t _dbus_get_is_errno_enomem                (void);
-dbus_bool_t _dbus_get_is_errno_eintr                 (void);
-dbus_bool_t _dbus_get_is_errno_epipe                 (void);
-dbus_bool_t _dbus_get_is_errno_etoomanyrefs           (void);
+dbus_bool_t _dbus_get_is_errno_eagain_or_ewouldblock (int e);
+dbus_bool_t _dbus_get_is_errno_enomem                (int e);
+dbus_bool_t _dbus_get_is_errno_eintr                 (int e);
+dbus_bool_t _dbus_get_is_errno_epipe                 (int e);
+dbus_bool_t _dbus_get_is_errno_etoomanyrefs          (int e);
+DBUS_PRIVATE_EXPORT
 const char* _dbus_strerror_from_errno                (void);
 
 void _dbus_disable_sigpipe (void);
 
-
+DBUS_PRIVATE_EXPORT
 void _dbus_exit (int code) _DBUS_GNUC_NORETURN;
 
+DBUS_PRIVATE_EXPORT
 int _dbus_printf_string_upper_bound (const char *format,
                                      va_list args);
 
@@ -414,10 +516,11 @@ typedef struct
 dbus_bool_t _dbus_stat             (const DBusString *filename,
                                     DBusStat         *statbuf,
                                     DBusError        *error);
-dbus_bool_t _dbus_full_duplex_pipe (int              *fd1,
-                                    int              *fd2,
-                                    dbus_bool_t       blocking,
-                                    DBusError        *error);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_socketpair (DBusSocket       *fd1,
+                              DBusSocket       *fd2,
+                              dbus_bool_t       blocking,
+                              DBusError        *error);
 
 void        _dbus_print_backtrace  (void);
 
@@ -453,6 +556,7 @@ void _dbus_init_system_log (dbus_bool_t is_daemon);
 
 typedef enum {
   DBUS_SYSTEM_LOG_INFO,
+  DBUS_SYSTEM_LOG_WARNING,
   DBUS_SYSTEM_LOG_SECURITY,
   DBUS_SYSTEM_LOG_FATAL
 } DBusSystemLogSeverity;
@@ -529,6 +633,7 @@ void _dbus_threads_lock_platform_specific (void);
  */
 void _dbus_threads_unlock_platform_specific (void);
 
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_split_paths_and_append (DBusString *dirs, 
                                           const char *suffix, 
                                           DBusList **dir_list);
@@ -539,11 +644,16 @@ unsigned long _dbus_pid_for_log (void);
  * the PID file handling just needs a little more abstraction
  * in the bus daemon first.
  */
+DBUS_PRIVATE_EXPORT
 dbus_pid_t    _dbus_getpid (void);
+
+DBUS_PRIVATE_EXPORT
+dbus_uid_t    _dbus_getuid (void);
 
 dbus_bool_t _dbus_change_to_daemon_user (const char *user,
                                          DBusError  *error);
 
+DBUS_PRIVATE_EXPORT
 void _dbus_flush_caches (void);
 
 /*

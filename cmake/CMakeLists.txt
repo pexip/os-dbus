@@ -12,10 +12,25 @@ if(COMMAND cmake_policy)
     cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
 
+if(CMAKE_MAJOR_VERSION GREATER 2)
+    cmake_policy(SET CMP0026 NEW)
+    if (CMAKE_MAJOR_VERSION GREATER 4 OR CMAKE_MINOR_VERSION GREATER 1)
+        cmake_policy(SET CMP0053 NEW)
+        cmake_policy(SET CMP0054 NEW)
+    endif()
+endif()
 
 # detect version
 include(MacrosAutotools)
-autoversion(../configure.ac dbus)
+autoinit(../configure.ac)
+autoversion(dbus)
+
+if(EXISTS ../config.h.in)
+    autoheaderchecks(../config.h.in ConfigureChecks.cmake config.h.cmake)
+else()
+    message(STATUS "Generate config.h.in with autogen.sh to enable cmake header difference check.")
+endif()
+
 # used by file version info
 set (DBUS_PATCH_VERSION "0")
 
@@ -63,17 +78,36 @@ if (NOT DBUS_DATADIR)
     SET(DBUS_DATADIR ${DATADIR})
 endif()
 
+set(DBUS_PREFIX ${DBUS_INSTALL_DIR})
+
 set(prefix                   ${DBUS_INSTALL_DIR})
 set(exec_prefix              ${prefix})
 set(EXPANDED_LIBDIR          ${DBUS_INSTALL_DIR}/lib)
 set(EXPANDED_INCLUDEDIR      ${DBUS_INSTALL_DIR}/include)
 set(EXPANDED_BINDIR          ${DBUS_INSTALL_DIR}/bin)
 set(EXPANDED_SYSCONFDIR      ${DBUS_INSTALL_DIR}/etc)
+set(EXPANDED_LOCALSTATEDIR   ${DBUS_INSTALL_DIR}/var)
 set(EXPANDED_DATADIR         ${DBUS_INSTALL_DIR}/${DBUS_DATADIR})
 set(DBUS_MACHINE_UUID_FILE   ${DBUS_INSTALL_DIR}/lib/dbus/machine-id)
 set(DBUS_BINDIR              ${EXPANDED_BINDIR})
 set(DBUS_DAEMONDIR           ${EXPANDED_BINDIR})
+set(DBUS_LOCALSTATEDIR       ${EXPANDED_LOCALSTATEDIR})
 
+# On Windows this is relative to where we put the bus setup, in
+# ${datadir}/dbus-1. For simplicity, we only do this if
+# ${sysconfdir} = ${prefix}/etc and ${datadir} = ${prefix}/share.
+#
+# On Unix, or on Windows with weird install layouts, it's the absolute path.
+if(WIN32 AND ${EXPANDED_SYSCONFDIR} STREQUAL ${prefix}/etc AND ${EXPANDED_DATADIR} STREQUAL ${prefix}/share)
+set(SYSCONFDIR_FROM_PKGDATADIR ../../etc)
+set(DATADIR_FROM_PKGSYSCONFDIR ../../share)
+else()
+set(SYSCONFDIR_FROM_PKGDATADIR ${EXPANDED_SYSCONFDIR})
+set(DATADIR_FROM_PKGSYSCONFDIR ${EXPANDED_DATADIR})
+endif()
+
+set(DBUS_LIBEXECDIR          ${EXPANDED_LIBDIR})
+set(DBUS_DATADIR             ${EXPANDED_DATADIR})
 
 #enable building of shared library
 SET(BUILD_SHARED_LIBS ON)
@@ -136,7 +170,6 @@ if(VCS)
 endif(VCS)
 
 if(WIN32)
-	set(CMAKE_DEBUG_POSTFIX "d")
 	if(MSVC)
 		# controll folders in msvc projects
 		include(ProjectSourceGroup)
@@ -182,7 +215,19 @@ if (UNIX AND NOT DBUS_DISABLE_ASSERT)
 	add_definitions(-DDBUS_BUILT_R_DYNAMIC)
 endif (UNIX AND NOT DBUS_DISABLE_ASSERT)
 
+if(DBUS_WITH_GLIB)
+    autodefine(GLIB_VERSION_MIN_REQUIRED)
+    autodefine(GLIB_VERSION_MAX_ALLOWED)
+endif()
+
 SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}  -D_DEBUG")
+if(MSVC)
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  /w14018")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /w14018")
+else()
+    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wsign-compare")
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wsign-compare")
+endif()
 
 #########################################################################
 # Windows CE (>= 5.0.0)
@@ -289,7 +334,6 @@ endif(NOT MSVC)
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
     option (DBUS_BUS_ENABLE_INOTIFY "build with inotify support (linux only)" ON)
     if(DBUS_BUS_ENABLE_INOTIFY)
-        check_include_file(sys/inotify.h HAVE_SYS_INOTIFY_H)
         if(NOT HAVE_SYS_INOTIFY_H)
             message(FATAL_ERROR "sys/inotify.h not found!")
         endif(NOT HAVE_SYS_INOTIFY_H)
@@ -297,10 +341,6 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
 elseif("${CMAKE_SYSTEM_NAME}" MATCHES ".*BSD")
     option (DBUS_BUS_ENABLE_KQUEUE "build with kqueue support (FreeBSD only)" ON)
     if(DBUS_BUS_ENABLE_KQUEUE)
-        # cmake check a header by compiling a test program with
-        # the header, sys/event.h needs stdint.h and sys/types.h
-        # to work.
-        check_include_files("stdint.h;sys/types.h;sys/event.h" HAVE_SYS_EVENT_H)
         if(NOT HAVE_SYS_EVENT_H)
             message(FATAL_ERROR "sys/event.h not found!")
         endif(NOT HAVE_SYS_EVENT_H)
@@ -401,21 +441,14 @@ endif (MSVC_IDE)
      endif (NOT $ENV{TEMP} STREQUAL "")
  endif (NOT $ENV{TMPDIR} STREQUAL "")
 
-# TODO: fix redhet
-if (WIN32)
-  # bus-test expects a non empty string
-	set (DBUS_SYSTEM_PID_FILE "/dbus-pid")
-else (WIN32)
-	set (DBUS_SYSTEM_PID_FILE ${EXPANDED_LOCALSTATEDIR}/run/dbus/pid)
-endif (WIN32)
+ # Not used on Windows, where there is no system bus
+set (DBUS_SYSTEM_PID_FILE ${DBUS_LOCALSTATEDIR}/run/dbus/pid)
 
 if (WIN32)
 	set (DBUS_CONSOLE_AUTH_DIR "")
 else (WIN32)
 	set (DBUS_CONSOLE_AUTH_DIR "/var/run/console/")
 endif (WIN32)
-
-set (DBUS_USER )
 
 # This won't work on Windows. It's not meant to - the system bus is
 # meaningless on Windows anyway.
@@ -425,16 +458,17 @@ set (DBUS_USER )
 # and also to connect to. If this ever changes, it'll need to be split into
 # two variables, one for the listening address and one for the connecting
 # address.
-set (DBUS_SYSTEM_BUS_DEFAULT_ADDRESS "unix:path=${EXPANDED_LOCALSTATEDIR}/run/dbus/system_bus_socket" CACHE STRING "system bus default address")
+set (DBUS_SYSTEM_BUS_DEFAULT_ADDRESS "unix:path=${DBUS_LOCALSTATEDIR}/run/dbus/system_bus_socket" CACHE STRING "system bus default address")
 
 if (WIN32)
   set (DBUS_SESSION_BUS_LISTEN_ADDRESS "autolaunch:" CACHE STRING "session bus default listening address")
   set (DBUS_SESSION_BUS_CONNECT_ADDRESS "autolaunch:" CACHE STRING "session bus fallback address for clients")
 
-  set (DBUS_SYSTEM_CONFIG_FILE "etc/dbus-1/system.conf")
-  set (DBUS_SESSION_CONFIG_FILE "etc/dbus-1/session.conf")
+  set (DBUS_SYSTEM_CONFIG_FILE "share/dbus-1/system.conf")
+  set (DBUS_SESSION_CONFIG_FILE "share/dbus-1/session.conf")
   # bus-test expects a non empty string
   set (DBUS_USER "Administrator")
+  set (DBUS_TEST_USER "guest")
   set (DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL "<!--<auth>EXTERNAL</auth>-->")
 else (WIN32)
   set (DBUS_SESSION_BUS_LISTEN_ADDRESS "unix:tmpdir=${DBUS_SESSION_SOCKET_DIR}" CACHE STRING "session bus default listening address")
@@ -443,7 +477,8 @@ else (WIN32)
   set (configdir ${sysconfdir}/dbus-1 )
   set (DBUS_SYSTEM_CONFIG_FILE  ${configdir}/system.conf)
   set (DBUS_SESSION_CONFIG_FILE ${configdir}/session.conf)
-  set (DBUS_USER "root")
+  set (DBUS_USER "messagebus")
+  set (DBUS_TEST_USER "nobody")
   # For best security, assume that all non-Windows platforms can do
   # credentials-passing.
   set (DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL "<auth>EXTERNAL</auth>")
@@ -483,13 +518,8 @@ endif  (DBUS_BUILD_TESTS)
 set(DBUS_LIBRARIES dbus-1)
 set(DBUS_INTERNAL_LIBRARIES dbus-internal)
 
-# settings for building and using static internal lib
-# important note: DBUS_INTERNAL_xxxxx_DEFINITIONS must *not* be set when building dbus-1 library
 set (DBUS_INTERNAL_ADD_LIBRARY_OPTIONS STATIC)
-set (DBUS_INTERNAL_LIBRARY_DEFINITIONS "-DDBUS_STATIC_BUILD")
-# For now, the CMake build system doesn't support replacing the internal
-# main loop with dbus-glib
-set (DBUS_INTERNAL_CLIENT_DEFINITIONS "-DDBUS_STATIC_BUILD -DDBUS_COMPILATION -DDBUS_TEST_USE_INTERNAL")
+set (DBUS_INTERNAL_CLIENT_DEFINITIONS "-DDBUS_COMPILATION")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h )
 
@@ -506,6 +536,9 @@ add_subdirectory( dbus )
 add_subdirectory( bus )
 if (DBUS_BUILD_TESTS)
 	add_subdirectory( test )
+	add_custom_target(check
+		COMMAND ctest -R ^test-.*
+	)
 endif (DBUS_BUILD_TESTS)
 add_subdirectory( tools )
 add_subdirectory( doc )
@@ -521,7 +554,7 @@ GET_FILENAME_COMPONENT(C_COMPILER ${CMAKE_C_COMPILER} NAME)
 GET_FILENAME_COMPONENT(CXX_COMPILER ${CMAKE_CXX_COMPILER} NAME)
 
 message("                  D-BUS ${DBUS_VERSION}                               ")
-message("                  ===========                                         ")
+message("                  ============                                        ")
 message("                                                                      ")
 message("        install prefix:           ${prefix}                           ")
 message("        install exec_prefix:      ${exec_prefix}                      ")

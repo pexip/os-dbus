@@ -17,6 +17,7 @@
 #cmakedefine DBUS_CONSOLE_AUTH_DIR "@DBUS_CONSOLE_AUTH_DIR@"
 #cmakedefine DBUS_DATADIR  "@DBUS_DATADIR@"
 #cmakedefine DBUS_BINDIR   "@DBUS_BINDIR@"
+#cmakedefine DBUS_PREFIX "@DBUS_PREFIX@"
 #cmakedefine DBUS_SYSTEM_CONFIG_FILE  "@DBUS_SYSTEM_CONFIG_FILE@"
 #cmakedefine DBUS_SESSION_CONFIG_FILE "@DBUS_SESSION_CONFIG_FILE@"
 #cmakedefine DBUS_DAEMON_NAME "@DBUS_DAEMON_NAME@"
@@ -95,54 +96,84 @@
 
 #cmakedefine DBUS_VA_COPY_AS_ARRAY @DBUS_VA_COPY_AS_ARRAY@
 
+#cmakedefine DBUS_WITH_GLIB 1
+#cmakedefine GLIB_VERSION_MIN_REQUIRED @GLIB_VERSION_MIN_REQUIRED@
+#cmakedefine GLIB_VERSION_MAX_ALLOWED  @GLIB_VERSION_MAX_ALLOWED@
+
 // headers
+#cmakedefine HAVE_ALLOCA_H
+#cmakedefine HAVE_BYTESWAP_H
+#cmakedefine HAVE_CRT_EXTERNS_H
+
 /* Define to 1 if you have dirent.h */
 #cmakedefine   HAVE_DIRENT_H 1
 
-/* Define to 1 if you have io.h */
-#cmakedefine   HAVE_IO_H 1
-
-/* Define to 1 if you have grp.h */
-#cmakedefine   HAVE_GRP_H 1
-
-/* Define to 1 if you have sys/poll.h */
-#cmakedefine    HAVE_POLL 1
-
-/* Define to 1 if you have sys/time.h */
-#cmakedefine    HAVE_SYS_TIME 1
-
-/* Define to 1 if you have sys/wait.h */
-#cmakedefine    HAVE_SYS_WAIT 1
-
-/* Define to 1 if you have time.h */
-#cmakedefine   HAVE_TIME_H 1
-
-/* Define to 1 if you have ws2tcpip.h */
-#cmakedefine   HAVE_WS2TCPIP_H
-
-/* Define to 1 if you have unistd.h */
-#cmakedefine   HAVE_UNISTD_H 1
-
-/* Define to 1 if you have stdio.h */
-#cmakedefine   HAVE_STDIO_H 1
-
-/* Define to 1 if you have sys/syslimits.h */
-#cmakedefine   HAVE_SYS_SYSLIMITS_H 1
+#cmakedefine HAVE_DLFCN_H
 
 /* Define to 1 if you have errno.h */
 #cmakedefine   HAVE_ERRNO_H 1
 
-/* Define to 1 if you have signal.h */
-#cmakedefine   HAVE_SIGNAL_H 1
+#cmakedefine HAVE_EXECINFO_H
+#cmakedefine HAVE_EXPAT_H
 
-/* Define to 1 if you have locale.h */
-#cmakedefine   HAVE_LOCALE_H 1
+/* Define to 1 if you have grp.h */
+#cmakedefine   HAVE_GRP_H 1
 
 /* Define to 1 if you have inttypes.h */
 #cmakedefine   HAVE_INTTYPES_H 1
 
+/* Define to 1 if you have io.h */
+#cmakedefine   HAVE_IO_H 1
+
+/* Define to 1 if you have locale.h */
+#cmakedefine   HAVE_LOCALE_H 1
+
+#cmakedefine HAVE_MEMORY_H
+
+/* Define to 1 if you have sys/poll.h */
+#cmakedefine    HAVE_POLL 1
+
+/* Define to 1 if you have signal.h */
+#cmakedefine   HAVE_SIGNAL_H 1
+
 /* Define to 1 if you have stdint.h */
 #cmakedefine   HAVE_STDINT_H 1
+
+#cmakedefine HAVE_STDLIB_H
+
+/* Define to 1 if you have stdio.h */
+#cmakedefine   HAVE_STDIO_H 1
+
+#cmakedefine HAVE_STRINGS_H
+#cmakedefine HAVE_STRING_H
+#cmakedefine HAVE_SYSLOG_H
+#cmakedefine HAVE_SYS_EVENTS_H
+#cmakedefine HAVE_SYS_INOTIFY_H
+#cmakedefine HAVE_SYS_PRCTL_H
+#cmakedefine HAVE_SYS_RESOURCE_H
+#cmakedefine HAVE_SYS_STAT_H
+
+/* Define to 1 if you have sys/syslimits.h */
+#cmakedefine   HAVE_SYS_SYSLIMITS_H 1
+
+/* Define to 1 if you have sys/time.h */
+#cmakedefine    HAVE_SYS_TIME_H 1
+
+#cmakedefine HAVE_SYS_TYPES_H
+
+#cmakedefine HAVE_SYS_UIO_H
+
+/* Define to 1 if you have sys/wait.h */
+#cmakedefine    HAVE_SYS_WAIT_H 1
+
+/* Define to 1 if you have time.h */
+#cmakedefine   HAVE_TIME_H 1
+
+/* Define to 1 if you have unistd.h */
+#cmakedefine   HAVE_UNISTD_H 1
+
+/* Define to 1 if you have ws2tcpip.h */
+#cmakedefine   HAVE_WS2TCPIP_H
 
 // symbols
 /* Define to 1 if you have backtrace */
@@ -190,11 +221,25 @@
 /* Define to 1 if you have strtoull */
 #cmakedefine   HAVE_STRTOULL 1
 
+/* Define to 1 if you have pip2 */
+#cmakedefine   HAVE_PIPE2
+
+#cmakedefine HAVE_ACCEPT4 1
+#cmakedefine HAVE_DIRFD 1
+#cmakedefine HAVE_INOTIFY_INIT1 1
+#cmakedefine HAVE_GETRLIMIT 1
+#cmakedefine HAVE_PRLIMIT 1
+#cmakedefine HAVE_SETRLIMIT 1
+#cmakedefine HAVE_UNIX_FD_PASSING 1
+
 // structs
 /* Define to 1 if you have struct cmsgred */
 #cmakedefine    HAVE_CMSGCRED 1
 
 #cmakedefine FD_SETSIZE @FD_SETSIZE@
+
+#cmakedefine DBUS_USER "@DBUS_USER@"
+#cmakedefine DBUS_TEST_USER "@DBUS_TEST_USER@"
 
 // system type defines
 #if defined(_WIN32) || defined(_WIN64) || defined (_WIN32_WCE)

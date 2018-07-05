@@ -1,9 +1,11 @@
-configdir=$(sysconfdir)/dbus-1
+dbusdatadir=$(datadir)/dbus-1
+legacydbusdatadir=$(sysconfdir)/dbus-1
 dbus_daemon_execdir = $(DBUS_DAEMONDIR)
 
 DBUS_BUS_LIBS = \
 	$(XML_LIBS) \
 	$(SELINUX_LIBS) \
+	$(APPARMOR_LIBS) \
 	$(THREAD_LIBS) \
 	$(ADT_LIBS) \
 	$(NETWORK_libs) \
@@ -17,10 +19,11 @@ DBUS_LAUNCHER_LIBS = \
 
 AM_CPPFLAGS = \
 	-I$(top_srcdir) \
+	$(DBUS_STATIC_BUILD_CPPFLAGS) \
 	$(XML_CFLAGS) \
-	-DDBUS_SYSTEM_CONFIG_FILE=\""$(configdir)/system.conf"\" \
+	$(APPARMOR_CFLAGS) \
+	-DDBUS_SYSTEM_CONFIG_FILE=\""$(dbusdatadir)/system.conf"\" \
 	-DDBUS_COMPILATION \
-	-DDBUS_STATIC_BUILD \
 	$(NULL)
 
 # if assertions are enabled, improve backtraces
@@ -31,11 +34,26 @@ EFENCE=
 CONFIG_IN_FILES=				\
 	session.conf.in				\
 	system.conf.in				\
-	org.freedesktop.dbus-session.plist.in
+	legacy-config/session.conf.in		\
+	legacy-config/system.conf.in		\
+	org.freedesktop.dbus-session.plist.in	\
+	example-system-enable-stats.conf.in	\
+	example-session-disable-stats.conf.in	\
+	$(NULL)
 
-config_DATA=					\
-	session.conf				\
-	system.conf
+dbusdata_DATA = session.conf
+legacydbusdata_DATA = legacy-config/session.conf
+
+if DBUS_UNIX
+dbusdata_DATA += system.conf
+legacydbusdata_DATA += legacy-config/system.conf
+endif
+
+examplesdir = ${docdir}/examples
+examples_DATA = \
+	example-system-enable-stats.conf	\
+	example-session-disable-stats.conf	\
+	$(NULL)
 
 if DBUS_ENABLE_LAUNCHD
 agentdir=$(LAUNCHD_AGENT_DIR)
@@ -58,6 +76,10 @@ BUS_SOURCES=					\
 	activation.c				\
 	activation.h				\
 	activation-exit-codes.h			\
+	apparmor.c				\
+	apparmor.h				\
+	audit.c					\
+	audit.h					\
 	bus.c					\
 	bus.h					\
 	config-parser.c				\
@@ -97,6 +119,7 @@ dbus_daemon_SOURCES=				\
 	main.c
 
 dbus_daemon_LDADD=					\
+	$(top_builddir)/dbus/libdbus-1.la	\
 	$(top_builddir)/dbus/libdbus-internal.la	\
 	$(EFENCE)					\
 	$(DBUS_BUS_LIBS)
@@ -121,7 +144,8 @@ dbus_daemon_launch_helper_SOURCES=		\
 	$(LAUNCH_HELPER_SOURCES)
 
 dbus_daemon_launch_helper_LDADD=		\
-	$(top_builddir)/dbus/libdbus-internal.la \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(top_builddir)/dbus/libdbus-internal.la	\
 	$(DBUS_LAUNCHER_LIBS)
 
 ## we build another binary so we can do the launch testing without root privs.
@@ -131,6 +155,7 @@ dbus_daemon_launch_helper_test_SOURCES=		\
 	$(LAUNCH_HELPER_SOURCES)
 
 dbus_daemon_launch_helper_test_LDADD=		\
+	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(DBUS_LAUNCHER_LIBS)
 
@@ -145,8 +170,10 @@ test_bus_launch_helper_SOURCES=		\
 	$(LAUNCH_HELPER_SOURCES)
 
 test_bus_launch_helper_LDADD=		\
+	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(DBUS_LAUNCHER_LIBS)
+	$(NULL)
 
 test_bus_launch_helper_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
@@ -169,11 +196,11 @@ if DBUS_ENABLE_EMBEDDED_TESTS
 ## even when not doing "make check"
 
 # run as a test by test/Makefile.am
-noinst_PROGRAMS += test-bus test-bus-system
+noinst_PROGRAMS += test-bus
 
 if DBUS_UNIX
 # run as a test by test/Makefile.am
-noinst_PROGRAMS += test-bus-launch-helper
+noinst_PROGRAMS += test-bus-launch-helper test-bus-system
 # this is used by the tests but is not,itself, a test
 noinst_PROGRAMS += dbus-daemon-launch-helper-test
 endif DBUS_UNIX
@@ -190,24 +217,34 @@ test_bus_system_SOURCES=			\
 	utils.h					\
 	test-system.c
 
-test_bus_system_LDADD=$(top_builddir)/dbus/libdbus-internal.la $(DBUS_BUS_LIBS)
+test_bus_system_LDADD = \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(top_builddir)/dbus/libdbus-internal.la \
+	$(DBUS_BUS_LIBS) \
+	$(NULL)
 
 test_bus_SOURCES=				\
 	$(BUS_SOURCES)				\
 	test-main.c
 
-test_bus_LDADD=$(top_builddir)/dbus/libdbus-internal.la $(DBUS_BUS_LIBS)
+test_bus_LDADD = \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(top_builddir)/dbus/libdbus-internal.la \
+	$(DBUS_BUS_LIBS) \
+	$(NULL)
 
 ## mop up the gcov files
 clean-local:
 	/bin/rm *.bb *.bbg *.da *.gcov || true
 
 install-data-hook:
+	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/session.d
+	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/services
+if DBUS_UNIX
 	$(mkinstalldirs) $(DESTDIR)$(localstatedir)/run/dbus
-	$(mkinstalldirs) $(DESTDIR)$(configdir)/system.d
-	$(mkinstalldirs) $(DESTDIR)$(configdir)/session.d
-	$(mkinstalldirs) $(DESTDIR)$(datadir)/dbus-1/services
-	$(mkinstalldirs) $(DESTDIR)$(datadir)/dbus-1/system-services
+	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/system.d
+	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/system-services
+endif
 if HAVE_SYSTEMD
 # Install dbus.socket as default implementation of a D-Bus stack.
 # Deliberately not using $(LN_S) here: ln -fs is not universally portable,
@@ -219,6 +256,10 @@ if HAVE_SYSTEMD
 	ln -fs ../dbus.socket $(DESTDIR)$(systemdsystemunitdir)/sockets.target.wants/dbus.socket
 	$(mkinstalldirs) $(DESTDIR)$(systemdsystemunitdir)/multi-user.target.wants
 	ln -fs ../dbus.service $(DESTDIR)$(systemdsystemunitdir)/multi-user.target.wants/dbus.service
+endif
+if DBUS_ENABLE_USER_SESSION
+	$(mkinstalldirs) $(DESTDIR)$(systemduserunitdir)/sockets.target.wants
+	ln -fs ../dbus.socket $(DESTDIR)$(systemduserunitdir)/sockets.target.wants/dbus.socket
 endif
 
 if DBUS_UNIX
@@ -271,11 +312,21 @@ endif
 if HAVE_SYSTEMD
 SCRIPT_IN_FILES += \
 	dbus.service.in \
-	dbus.socket.in
+	dbus.socket.in \
+	systemd-user/dbus.service.in \
+	systemd-user/dbus.socket.in \
+	$(NULL)
 
 systemdsystemunit_DATA = \
 	dbus.service \
 	dbus.socket
+endif
+
+if DBUS_ENABLE_USER_SESSION
+systemduserunit_DATA = \
+	systemd-user/dbus.service \
+	systemd-user/dbus.socket \
+	$(NULL)
 endif
 
 #### Extra dist

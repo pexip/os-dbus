@@ -136,6 +136,29 @@ struct DBusMessageRealIter
   } u; /**< the type writer or reader that does all the work */
 };
 
+/**
+ * Layout of a DBusMessageIter on the stack in dbus 1.10.0. This is no
+ * longer used, but for ABI compatibility we need to assert that the
+ * new layout is the same size.
+ */
+typedef struct
+{
+  void *dummy1;
+  void *dummy2;
+  dbus_uint32_t dummy3;
+  int dummy4;
+  int dummy5;
+  int dummy6;
+  int dummy7;
+  int dummy8;
+  int dummy9;
+  int dummy10;
+  int dummy11;
+  int pad1;
+  int pad2;
+  void *pad3;
+} DBusMessageIter_1_10_0;
+
 static void
 get_const_signature (DBusHeader        *header,
                      const DBusString **type_str_p,
@@ -602,7 +625,7 @@ static void
 close_unix_fds(int *fds, unsigned *n_fds)
 {
   DBusError e;
-  int i;
+  unsigned int i;
 
   if (*n_fds <= 0)
     return;
@@ -1143,14 +1166,18 @@ dbus_bool_t
 dbus_message_set_reply_serial (DBusMessage   *message,
                                dbus_uint32_t  reply_serial)
 {
+  DBusBasicValue value;
+
   _dbus_return_val_if_fail (message != NULL, FALSE);
   _dbus_return_val_if_fail (!message->locked, FALSE);
   _dbus_return_val_if_fail (reply_serial != 0, FALSE); /* 0 is invalid */
 
+  value.u32 = reply_serial;
+
   return _dbus_header_set_field_basic (&message->header,
                                        DBUS_HEADER_FIELD_REPLY_SERIAL,
                                        DBUS_TYPE_UINT32,
-                                       &reply_serial);
+                                       &value);
 }
 
 /**
@@ -1908,6 +1935,7 @@ dbus_message_append_args_valist (DBusMessage *message,
               _dbus_warn ("arrays of %s can't be appended with %s for now\n",
                           _dbus_type_to_string (element_type),
                           _DBUS_FUNCTION_NAME);
+              dbus_message_iter_abandon_container (&iter, &array);
               goto failed;
             }
 
@@ -2025,7 +2053,21 @@ _dbus_message_iter_init_common (DBusMessage         *message,
                                 DBusMessageRealIter *real,
                                 int                  iter_type)
 {
-  _dbus_assert (sizeof (DBusMessageRealIter) <= sizeof (DBusMessageIter));
+  /* If these static assertions fail on your platform, report it as a bug. */
+  _DBUS_STATIC_ASSERT (sizeof (DBusMessageRealIter) <= sizeof (DBusMessageIter));
+  _DBUS_STATIC_ASSERT (_DBUS_ALIGNOF (DBusMessageRealIter) <=
+      _DBUS_ALIGNOF (DBusMessageIter));
+  /* A failure of these two assertions would indicate that we've broken
+   * ABI on this platform since 1.10.0. */
+  _DBUS_STATIC_ASSERT (sizeof (DBusMessageIter_1_10_0) ==
+      sizeof (DBusMessageIter));
+  _DBUS_STATIC_ASSERT (_DBUS_ALIGNOF (DBusMessageIter_1_10_0) ==
+      _DBUS_ALIGNOF (DBusMessageIter));
+  /* If this static assertion fails, it means the DBusMessageIter struct
+   * is not "packed", which might result in "iter = other_iter" not copying
+   * every byte. */
+  _DBUS_STATIC_ASSERT (sizeof (DBusMessageIter) ==
+      4 * sizeof (void *) + sizeof (dbus_uint32_t) + 9 * sizeof (int));
 
   /* Since the iterator will read or write who-knows-what from the
    * message, we need to get in the right byte order
@@ -2325,20 +2367,56 @@ dbus_message_iter_get_basic (DBusMessageIter  *iter,
 }
 
 /**
+ * Returns the number of elements in the array-typed value pointed
+ * to by the iterator.
+ * Note that this function is O(1) for arrays of fixed-size types
+ * but O(n) for arrays of variable-length types such as strings,
+ * so it may be a bad idea to use it.
+ *
+ * @param iter the iterator
+ * @returns the number of elements in the array
+ */
+int
+dbus_message_iter_get_element_count (DBusMessageIter *iter)
+{
+  DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
+  DBusTypeReader array;
+  int element_type;
+  int n_elements = 0;
+
+  _dbus_return_val_if_fail (_dbus_message_iter_check (real), 0);
+  _dbus_return_val_if_fail (_dbus_type_reader_get_current_type (&real->u.reader)
+                            == DBUS_TYPE_ARRAY, 0);
+
+  element_type = _dbus_type_reader_get_element_type (&real->u.reader);
+  _dbus_type_reader_recurse (&real->u.reader, &array);
+  if (dbus_type_is_fixed (element_type))
+    {
+      int alignment = _dbus_type_get_alignment (element_type);
+      int total_len = _dbus_type_reader_get_array_length (&array);
+      n_elements = total_len / alignment;
+    }
+  else
+    {
+      while (_dbus_type_reader_get_current_type (&array) != DBUS_TYPE_INVALID)
+        {
+          ++n_elements;
+          _dbus_type_reader_next (&array);
+        }
+    }
+
+   return n_elements;
+}
+
+/**
  * Returns the number of bytes in the array as marshaled in the wire
  * protocol. The iterator must currently be inside an array-typed
  * value.
  *
  * This function is deprecated on the grounds that it is stupid.  Why
  * would you want to know how many bytes are in the array as marshaled
- * in the wire protocol?  For now, use the n_elements returned from
- * dbus_message_iter_get_fixed_array() instead, or iterate over the
- * array values and count them.
+ * in the wire protocol?  Use dbus_message_iter_get_element_count() instead.
  *
- * @todo introduce a variant of this get_n_elements that returns
- * the number of elements, though with a non-fixed array it will not
- * be very efficient, so maybe it's not good.
- * 
  * @param iter the iterator
  * @returns the number of bytes in the array
  */
@@ -2707,20 +2785,22 @@ dbus_message_iter_append_basic (DBusMessageIter *iter,
       int *fds;
       dbus_uint32_t u;
 
+      ret = FALSE;
+
       /* First step, include the fd in the fd list of this message */
       if (!(fds = expand_fd_array(real->message, 1)))
-        return FALSE;
+        goto out;
 
       *fds = _dbus_dup(*(int*) value, NULL);
       if (*fds < 0)
-        return FALSE;
+        goto out;
 
       u = real->message->n_unix_fds;
 
       /* Second step, write the index to the fd */
       if (!(ret = _dbus_type_writer_write_basic (&real->u.writer, DBUS_TYPE_UNIX_FD, &u))) {
         _dbus_close(*fds, NULL);
-        return FALSE;
+        goto out;
       }
 
       real->message->n_unix_fds += 1;
@@ -2739,6 +2819,9 @@ dbus_message_iter_append_basic (DBusMessageIter *iter,
          freed. */
 #else
       ret = FALSE;
+      /* This is redundant (we could just fall through), but it avoids
+       * -Wunused-label in builds that don't HAVE_UNIX_FD_PASSING */
+      goto out;
 #endif
     }
   else
@@ -2746,6 +2829,7 @@ dbus_message_iter_append_basic (DBusMessageIter *iter,
       ret = _dbus_type_writer_write_basic (&real->u.writer, type, value);
     }
 
+out:
   if (!_dbus_message_iter_close_signature (real))
     ret = FALSE;
 
@@ -2854,6 +2938,7 @@ dbus_message_iter_open_container (DBusMessageIter *iter,
   DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
   DBusMessageRealIter *real_sub = (DBusMessageRealIter *)sub;
   DBusString contained_str;
+  dbus_bool_t ret;
 
   _dbus_return_val_if_fail (_dbus_message_iter_append_check (real), FALSE);
   _dbus_return_val_if_fail (real->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER, FALSE);
@@ -2880,24 +2965,30 @@ dbus_message_iter_open_container (DBusMessageIter *iter,
   if (!_dbus_message_iter_open_signature (real))
     return FALSE;
 
+  ret = FALSE;
   *real_sub = *real;
 
   if (contained_signature != NULL)
     {
       _dbus_string_init_const (&contained_str, contained_signature);
 
-      return _dbus_type_writer_recurse (&real->u.writer,
-                                        type,
-                                        &contained_str, 0,
-                                        &real_sub->u.writer);
+      ret = _dbus_type_writer_recurse (&real->u.writer,
+                                       type,
+                                       &contained_str, 0,
+                                       &real_sub->u.writer);
     }
   else
     {
-      return _dbus_type_writer_recurse (&real->u.writer,
-                                        type,
-                                        NULL, 0,
-                                        &real_sub->u.writer);
-    } 
+      ret = _dbus_type_writer_recurse (&real->u.writer,
+                                       type,
+                                       NULL, 0,
+                                       &real_sub->u.writer);
+    }
+
+  if (!ret)
+    _dbus_message_iter_abandon_signature (real);
+
+  return ret;
 }
 
 
@@ -4877,6 +4968,54 @@ dbus_message_demarshal_bytes_needed(const char *buf,
     {
       return -1; /* broken! */
     }
+}
+
+/**
+ * Sets a flag indicating that the caller of the method is prepared
+ * to wait for interactive authorization to take place (for instance
+ * via Polkit) before the actual method is processed.
+ *
+ * The flag is #FALSE by default; that is, by default the other end is
+ * expected to make any authorization decisions non-interactively
+ * and promptly. It may use the error
+ * #DBUS_ERROR_INTERACTIVE_AUTHORIZATION_REQUIRED to signal that
+ * authorization failed, but could have succeeded if this flag had
+ * been used.
+ *
+ * For messages whose type is not #DBUS_MESSAGE_TYPE_METHOD_CALL,
+ * this flag is meaningless and should not be set.
+ *
+ * On the protocol level this toggles
+ * #DBUS_HEADER_FLAG_ALLOW_INTERACTIVE_AUTHORIZATION.
+ *
+ * @param message the message
+ * @param allow #TRUE if interactive authorization is acceptable
+ */
+void
+dbus_message_set_allow_interactive_authorization (DBusMessage *message,
+                                                  dbus_bool_t  allow)
+{
+  _dbus_return_if_fail (message != NULL);
+  _dbus_return_if_fail (!message->locked);
+
+  _dbus_header_toggle_flag (&message->header,
+                            DBUS_HEADER_FLAG_ALLOW_INTERACTIVE_AUTHORIZATION,
+                            allow);
+}
+
+/**
+ * Returns whether the flag controlled by
+ * dbus_message_set_allow_interactive_authorization() has been set.
+ *
+ * @param message the message
+ */
+dbus_bool_t
+dbus_message_get_allow_interactive_authorization (DBusMessage *message)
+{
+  _dbus_return_val_if_fail (message != NULL, FALSE);
+
+  return _dbus_header_get_flag (&message->header,
+                                DBUS_HEADER_FLAG_ALLOW_INTERACTIVE_AUTHORIZATION);
 }
 
 /** @} */

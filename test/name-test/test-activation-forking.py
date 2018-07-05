@@ -3,15 +3,15 @@
 import os,sys
 
 try:
-    import gobject
+    from gi.repository import GObject
     import dbus
     import dbus.mainloop.glib
 except:
-    print "Failed import, aborting test"
+    print("Failed import, aborting test")
     sys.exit(0)
 
 dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
-loop = gobject.MainLoop()
+loop = GObject.MainLoop()
 
 exitcode = 0
 
@@ -23,7 +23,7 @@ i = dbus.Interface(o, 'org.freedesktop.TestSuite')
 
 # Start it up
 reply = i.Echo("hello world")
-print "TestSuiteForkingEchoService initial reply OK"
+print("TestSuiteForkingEchoService initial reply OK")
 
 def ignore(*args, **kwargs):
     pass
@@ -36,7 +36,7 @@ def on_forking_echo_owner_changed(name, old, new):
     global o
     global i
     if counter > 10:
-        print "Activated 10 times OK, TestSuiteForkingEchoService pass"
+        print("Activated 10 times OK, TestSuiteForkingEchoService pass")
         loop.quit()
         return
     counter += 1
@@ -52,9 +52,9 @@ i.Exit(reply_handler=ignore, error_handler=ignore)
 
 def check_counter():
     if counter == 0:
-        print "Failed to get NameOwnerChanged for TestSuiteForkingEchoService"
+        print("Failed to get NameOwnerChanged for TestSuiteForkingEchoService")
         sys.exit(1)
-gobject.timeout_add(15000, check_counter)
+GObject.timeout_add(15000, check_counter)
 
 loop.run()
 sys.exit(0)

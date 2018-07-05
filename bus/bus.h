@@ -38,6 +38,7 @@ typedef struct BusClientPolicy  BusClientPolicy;
 typedef struct BusPolicyRule    BusPolicyRule;
 typedef struct BusRegistry      BusRegistry;
 typedef struct BusSELinuxID     BusSELinuxID;
+typedef struct BusAppArmorConfinement BusAppArmorConfinement;
 typedef struct BusService       BusService;
 typedef struct BusOwner		BusOwner;
 typedef struct BusTransaction   BusTransaction;
@@ -120,7 +121,16 @@ DBusRLimit *      bus_context_get_initial_fd_limit               (BusContext    
 void              bus_context_log                                (BusContext       *context,
                                                                   DBusSystemLogSeverity severity,
                                                                   const char       *msg,
-                                                                  ...);
+                                                                  ...) _DBUS_GNUC_PRINTF (3, 4);
+void              bus_context_log_literal                        (BusContext       *context,
+                                                                  DBusSystemLogSeverity severity,
+                                                                  const char       *msg);
+void              bus_context_log_and_set_error                  (BusContext       *context,
+                                                                  DBusSystemLogSeverity severity,
+                                                                  DBusError        *error,
+                                                                  const char       *name,
+                                                                  const char       *msg,
+                                                                  ...) _DBUS_GNUC_PRINTF (5, 6);
 dbus_bool_t       bus_context_check_security_policy              (BusContext       *context,
                                                                   BusTransaction   *transaction,
                                                                   DBusConnection   *sender,

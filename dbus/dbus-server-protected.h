@@ -93,12 +93,14 @@ struct DBusServer
 
 dbus_bool_t _dbus_server_init_base      (DBusServer             *server,
                                          const DBusServerVTable *vtable,
-                                         const DBusString       *address);
+                                         const DBusString       *address,
+                                         DBusError              *error);
 void        _dbus_server_finalize_base  (DBusServer             *server);
 dbus_bool_t _dbus_server_add_watch      (DBusServer             *server,
                                          DBusWatch              *watch);
 void        _dbus_server_remove_watch   (DBusServer             *server,
                                          DBusWatch              *watch);
+DBUS_PRIVATE_EXPORT
 void        _dbus_server_toggle_all_watches (DBusServer         *server,
                                              dbus_bool_t         enabled);
 dbus_bool_t _dbus_server_add_timeout    (DBusServer             *server,
@@ -109,7 +111,9 @@ void        _dbus_server_toggle_timeout (DBusServer             *server,
                                          DBusTimeout            *timeout,
                                          dbus_bool_t             enabled);
 
+DBUS_PRIVATE_EXPORT
 void        _dbus_server_ref_unlocked   (DBusServer             *server);
+DBUS_PRIVATE_EXPORT
 void        _dbus_server_unref_unlocked (DBusServer             *server);
 
 typedef enum

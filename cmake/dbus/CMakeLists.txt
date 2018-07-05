@@ -214,14 +214,12 @@ else (WIN32)
 		${DBUS_DIR}/dbus-sysdeps-unix.c
 		${DBUS_DIR}/dbus-sysdeps-pthread.c
 		${DBUS_DIR}/dbus-userdb.c
-        ${DBUS_DIR}/sd-daemon.c
 	)
 	set (DBUS_SHARED_HEADERS ${DBUS_SHARED_HEADERS} 
 		${DBUS_DIR}/dbus-server-unix.h
 		${DBUS_DIR}/dbus-transport-unix.h
 		${DBUS_DIR}/dbus-sysdeps-unix.h
 		${DBUS_DIR}/dbus-userdb.h
-        ${DBUS_DIR}/sd-daemon.h
 	)
 	set (DBUS_UTIL_SOURCES ${DBUS_UTIL_SOURCES}
 		${DBUS_DIR}/dbus-spawn.c
@@ -261,15 +259,37 @@ add_library(dbus-1 SHARED
 			${libdbus_SOURCES}
 			${libdbus_HEADERS}
 )
+if(DEFINED DBUS_LIBRARY_REVISION)
+    math(EXPR DBUS_LIBRARY_MAJOR "${DBUS_LIBRARY_CURRENT} - ${DBUS_LIBRARY_AGE}")
+endif()
+
 if(WIN32)
+    if(DEFINED DBUS_LIBRARY_REVISION)
+        set_target_properties(dbus-1 PROPERTIES SUFFIX "-${DBUS_LIBRARY_MAJOR}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        add_custom_command(TARGET dbus-1 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy "$<TARGET_FILE:dbus-1>" "$<TARGET_FILE_DIR:dbus-1>/${CMAKE_SHARED_LIBRARY_PREFIX}dbus-1${CMAKE_SHARED_LIBRARY_SUFFIX}"
+            COMMENT "Create non versioned dbus-1 library for legacy applications"
+        )
+        install(FILES ${LEGACY_FILE_NAME} DESTINATION bin)
+    endif()
     if(WINCE)
         target_link_libraries(dbus-1 ws2)
     else(WINCE)
         target_link_libraries(dbus-1 ws2_32 advapi32 netapi32 iphlpapi)
     endif(WINCE)
 else(WIN32)
+    if(DEFINED DBUS_LIBRARY_REVISION)
+        set_target_properties(dbus-1 PROPERTIES VERSION ${DBUS_LIBRARY_MAJOR}.${DBUS_LIBRARY_AGE}.${DBUS_LIBRARY_REVISION} SOVERSION ${DBUS_LIBRARY_MAJOR})
+    endif()
     target_link_libraries(dbus-1 ${CMAKE_THREAD_LIBS_INIT} rt)
 endif(WIN32)
+
+# Assume that Linux has -Wl,--version-script and other platforms do not
+if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
+    set(SOVERSION ${DBUS_LIBRARY_MAJOR})
+    configure_file(${DBUS_DIR}/Version.in ${CMAKE_CURRENT_BINARY_DIR}/Version)
+    set_target_properties(dbus-1 PROPERTIES LINK_FLAGS -Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/Version)
+endif("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
 
 install(TARGETS dbus-1 ${INSTALL_TARGETS_DEFAULT_ARGS})
 install_files(/include/dbus FILES ${dbusinclude_HEADERS})
@@ -277,15 +297,10 @@ install_files(/include/dbus FILES ${dbusinclude_HEADERS})
 ### Internal library, used for the daemon, tools and tests, compiled statically.
 
 add_library(dbus-internal ${DBUS_INTERNAL_ADD_LIBRARY_OPTIONS}
-			${DBUS_LIB_SOURCES}
-			${DBUS_LIB_HEADERS}
-			${DBUS_SHARED_SOURCES}
-			${DBUS_SHARED_HEADERS}
 			${DBUS_UTIL_SOURCES}
 			${DBUS_UTIL_HEADERS}
 )
-target_link_libraries(dbus-internal)
-set_target_properties(dbus-internal PROPERTIES COMPILE_FLAGS ${DBUS_INTERNAL_LIBRARY_DEFINITIONS})
+target_link_libraries(dbus-internal dbus-1)
 if(WIN32)
     if(WINCE)
         target_link_libraries(dbus-internal ws2)

@@ -51,7 +51,7 @@ struct DBusServerSocket
 {
   DBusServer base;   /**< Parent class members. */
   int n_fds;         /**< Number of active file handles */
-  int *fds;          /**< File descriptor or -1 if disconnected. */
+  DBusSocket *fds;   /**< File descriptor or DBUS_SOCKET_INVALID if disconnected. */
   DBusWatch **watch; /**< File descriptor watch. */
   char *socket_name; /**< Name of domain socket, to unlink if appropriate */
   DBusNonceFile *noncefile; /**< Nonce file used to authenticate clients */
@@ -84,18 +84,19 @@ socket_finalize (DBusServer *server)
 /* Return value is just for memory, not other failures. */
 static dbus_bool_t
 handle_new_client_fd_and_unlock (DBusServer *server,
-                                 int         client_fd)
+                                 DBusSocket  client_fd)
 {
   DBusConnection *connection;
   DBusTransport *transport;
   DBusNewConnectionFunction new_connection_function;
   void *new_connection_data;
 
-  _dbus_verbose ("Creating new client connection with fd %d\n", client_fd);
+  _dbus_verbose ("Creating new client connection with fd %" DBUS_SOCKET_FORMAT "\n",
+                 _dbus_socket_printable (client_fd));
 
   HAVE_LOCK_CHECK (server);
 
-  if (!_dbus_set_fd_nonblocking (client_fd, NULL))
+  if (!_dbus_set_socket_nonblocking (client_fd, NULL))
     {
       SERVER_UNLOCK (server);
       return TRUE;
@@ -182,25 +183,28 @@ socket_handle_watch (DBusWatch    *watch,
 
   if (flags & DBUS_WATCH_READABLE)
     {
-      int client_fd;
-      int listen_fd;
+      DBusSocket client_fd;
+      DBusSocket listen_fd;
+      int saved_errno;
 
-      listen_fd = dbus_watch_get_socket (watch);
+      listen_fd = _dbus_watch_get_socket (watch);
 
       if (socket_server->noncefile)
           client_fd = _dbus_accept_with_noncefile (listen_fd, socket_server->noncefile);
       else 
           client_fd = _dbus_accept (listen_fd);
 
-      if (client_fd < 0)
+      saved_errno = _dbus_save_socket_errno ();
+
+      if (!_dbus_socket_is_valid (client_fd))
         {
           /* EINTR handled for us */
 
-          if (_dbus_get_is_errno_eagain_or_ewouldblock ())
+          if (_dbus_get_is_errno_eagain_or_ewouldblock (saved_errno))
             _dbus_verbose ("No client available to accept after all\n");
           else
             _dbus_verbose ("Failed to accept a client connection: %s\n",
-                           _dbus_strerror_from_errno ());
+                           _dbus_strerror (saved_errno));
 
           SERVER_UNLOCK (server);
         }
@@ -240,7 +244,7 @@ socket_disconnect (DBusServer *server)
         }
 
       _dbus_close_socket (socket_server->fds[i], NULL);
-      socket_server->fds[i] = -1;
+      _dbus_socket_invalidate (&socket_server->fds[i]);
     }
 
   if (socket_server->socket_name != NULL)
@@ -273,14 +277,16 @@ static const DBusServerVTable socket_vtable = {
  * @param n_fds number of file descriptors
  * @param address the server's address
  * @param noncefile to be used for authentication (NULL if not needed)
- * @returns the new server, or #NULL if no memory.
+ * @param error location to store reason for failure
+ * @returns the new server, or #NULL on OOM or other error.
  *
  */
 DBusServer*
-_dbus_server_new_for_socket (int              *fds,
+_dbus_server_new_for_socket (DBusSocket       *fds,
                              int               n_fds,
                              const DBusString *address,
-                             DBusNonceFile    *noncefile)
+                             DBusNonceFile    *noncefile,
+                             DBusError        *error)
 {
   DBusServerSocket *socket_server;
   DBusServer *server;
@@ -288,11 +294,11 @@ _dbus_server_new_for_socket (int              *fds,
 
   socket_server = dbus_new0 (DBusServerSocket, 1);
   if (socket_server == NULL)
-    return NULL;
+    goto failed_0;
 
   socket_server->noncefile = noncefile;
 
-  socket_server->fds = dbus_new (int, n_fds);
+  socket_server->fds = dbus_new (DBusSocket, n_fds);
   if (!socket_server->fds)
     goto failed_0;
 
@@ -304,7 +310,7 @@ _dbus_server_new_for_socket (int              *fds,
     {
       DBusWatch *watch;
 
-      watch = _dbus_watch_new (fds[i],
+      watch = _dbus_watch_new (_dbus_socket_get_pollable (fds[i]),
                                DBUS_WATCH_READABLE,
                                TRUE,
                                socket_handle_watch, socket_server,
@@ -318,7 +324,8 @@ _dbus_server_new_for_socket (int              *fds,
     }
 
   if (!_dbus_server_init_base (&socket_server->base,
-                               &socket_vtable, address))
+                               &socket_vtable, address,
+                               error))
     goto failed_2;
 
   server = (DBusServer*)socket_server;
@@ -362,6 +369,10 @@ _dbus_server_new_for_socket (int              *fds,
 
  failed_0:
   dbus_free (socket_server);
+
+  if (error != NULL && !dbus_error_is_set (error))
+    _DBUS_SET_OOM (error);
+
   return NULL;
 }
 
@@ -393,7 +404,7 @@ _dbus_server_new_for_tcp_socket (const char     *host,
                                  dbus_bool_t    use_nonce)
 {
   DBusServer *server;
-  int *listen_fds = NULL;
+  DBusSocket *listen_fds = NULL;
   int nlisten_fds = 0, i;
   DBusString address;
   DBusString host_str;
@@ -474,10 +485,9 @@ _dbus_server_new_for_tcp_socket (const char     *host,
 
     }
 
-  server = _dbus_server_new_for_socket (listen_fds, nlisten_fds, &address, noncefile);
+  server = _dbus_server_new_for_socket (listen_fds, nlisten_fds, &address, noncefile, error);
   if (server == NULL)
     {
-      dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
       if (noncefile != NULL)
         goto failed_4;
       else

@@ -38,10 +38,18 @@
 #include <sys/select.h>
 #include <time.h>
 
+#include <dbus/dbus.h>
+#include "dbus/dbus-internals.h"
+
 #ifdef DBUS_BUILD_X11
 #include <X11/Xlib.h>
 extern Display *xdisplay;
 #endif
+
+#include "dbus/dbus-internals.h"
+#include "dbus/dbus-sysdeps-unix.h"
+
+#include "tool-common.h"
 
 /* PROCESSES
  *
@@ -102,50 +110,25 @@ save_machine_uuid (const char *uuid_arg)
       exit (1);
     }
 
-  machine_uuid = xstrdup (uuid_arg);
+  machine_uuid = _dbus_strdup (uuid_arg);
 }
 
 #ifdef DBUS_BUILD_X11
-#define UUID_MAXLEN 40
 /* Read the machine uuid from file if needed. Returns TRUE if machine_uuid is
  * set after this function */
 static int
 read_machine_uuid_if_needed (void)
 {
-  FILE *f;
-  char uuid[UUID_MAXLEN];
-  size_t len;
-  int ret = FALSE;
-
   if (machine_uuid != NULL)
     return TRUE;
 
-  f = fopen (DBUS_MACHINE_UUID_FILE, "r");
-  if (f == NULL)
+  machine_uuid = dbus_get_local_machine_id ();
+
+  if (machine_uuid == NULL)
     return FALSE;
 
-  if (fgets (uuid, UUID_MAXLEN, f) == NULL)
-    goto out;
-
-  len = strlen (uuid);
-  if (len < 32)
-    goto out;
-
-  /* rstrip the read uuid */
-  while (len > 31 && isspace((int) uuid[len - 1]))
-    len--;
-
-  if (len != 32)
-    goto out;
-
-  uuid[len] = '\0';
-  machine_uuid = xstrdup (uuid);
   verbose ("UID: %s\n", machine_uuid);
-  ret = TRUE;
-
-out:
-  fclose(f);
-  return ret;
+  return TRUE;
 }
 #endif /* DBUS_BUILD_X11 */
 
@@ -443,7 +426,8 @@ print_variables (const char *bus_address, pid_t bus_pid, long bus_wid,
   else if (c_shell_syntax)
     {
       printf ("setenv DBUS_SESSION_BUS_ADDRESS '%s';\n", bus_address);	
-      printf ("set DBUS_SESSION_BUS_PID=%ld;\n", (long) bus_pid);
+      if (bus_pid)
+        printf ("set DBUS_SESSION_BUS_PID=%ld;\n", (long) bus_pid);
       if (bus_wid)
         printf ("set DBUS_SESSION_BUS_WINDOWID=%ld;\n", (long) bus_wid);
       fflush (stdout);
@@ -452,7 +436,8 @@ print_variables (const char *bus_address, pid_t bus_pid, long bus_wid,
     {
       printf ("DBUS_SESSION_BUS_ADDRESS='%s';\n", bus_address);
       printf ("export DBUS_SESSION_BUS_ADDRESS;\n");
-      printf ("DBUS_SESSION_BUS_PID=%ld;\n", (long) bus_pid);
+      if (bus_pid)
+        printf ("DBUS_SESSION_BUS_PID=%ld;\n", (long) bus_pid);
       if (bus_wid)
         printf ("DBUS_SESSION_BUS_WINDOWID=%ld;\n", (long) bus_wid);
       fflush (stdout);
@@ -460,7 +445,8 @@ print_variables (const char *bus_address, pid_t bus_pid, long bus_wid,
   else
     {
       printf ("DBUS_SESSION_BUS_ADDRESS=%s\n", bus_address);
-      printf ("DBUS_SESSION_BUS_PID=%ld\n", (long) bus_pid);
+      if (bus_pid)
+        printf ("DBUS_SESSION_BUS_PID=%ld\n", (long) bus_pid);
       if (bus_wid)
 	printf ("DBUS_SESSION_BUS_WINDOWID=%ld\n", (long) bus_wid);
       fflush (stdout);
@@ -854,10 +840,27 @@ main (int argc, char **argv)
   int bus_pid_to_babysitter_pipe[2];
   int bus_address_to_launcher_pipe[2];
   char *config_file;
-  
+  dbus_bool_t user_bus_supported = FALSE;
+  DBusString user_bus;
+  const char *error_str;
+
   exit_with_session = FALSE;
   config_file = NULL;
-  
+
+  /* Ensure that the first three fds are open, to ensure that when we
+   * create other file descriptors (for example for epoll, inotify or
+   * a socket), they never get assigned as fd 0, 1 or 2. If they were,
+   * which could happen if our caller had (incorrectly) closed those
+   * standard fds, then we'd start dbus-daemon with those fds closed,
+   * which is unexpected and could cause it to misbehave. */
+  if (!_dbus_ensure_standard_fds (0, &error_str))
+    {
+      fprintf (stderr,
+               "dbus-launch: fatal error setting up standard fds: %s: %s\n",
+               error_str, _dbus_strerror (errno));
+      return 1;
+    }
+
   prev_arg = NULL;
   i = 1;
   while (i < argc)
@@ -1007,11 +1010,43 @@ main (int argc, char **argv)
       char *address;
       pid_t pid;
       long wid;
+      DBusError error = DBUS_ERROR_INIT;
       
       if (get_machine_uuid () == NULL)
         {
           fprintf (stderr, "Machine UUID not provided as arg to --autolaunch\n");
           exit (1);
+        }
+
+      if (!_dbus_string_init (&user_bus))
+        tool_oom ("initializing");
+
+      /* If we have an XDG_RUNTIME_DIR and it contains a suitable socket,
+       * dbus-launch --autolaunch can use it, since --autolaunch implies
+       * "I'm OK with getting a bus that is already active".
+       *
+       * (However, plain dbus-launch without --autolaunch must not do so,
+       * because that would break lots of regression tests, which often
+       * use dbus-launch instead of the more appropriate dbus-run-session.)
+       *
+       * At this stage, we just save the user bus's address; later on, the
+       * "babysitter" process will be available to advertise the user-bus
+       * on the X11 display and in ~/.dbus/session-bus, for full
+       * backwards compatibility.
+       */
+      if (!_dbus_lookup_user_bus (&user_bus_supported, &user_bus, &error))
+        {
+          fprintf (stderr, "%s\n", error.message);
+          exit (1);
+        }
+      else if (user_bus_supported)
+        {
+          verbose ("=== Using existing user bus \"%s\"\n",
+                   _dbus_string_get_const_data (&user_bus));
+        }
+      else
+        {
+          _dbus_string_free (&user_bus);
         }
 
       verbose ("Autolaunch enabled (using X11).\n");
@@ -1122,6 +1157,22 @@ main (int argc, char **argv)
       close (bus_address_to_launcher_pipe[READ_END]);
       close (bus_pid_to_babysitter_pipe[READ_END]);
       close (bus_pid_to_babysitter_pipe[WRITE_END]);
+
+      /* If we have a user bus and want to use it, do so instead of
+       * exec'ing a new dbus-daemon. */
+      if (autolaunch && user_bus_supported)
+        {
+          do_write (bus_pid_to_launcher_pipe[WRITE_END], "0\n", 2);
+          close (bus_pid_to_launcher_pipe[WRITE_END]);
+
+          do_write (bus_address_to_launcher_pipe[WRITE_END],
+                    _dbus_string_get_const_data (&user_bus),
+                    _dbus_string_get_length (&user_bus));
+          do_write (bus_address_to_launcher_pipe[WRITE_END], "\n", 1);
+          close (bus_address_to_launcher_pipe[WRITE_END]);
+
+          exit (0);
+        }
 
       sprintf (write_pid_fd_as_string,
                "%d", bus_pid_to_launcher_pipe[WRITE_END]);

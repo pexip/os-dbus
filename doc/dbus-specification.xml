@@ -6,8 +6,8 @@
 <article id="index">
   <articleinfo>
     <title>D-Bus Specification</title>
-    <releaseinfo>Version 0.23</releaseinfo>
-    <date>2014-01-06</date>
+    <releaseinfo>Version 0.26</releaseinfo>
+    <date>2015-02-19</date>
     <authorgroup>
       <author>
         <firstname>Havoc</firstname>
@@ -70,6 +70,32 @@
       </author>
     </authorgroup>
    <revhistory>
+     <revision>
+       <revnumber>0.26</revnumber>
+       <date>2015-02-19</date>
+       <authorinitials>smcv, rh</authorinitials>
+       <revremark>
+         GetConnectionCredentials can return LinuxSecurityLabel or
+         WindowsSID; add privileged BecomeMonitor method
+       </revremark>
+     </revision>
+     <revision>
+       <revnumber>0.25</revnumber>
+       <date>2014-11-10</date>
+       <authorinitials>smcv, lennart</authorinitials>
+       <revremark>
+         ALLOW_INTERACTIVE_AUTHORIZATION flag, EmitsChangedSignal=const
+       </revremark>
+     </revision>
+     <revision>
+       <revnumber>0.24</revnumber>
+       <date>2014-10-01</date>
+       <authorinitials>SMcV</authorinitials>
+       <revremark>
+         non-method-calls never expect a reply even without NO_REPLY_EXPECTED;
+         document how to quote match rules
+       </revremark>
+     </revision>
      <revision>
        <revnumber>0.23</revnumber>
        <date>2014-01-06</date>
@@ -755,6 +781,7 @@
           <tgroup cols="3">
             <thead>
               <row>
+                <entry>Category</entry>
                 <entry>Conventional Name</entry>
                 <entry>Code</entry>
                 <entry>Description</entry>
@@ -762,62 +789,77 @@
             </thead>
             <tbody>
               <row>
+                <entry>reserved</entry>
                 <entry><literal>INVALID</literal></entry>
                 <entry>0 (ASCII NUL)</entry>
                 <entry>Not a valid type code, used to terminate signatures</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>BYTE</literal></entry>
                 <entry>121 (ASCII 'y')</entry>
                 <entry>8-bit unsigned integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>BOOLEAN</literal></entry>
                 <entry>98 (ASCII 'b')</entry>
                 <entry>Boolean value, 0 is <literal>FALSE</literal> and 1 is <literal>TRUE</literal>. Everything else is invalid.</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>INT16</literal></entry>
                 <entry>110 (ASCII 'n')</entry>
                 <entry>16-bit signed integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>UINT16</literal></entry>
                 <entry>113 (ASCII 'q')</entry>
                 <entry>16-bit unsigned integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>INT32</literal></entry>
                 <entry>105 (ASCII 'i')</entry>
                 <entry>32-bit signed integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>UINT32</literal></entry>
                 <entry>117 (ASCII 'u')</entry>
                 <entry>32-bit unsigned integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>INT64</literal></entry>
                 <entry>120 (ASCII 'x')</entry>
                 <entry>64-bit signed integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>UINT64</literal></entry>
                 <entry>116 (ASCII 't')</entry>
                 <entry>64-bit unsigned integer</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>DOUBLE</literal></entry>
                 <entry>100 (ASCII 'd')</entry>
                 <entry>IEEE 754 double</entry>
               </row><row>
+                <entry>string-like, basic</entry>
                 <entry><literal>STRING</literal></entry>
                 <entry>115 (ASCII 's')</entry>
                 <entry>UTF-8 string (<emphasis>must</emphasis> be valid UTF-8). Must be nul terminated and contain no other nul bytes.</entry>
               </row><row>
+                <entry>string-like, basic</entry>
                 <entry><literal>OBJECT_PATH</literal></entry>
                 <entry>111 (ASCII 'o')</entry>
                 <entry>Name of an object instance</entry>
               </row><row>
+                <entry>string-like, basic</entry>
                 <entry><literal>SIGNATURE</literal></entry>
                 <entry>103 (ASCII 'g')</entry>
                 <entry>A type signature</entry>
               </row><row>
+                <entry>container</entry>
                 <entry><literal>ARRAY</literal></entry>
                 <entry>97 (ASCII 'a')</entry>
                 <entry>Array</entry>
               </row><row>
+                <entry>container</entry>
                 <entry><literal>STRUCT</literal></entry>
                 <entry>114 (ASCII 'r'), 40 (ASCII '('), 41 (ASCII ')')</entry>
                 <entry>Struct; type code 114 'r' is reserved for use in
@@ -825,10 +867,12 @@
                   concept of a struct, and must not appear in signatures
                   used on D-Bus.</entry>
               </row><row>
+                <entry>container</entry>
                 <entry><literal>VARIANT</literal></entry>
                 <entry>118 (ASCII 'v') </entry>
                 <entry>Variant type (the type of the value is part of the value itself)</entry>
               </row><row>
+                <entry>container</entry>
                 <entry><literal>DICT_ENTRY</literal></entry>
                 <entry>101 (ASCII 'e'), 123 (ASCII '{'), 125 (ASCII '}') </entry>
                 <entry>Entry in a dict or map (array of key-value pairs).
@@ -837,11 +881,13 @@
                   dict or dict-entry, and must not appear in signatures
                   used on D-Bus.</entry>
               </row><row>
+                <entry>fixed, basic</entry>
                 <entry><literal>UNIX_FD</literal></entry>
                 <entry>104 (ASCII 'h')</entry>
                 <entry>Unix file descriptor</entry>
               </row>
               <row>
+                <entry>reserved</entry>
                 <entry>(reserved)</entry>
                 <entry>109 (ASCII 'm')</entry>
                 <entry>Reserved for <ulink
@@ -851,6 +897,7 @@
                   specified here</entry>
               </row>
               <row>
+                <entry>reserved</entry>
                 <entry>(reserved)</entry>
                 <entry>42 (ASCII '*')</entry>
                 <entry>Reserved for use in bindings/implementations to
@@ -858,6 +905,7 @@
                   and must not appear in signatures used on D-Bus.</entry>
               </row>
               <row>
+                <entry>reserved</entry>
                 <entry>(reserved)</entry>
                 <entry>63 (ASCII '?')</entry>
                 <entry>Reserved for use in bindings/implementations to
@@ -865,6 +913,7 @@
                   not appear in signatures used on D-Bus.</entry>
               </row>
               <row>
+                <entry>reserved</entry>
                 <entry>(reserved)</entry>
                 <entry>64 (ASCII '@'), 38 (ASCII '&amp;'),
                   94 (ASCII '^')</entry>
@@ -986,8 +1035,8 @@
 
       <para>
         Arrays have a maximum length defined to be 2 to the 26th power or
-        67108864. Implementations must not send or accept arrays exceeding this
-        length.
+        67108864 (64 MiB). Implementations must not send or accept arrays
+        exceeding this length.
       </para>
 
       <para>
@@ -1192,8 +1241,8 @@
 
       <para>
         The maximum length of a message, including header, header alignment padding, 
-        and body is 2 to the 27th power or 134217728. Implementations must not 
-        send or accept messages exceeding this size.
+        and body is 2 to the 27th power or 134217728 (128 MiB).
+        Implementations must not send or accept messages exceeding this size.
       </para>
       
       <para>
@@ -1292,7 +1341,8 @@
               <row>
                 <entry><literal>METHOD_CALL</literal></entry>
                 <entry>1</entry>
-                <entry>Method call.</entry>
+                <entry>Method call. This message type may prompt a
+                  reply.</entry>
               </row>
               <row>
                 <entry><literal>METHOD_RETURN</literal></entry>
@@ -1329,11 +1379,26 @@
               <row>
                 <entry><literal>NO_REPLY_EXPECTED</literal></entry>
                 <entry>0x1</entry>
-                <entry>This message does not expect method return replies or
-                error replies; the reply can be omitted as an
-                optimization. However, it is compliant with this specification
-                to return the reply despite this flag and the only harm 
-                  from doing so is extra network traffic.
+                <entry>
+                  <para>
+                    This message does not expect method return replies or
+                    error replies, even if it is of a type that can
+                    have a reply; the reply can be omitted as an
+                    optimization. It is compliant with this specification
+                    to return the reply despite this flag, although doing
+                    so on a bus with a non-trivial security policy
+                    (such as the well-known system bus) may result in
+                    access denial messages being logged for the reply.
+                  </para>
+                  <para>
+                    Note that METHOD_CALL is the only message type currently
+                    defined in this specification that can expect a reply,
+                    so the presence or absence of this flag in the other
+                    three message types that are currently
+                    documented is meaningless: replies to those message
+                    types should not be sent, whether this flag is present
+                    or not.
+                  </para>
                 </entry>
               </row>
               <row>
@@ -1341,6 +1406,66 @@
                 <entry>0x2</entry>
                 <entry>The bus must not launch an owner
                   for the destination name in response to this message.
+                </entry>
+              </row>
+              <row>
+                <entry><literal>ALLOW_INTERACTIVE_AUTHORIZATION</literal></entry>
+                <entry>0x4</entry>
+                <entry>
+                  <para>
+                    This flag may be set on a method call message to
+                    inform the receiving side that the caller is prepared
+                    to wait for interactive authorization, which might
+                    take a considerable time to complete. For instance,
+                    if this flag is set, it would be appropriate to
+                    query the user for passwords or confirmation via
+                    Polkit or a similar framework.
+                  </para>
+                  <para>
+                    This flag is only useful when
+                    unprivileged code calls a more privileged method call,
+                    and an authorization framework is deployed that allows
+                    possibly interactive authorization. If no such framework
+                    is deployed it has no effect. This flag should not
+                    be set by default by client implementations. If it is
+                    set, the caller should also set a suitably long timeout
+                    on the method call to make sure the user interaction
+                    may complete. This flag is only valid for method call
+                    messages, and shall be ignored otherwise.
+                  </para>
+                  <para>
+                    Interaction that takes place as a part of the
+                    effect of the method being called is outside the scope
+                    of this flag, even if it could also be characterized
+                    as authentication or authorization. For instance, in
+                    a method call that directs a network management service
+                    to attempt to connect to a virtual private network,
+                    this flag should control how the network management
+                    service makes the decision "is this user allowed to
+                    change system network configuration?", but it should
+                    not affect how or whether the network management
+                    service interacts with the user to obtain the credentials
+                    that are required for access to the VPN.
+                  </para>
+                  <para>
+                    If a this flag is not set on a method call, and a
+                    service determines that the requested operation is
+                    not allowed without interactive authorization, but
+                    could be allowed after successful interactive
+                    authorization, it may return the
+                    <literal>org.freedesktop.DBus.Error.InteractiveAuthorizationRequired</literal>
+                    error.
+                  </para>
+                  <para>
+                    The absence of this flag does not guarantee that
+                    interactive authorization will not be applied, since
+                    existing services that pre-date this flag might
+                    already use interactive authorization. However,
+                    existing D-Bus APIs that will use interactive
+                    authorization should document that the call may take
+                    longer than usual, and new D-Bus APIs should avoid
+                    interactive authorization in the absence of this flag.
+                  </para>
                 </entry>
               </row>
             </tbody>
@@ -2977,9 +3102,12 @@
       For instance, listening on <literal>tcp:host=127.0.0.1</literal>
       might result in the connectable address
       <literal>tcp:host=127.0.0.1,port=30958</literal>,
-      or listening on <literal>unix:tmpdir=/tmp</literal>
+      listening on <literal>unix:tmpdir=/tmp</literal>
       might result in the connectable address
-      <literal>unix:abstract=/tmp/dbus-U8OSdmf7</literal>.
+      <literal>unix:abstract=/tmp/dbus-U8OSdmf7</literal>, or
+      listening on <literal>unix:runtime=yes</literal>
+      might result in the connectable address
+      <literal>unix:path=/run/user/1234/bus</literal>.
     </para>
   </sect1>
   
@@ -3019,6 +3147,9 @@
         Unix addresses that specify <literal>tmpdir</literal> are only
         listenable: the corresponding connectable address will specify
         either <literal>path</literal> or <literal>abstract</literal>.
+        Similarly, Unix addresses that specify <literal>runtime</literal>
+        are only listenable, and the corresponding connectable address
+        will specify <literal>path</literal>.
       </para>
       <sect3 id="transports-unix-domain-sockets-addresses">
         <title>Server Address Format</title>
@@ -3051,12 +3182,17 @@
             <entry>(string)</entry>
             <entry>unique string (path) in the abstract namespace. If set, the "path" or "tmpdir" key must not be set. This key is only supported on platforms with "abstract Unix sockets", of which Linux is the only known example.</entry>
           </row>
+          <row>
+            <entry>runtime</entry>
+            <entry><literal>yes</literal></entry>
+            <entry>If given, This key can only be used in server addresses, not in client addresses. If set, its value must be <literal>yes</literal>. This is typically used in an address string like <literal>unix:runtime=yes;unix:tmpdir=/tmp</literal> so that there can be a fallback if <literal>XDG_RUNTIME_DIR</literal> is not set.</entry>
+          </row>
         </tbody>
         </tgroup>
        </informaltable>
        <para>
          Exactly one of the keys <literal>path</literal>,
-         <literal>abstract</literal> or
+         <literal>abstract</literal>, <literal>runtime</literal> or
          <literal>tmpdir</literal> must be provided.
        </para>
       </sect3>
@@ -3894,7 +4030,7 @@
            </row>
            <row>
              <entry>org.freedesktop.DBus.Property.EmitsChangedSignal</entry>
-             <entry>true,invalidates,false</entry>
+             <entry>true,invalidates,const,false</entry>
              <entry>
                <para>
                  If set to <literal>false</literal>, the
@@ -3902,6 +4038,12 @@
                  signal, see <xref
                  linkend="standard-interfaces-properties"/> is not
                  guaranteed to be emitted if the property changes.
+               </para>
+               <para>
+                 If set to <literal>const</literal> the property never
+                 changes value during the lifetime of the object it
+                 belongs to, and hence the signal is never emitted for
+                 it.
                </para>
                <para>
                  If set to <literal>invalidates</literal> the signal
@@ -3918,6 +4060,17 @@
                  element does not specify the annotation. Otherwise it
                  defaults to the value specified in the enclosing
                  interface element.
+               </para>
+               <para>
+                 This annotation is intended to be used by code
+                 generators to implement client-side caching of
+                 property values. For all properties for which the
+                 annotation is set to <literal>const</literal>,
+                 <literal>invalidates</literal> or
+                 <literal>true</literal> the client may
+                 unconditionally cache the values as the properties
+                 don't change or notifications are generated for them
+                 if they do.
                </para>
              </entry>
            </row>
@@ -4423,7 +4576,9 @@
         <literal>DESTINATION</literal> field is absent, it is considered to
         be a <firstterm>broadcast signal</firstterm>, and is sent to all
         applications with <firstterm>message matching rules</firstterm> that
-        match the message. Most signal messages are broadcasts.
+        match the message. Most signal messages are broadcasts, and
+        no other message types currently defined in this specification
+        may be broadcast.
       </para>
 
       <para>
@@ -4463,7 +4618,7 @@
       <para>
         Message bus implementations may impose a security policy which
         prevents certain messages from being sent or received.
-        When a message cannot be sent or received due to a security
+        When a method call message cannot be sent or received due to a security
         policy, the message bus should send an error reply, unless the
         original message had the <literal>NO_REPLY</literal> flag.
       </para>
@@ -4499,6 +4654,13 @@
           adding the same rule with the <literal>eavesdrop</literal> match
           omitted.
         </para>
+
+        <para>
+          Eavesdropping interacts poorly with buses with non-trivial
+          access control restrictions. The
+          <xref linkend="bus-messages-become-monitor"/> method provides
+          an alternative way to monitor buses.
+        </para>
       </sect3>
 
       <sect3 id="message-bus-routing-match-rules">
@@ -4531,6 +4693,32 @@
           adding a sender would let all messages from that sender through.
           An example of a complete rule would be 
           "type='signal',sender='org.freedesktop.DBus',interface='org.freedesktop.DBus',member='Foo',path='/bar/foo',destination=':452345.34',arg2='bar'"
+        </para>
+        <para>
+          Within single quotes (ASCII apostrophe, U+0027), a backslash
+          (U+005C) represents itself, and an apostrophe ends the quoted
+          section. Outside single quotes, \' (backslash, apostrophe)
+          represents an apostrophe, and any backslash not followed by
+          an apostrophe represents itself. For instance, the match rules
+          <literal>arg0=''\''',arg1='\',arg2=',',arg3='\\'</literal> and
+          <literal>arg0=\',arg1=\,arg2=',',arg3=\\</literal>
+          both match messages where the arguments are a 1-character string
+          containing an apostrophe, a 1-character string containing a
+          backslash, a 1-character string containing a comma, and a
+          2-character string containing two backslashes<footnote>
+            <para>
+              This idiosyncratic quoting style is based on the rules for
+              escaping items to appear inside single-quoted strings
+              in POSIX <literal>/bin/sh</literal>, but please
+              note that backslashes that are not inside single quotes have
+              different behaviour. This syntax does not offer any way to
+              represent an apostrophe inside single quotes (it is necessary
+              to leave the single-quoted section, backslash-escape the
+              apostrophe and re-enter single quotes), or to represent a
+              comma outside single quotes (it is necessary to wrap it in
+              a single-quoted section).
+            </para>
+          </footnote>.
         </para>
         <para>
           The following table describes the keys that can be used to create 
@@ -5829,6 +6017,65 @@
                   this concept. On Unix, this is the process ID defined by
                   POSIX.</entry>
               </row>
+              <row>
+                <entry>WindowsSID</entry>
+                <entry>STRING</entry>
+                <entry>The Windows security identifier in its string form,
+                e.g. "S-1-5-21-3623811015-3361044348-30300820-1013" for
+                a domain or local computer user or "S-1-5-18" for the
+                LOCAL_SYSTEM user</entry>
+              </row>
+
+              <row>
+                <entry>LinuxSecurityLabel</entry>
+                <entry>ARRAY of BYTE</entry>
+                <entry>
+                  <para>On Linux systems, the security label that would result
+                    from the SO_PEERSEC getsockopt call. The array contains
+                    the non-zero bytes of the security label in an unspecified
+                    ASCII-compatible encoding<footnote>
+                      <para>It could be ASCII or UTF-8, but could also be
+                        ISO Latin-1 or any other encoding.</para>
+                    </footnote>, followed by a single zero byte.</para>
+                  <para>
+                    For example, the SELinux context
+                    <literal>system_u:system_r:init_t:s0</literal>
+                    (a string of length 27) would be encoded as 28 bytes
+                    ending with ':', 's', '0', '\x00'.<footnote>
+                      <para>Note that this is not the same as the older
+                        GetConnectionSELinuxContext method, which does
+                        not append the zero byte. Always appending the
+                        zero byte allows callers to read the string
+                        from the message payload without copying.</para>
+                    </footnote>
+                  </para>
+                  <para>
+                    On SELinux systems this is the SELinux context, as output
+                    by <literal>ps -Z</literal> or <literal>ls -Z</literal>.
+                    Typical values might include
+                    <literal>system_u:system_r:init_t:s0</literal>,
+                    <literal>unconfined_u:unconfined_r:unconfined_t:s0-s0:c0.c1023</literal>,
+                    or
+                    <literal>unconfined_u:unconfined_r:chrome_sandbox_t:s0-s0:c0.c1023</literal>.
+                  </para>
+                  <para>
+                    On Smack systems, this is the Smack label.
+                    Typical values might include
+                    <literal>_</literal>, <literal>*</literal>,
+                    <literal>User</literal>, <literal>System</literal>
+                    or <literal>System::Shared</literal>.
+                  </para>
+                  <para>
+                    On AppArmor systems, this is the AppArmor context,
+                    a composite string encoding the AppArmor label (one or more
+                    profiles) and the enforcement mode.
+                    Typical values might include <literal>unconfined</literal>,
+                    <literal>/usr/bin/firefox (enforce)</literal> or
+                    <literal>user1 (complain)</literal>.
+                  </para>
+                </entry>
+              </row>
+
             </tbody>
           </tgroup>
         </informaltable>
@@ -6058,6 +6305,96 @@
         by org.freedesktop.DBus.Peer.GetMachineId().
         For a desktop session bus, the bus ID can be used as a way to uniquely identify a user's session.
         </para>
+      </sect3>
+
+      <sect3 id="bus-messages-become-monitor">
+        <title><literal>org.freedesktop.DBus.Monitoring.BecomeMonitor</literal></title>
+        <para>
+          As a method:
+          <programlisting>
+            BecomeMonitor (in ARRAY of STRING rule, in UINT32 flags)
+          </programlisting>
+          Message arguments:
+          <informaltable>
+            <tgroup cols="3">
+              <thead>
+                <row>
+                  <entry>Argument</entry>
+                  <entry>Type</entry>
+                  <entry>Description</entry>
+                </row>
+              </thead>
+              <tbody>
+                <row>
+                  <entry>0</entry>
+                  <entry>ARRAY of STRING</entry>
+                  <entry>Match rules to add to the connection</entry>
+                </row>
+                <row>
+                  <entry>1</entry>
+                  <entry>UINT32</entry>
+                  <entry>Not used, must be 0</entry>
+                </row>
+              </tbody>
+            </tgroup>
+          </informaltable>
+        </para>
+
+        <para>
+          Converts the connection into a <emphasis>monitor
+            connection</emphasis> which can be used as a debugging/monitoring
+          tool. Only a user who is privileged on this
+          bus (by some implementation-specific definition) may create
+          monitor connections<footnote>
+            <para>
+              In the reference implementation,
+              the default configuration is that each user (identified by
+              numeric user ID) may monitor their own session bus,
+              and the root user (user ID zero) may monitor the
+              system bus.
+            </para>
+          </footnote>.
+       </para>
+
+       <para>
+         Monitor connections lose all their bus names, including the unique
+         connection name, and all their match rules. Sending messages on a
+         monitor connection is not allowed: applications should use a private
+         connection for monitoring.
+       </para>
+
+       <para>
+         Monitor connections may receive all messages, even messages that
+         should only have gone to some other connection ("eavesdropping").
+         The first argument is a list of match rules, which replace any
+         match rules that were previously active for this connection.
+         These match rules are always treated as if they contained the
+         special <literal>eavesdrop='true'</literal> member.
+       </para>
+
+       <para>
+         As a special case, an empty list of match rules (which would
+         otherwise match nothing, making the monitor useless) is treated
+         as a shorthand for matching all messages.
+       </para>
+
+       <para>
+         The second argument might be used for flags to influence the
+         behaviour of the monitor connection in future D-Bus versions.
+       </para>
+
+       <para>
+         Message bus implementations should attempt to minimize the
+         side-effects of monitoring — in particular, unlike ordinary
+         eavesdropping, monitoring the system bus does not require the
+         access control rules to be relaxed, which would change the set
+         of messages that can be delivered to their (non-monitor)
+         destinations. However, it is unavoidable that monitoring
+         will increase the message bus's resource consumption. In
+         edge cases where there was barely enough time or memory without
+         monitoring, this might result in message deliveries failing
+         when they would otherwise have succeeded.
+       </para>
       </sect3>
 
     </sect2>
