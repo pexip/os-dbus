@@ -153,7 +153,6 @@ override_dh_install:
 		lib/$(DEB_HOST_MULTIARCH)
 	dh_install --remaining-packages --list-missing $(dh_install_options)
 	install -m 644 -D debian/dbus-Xsession debian/dbus-x11/etc/X11/Xsession.d/75dbus_dbus-launch
-	install -m 644 -D debian/dbus.user-session.upstart debian/dbus/usr/share/upstart/sessions/dbus.conf
 
 override_dh_installinit:
 	dh_installinit -pdbus -r
