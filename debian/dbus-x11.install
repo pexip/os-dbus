@@ -1,2 +1,4 @@
-debian/tmp/usr/bin/dbus-launch
-debian/tmp/usr/share/man/man1/dbus-launch.1
+debian/??dbus_dbus-launch              etc/X11/Xsession.d
+debian/??dbus_update-activation-env    etc/X11/Xsession.d
+usr/bin/dbus-launch
+usr/share/man/man1/dbus-launch.1

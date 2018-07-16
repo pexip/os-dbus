@@ -166,8 +166,9 @@ _dbus_server_debug_pipe_new (const char     *server_name,
     goto nomem_2;
   
   if (!_dbus_server_init_base (&debug_server->base,
-			       &debug_vtable, &address))
-    goto nomem_3;
+			       &debug_vtable, &address,
+                               error))
+    goto fail_3;
 
   if (!_dbus_hash_table_insert_string (server_pipe_hash,
 				       debug_server->name,
@@ -183,7 +184,7 @@ _dbus_server_debug_pipe_new (const char     *server_name,
 
  nomem_4:
   _dbus_server_finalize_base (&debug_server->base);
- nomem_3:
+ fail_3:
   dbus_free (debug_server->name);
  nomem_2:
   _dbus_string_free (&address);
@@ -191,7 +192,8 @@ _dbus_server_debug_pipe_new (const char     *server_name,
   dbus_free (debug_server);
  nomem_0:
   pipe_hash_unref ();
-  dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
+  if (error != NULL && !dbus_error_is_set (error))
+    _DBUS_SET_OOM (error);
   return NULL;
 }
 
@@ -211,7 +213,7 @@ _dbus_transport_debug_pipe_new (const char     *server_name,
   DBusTransport *client_transport;
   DBusTransport *server_transport;
   DBusConnection *connection;
-  int client_fd, server_fd;
+  DBusSocket client_fd, server_fd;
   DBusServer *server;
   DBusString address;
   
@@ -246,8 +248,7 @@ _dbus_transport_debug_pipe_new (const char     *server_name,
       return NULL;
     }
   
-  if (!_dbus_full_duplex_pipe (&client_fd, &server_fd, FALSE,
-                               NULL))
+  if (!_dbus_socketpair (&client_fd, &server_fd, FALSE, NULL))
     {
       _dbus_verbose ("failed to create full duplex pipe\n");
       dbus_set_error (error, DBUS_ERROR_FAILED, "Could not create full-duplex pipe");
@@ -268,7 +269,7 @@ _dbus_transport_debug_pipe_new (const char     *server_name,
 
   _dbus_string_free (&address);
   
-  client_fd = -1;
+  _dbus_socket_invalidate (&client_fd);
 
   server_transport = _dbus_transport_new_for_socket (server_fd,
                                                      &server->guid_hex, NULL);
@@ -280,7 +281,7 @@ _dbus_transport_debug_pipe_new (const char     *server_name,
       return NULL;
     }
 
-  server_fd = -1;
+  _dbus_socket_invalidate (&server_fd);
 
   if (!_dbus_transport_set_auth_mechanisms (server_transport,
                                             (const char**) server->auth_mechanisms))

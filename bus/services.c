@@ -36,6 +36,7 @@
 #include "policy.h"
 #include "bus.h"
 #include "selinux.h"
+#include "apparmor.h"
 
 struct BusService
 {
@@ -75,6 +76,7 @@ bus_registry_new (BusContext *context)
 {
   BusRegistry *registry;
 
+  _dbus_assert (context);
   registry = dbus_new0 (BusRegistry, 1);
   if (registry == NULL)
     return NULL;
@@ -458,6 +460,11 @@ bus_registry_acquire_service (BusRegistry      *registry,
                       _dbus_string_get_const_data (service_name));
       goto out;
     }
+
+  if (!bus_apparmor_allows_acquire_service (connection,
+                                            bus_context_get_type (registry->context),
+                                            _dbus_string_get_const_data (service_name), error))
+    goto out;
   
   if (!bus_client_policy_check_can_own (policy, service_name))
     {

@@ -254,13 +254,16 @@ check_address (const char *address, DBusError *error)
   int len, i;
 
   _dbus_assert (address != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
   if (!dbus_parse_address (address, &entries, &len, error))
     return NULL;              /* not a valid address */
 
   for (i = 0; i < len; i++)
     {
+      dbus_error_free (error);
       transport = _dbus_transport_open (entries[i], error);
+
       if (transport != NULL)
         break;
     }
@@ -949,7 +952,7 @@ _dbus_transport_set_connection (DBusTransport  *transport,
  */
 dbus_bool_t
 _dbus_transport_get_socket_fd (DBusTransport *transport,
-                               int           *fd_p)
+                               DBusSocket    *fd_p)
 {
   dbus_bool_t retval;
   
@@ -1423,6 +1426,33 @@ _dbus_transport_set_unix_user_function (DBusTransport             *transport,
   transport->unix_user_function = function;
   transport->unix_user_data = data;
   transport->free_unix_user_data = free_data_function;
+}
+
+dbus_bool_t
+_dbus_transport_get_linux_security_label (DBusTransport  *transport,
+                                          char          **label_p)
+{
+  DBusCredentials *auth_identity;
+
+  *label_p = NULL;
+
+  if (!transport->authenticated)
+    return FALSE;
+
+  auth_identity = _dbus_auth_get_identity (transport->auth);
+
+  if (_dbus_credentials_include (auth_identity,
+                                 DBUS_CREDENTIAL_LINUX_SECURITY_LABEL))
+    {
+      /* If no memory, we are supposed to return TRUE and set NULL */
+      *label_p = _dbus_strdup (_dbus_credentials_get_linux_security_label (auth_identity));
+
+      return TRUE;
+    }
+  else
+    {
+      return FALSE;
+    }
 }
 
 /**

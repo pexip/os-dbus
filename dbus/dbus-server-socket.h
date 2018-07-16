@@ -29,12 +29,14 @@
 
 DBUS_BEGIN_DECLS
 
-DBusServer* _dbus_server_new_for_socket           (int              *fds,
+DBusServer* _dbus_server_new_for_socket           (DBusSocket       *fds,
                                                    int               n_fds,
                                                    const DBusString *address,
-                                                   DBusNonceFile    *noncefile);
+                                                   DBusNonceFile    *noncefile,
+                                                   DBusError        *error);
 DBusServer* _dbus_server_new_for_autolaunch       (const DBusString *address,
                                                    DBusError        *error);
+DBUS_PRIVATE_EXPORT
 DBusServer* _dbus_server_new_for_tcp_socket       (const char       *host,
                                                    const char       *bind,
                                                    const char       *port,

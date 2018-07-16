@@ -25,6 +25,7 @@
 #include <string.h>
 
 #include <dbus/dbus.h>
+#include "dbus/dbus-internals.h"
 
 #ifndef HAVE_STRTOLL
 #undef strtoll
@@ -229,8 +230,8 @@ main (int argc, char *argv[])
   DBusConnection *connection;
   DBusError error;
   DBusMessage *message;
-  int print_reply;
-  int print_reply_literal;
+  dbus_bool_t print_reply;
+  dbus_bool_t print_reply_literal;
   int reply_timeout;
   DBusMessageIter iter;
   int i;
@@ -463,6 +464,7 @@ main (int argc, char *argv[])
       DBusMessageIter container_iter;
 
       type = DBUS_TYPE_INVALID;
+      secondary_type = DBUS_TYPE_INVALID;
       arg = argv[i++];
       c = strchr (arg, ':');
 
@@ -543,6 +545,7 @@ main (int argc, char *argv[])
 	}
       else if (container_type == DBUS_TYPE_DICT_ENTRY)
 	{
+	  _dbus_assert (secondary_type != DBUS_TYPE_INVALID);
 	  append_dict (target_iter, type, secondary_type, c);
 	}
       else
@@ -573,7 +576,10 @@ main (int argc, char *argv[])
 
       if (reply)
         {
-          print_message (reply, print_reply_literal);
+          long sec, usec;
+
+          _dbus_get_real_time (&sec, &usec);
+          print_message (reply, print_reply_literal, sec, usec);
           dbus_message_unref (reply);
         }
     }

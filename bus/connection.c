@@ -30,10 +30,12 @@
 #include "signals.h"
 #include "expirelist.h"
 #include "selinux.h"
+#include "apparmor.h"
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-hash.h>
 #include <dbus/dbus-timeout.h>
 #include <dbus/dbus-connection-internal.h>
+#include <dbus/dbus-internals.h>
 
 /* Trim executed commands to this length; we want to keep logs readable */
 #define MAX_LOG_COMMAND_LEN 50
@@ -63,6 +65,11 @@ struct BusConnections
   DBusTimeout *expire_timeout; /**< Timeout for expiring incomplete connections. */
   int stamp;                   /**< Incrementing number */
   BusExpireList *pending_replies; /**< List of pending replies */
+
+  /** List of all monitoring connections, a subset of completed.
+   * Each member is a #DBusConnection. */
+  DBusList *monitors;
+  BusMatchmaker *monitor_matchmaker;
 
 #ifdef DBUS_ENABLE_STATS
   int total_match_rules;
@@ -94,6 +101,7 @@ typedef struct
 
   char *cached_loginfo_string;
   BusSELinuxID *selinux_id;
+  BusAppArmorConfinement *apparmor_confinement;
 
   long connection_tv_sec;  /**< Time when we connected (seconds component) */
   long connection_tv_usec; /**< Time when we connected (microsec component) */
@@ -105,6 +113,9 @@ typedef struct
 #endif
   int n_pending_unix_fds;
   DBusTimeout *pending_unix_fds_timeout;
+
+  /** non-NULL if and only if this is a monitor */
+  DBusList *link_in_monitors;
 } BusConnectionData;
 
 static dbus_bool_t bus_pending_reply_expired (BusExpireList *list,
@@ -124,6 +135,7 @@ connection_get_loop (DBusConnection *connection)
   BusConnectionData *d;
 
   d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert(d != NULL);
 
   return bus_context_get_loop (d->connections->context);
 }
@@ -283,6 +295,17 @@ bus_connection_disconnected (DBusConnection *connection)
   
   bus_connection_remove_transactions (connection);
 
+  if (d->link_in_monitors != NULL)
+    {
+      BusMatchmaker *mm = d->connections->monitor_matchmaker;
+
+      if (mm != NULL)
+        bus_matchmaker_disconnected (mm, connection);
+
+      _dbus_list_remove_link (&d->connections->monitors, d->link_in_monitors);
+      d->link_in_monitors = NULL;
+    }
+
   if (d->link_in_connection_list != NULL)
     {
       if (d->name != NULL)
@@ -420,6 +443,9 @@ free_connection_data (void *data)
 
   if (d->selinux_id)
     bus_selinux_id_unref (d->selinux_id);
+
+  if (d->apparmor_confinement)
+    bus_apparmor_confinement_unref (d->apparmor_confinement);
   
   dbus_free (d->cached_loginfo_string);
   
@@ -513,7 +539,10 @@ bus_connections_unref (BusConnections *connections)
         }
 
       _dbus_assert (connections->n_incomplete == 0);
-      
+
+      /* drop all monitors */
+      _dbus_list_clear (&connections->monitors);
+
       /* drop all real connections */
       while (connections->completed != NULL)
         {
@@ -537,7 +566,10 @@ bus_connections_unref (BusConnections *connections)
       _dbus_timeout_unref (connections->expire_timeout);
       
       _dbus_hash_table_unref (connections->completed_by_user);
-      
+
+      if (connections->monitor_matchmaker != NULL)
+        bus_matchmaker_unref (connections->monitor_matchmaker);
+
       dbus_free (connections);
 
       dbus_connection_free_data_slot (&connection_data_slot);
@@ -608,9 +640,12 @@ static void
 check_pending_fds_cb (DBusConnection *connection)
 {
   BusConnectionData *d = BUS_CONNECTION_DATA (connection);
-  int n_pending_unix_fds_old = d->n_pending_unix_fds;
+  int n_pending_unix_fds_old;
   int n_pending_unix_fds_new;
 
+  _dbus_assert(d != NULL);
+
+  n_pending_unix_fds_old = d->n_pending_unix_fds;
   n_pending_unix_fds_new = _dbus_connection_get_pending_fds_count (connection);
 
   _dbus_verbose ("Pending fds count changed on connection %p: %d -> %d\n",
@@ -636,6 +671,32 @@ static dbus_bool_t
 pending_unix_fds_timeout_cb (void *data)
 {
   DBusConnection *connection = data;
+  BusConnectionData *d = BUS_CONNECTION_DATA (connection);
+  unsigned long uid;
+  int limit;
+
+  _dbus_assert (d != NULL);
+  limit = bus_context_get_pending_fd_timeout (d->connections->context);
+
+  if (dbus_connection_get_unix_user (connection, &uid) && uid == 0)
+    {
+      bus_context_log (d->connections->context, DBUS_SYSTEM_LOG_WARNING,
+                       "Connection \"%s\" (%s) has had Unix fds pending for "
+                       "too long (pending_fd_timeout=%dms); tolerating it, "
+                       "because it has uid 0",
+                       d->name != NULL ? d->name : "(null)",
+                       bus_connection_get_loginfo (connection),
+                       limit);
+      return TRUE;
+    }
+
+  bus_context_log (d->connections->context, DBUS_SYSTEM_LOG_WARNING,
+      "Connection \"%s\" (%s) has had Unix fds pending for too long, "
+      "closing it (pending_fd_timeout=%d ms)",
+      d->name != NULL ? d->name : "(null)",
+      bus_connection_get_loginfo (connection),
+      limit);
+
   dbus_connection_close (connection);
   return TRUE;
 }
@@ -678,6 +739,19 @@ bus_connections_setup_connection (BusConnections *connections,
   dbus_error_init (&error);
   d->selinux_id = bus_selinux_init_connection_id (connection,
                                                   &error);
+  if (dbus_error_is_set (&error))
+    {
+      /* This is a bit bogus because we pretend all errors
+       * are OOM; this is done because we know that in bus.c
+       * an OOM error disconnects the connection, which is
+       * the same thing we want on any other error.
+       */
+      dbus_error_free (&error);
+      goto out;
+    }
+
+  d->apparmor_confinement = bus_apparmor_init_connection_confinement (connection,
+                                                                      &error);
   if (dbus_error_is_set (&error))
     {
       /* This is a bit bogus because we pretend all errors
@@ -776,6 +850,10 @@ bus_connections_setup_connection (BusConnections *connections,
       if (d->selinux_id)
         bus_selinux_id_unref (d->selinux_id);
       d->selinux_id = NULL;
+
+      if (d->apparmor_confinement)
+        bus_apparmor_confinement_unref (d->apparmor_confinement);
+      d->apparmor_confinement = NULL;
       
       if (!dbus_connection_set_watch_functions (connection,
                                                 NULL, NULL, NULL,
@@ -863,7 +941,7 @@ bus_connections_expire_incomplete (BusConnections *connections)
               /* Unfortunately, we can't identify the connection: it doesn't
                * have a unique name yet, we don't know its uid/pid yet,
                * and so on. */
-              bus_context_log (connections->context, DBUS_SYSTEM_LOG_INFO,
+              bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
                   "Connection has not authenticated soon enough, closing it "
                   "(auth_timeout=%dms, elapsed: %.0fms)",
                   auth_timeout, elapsed);
@@ -965,6 +1043,7 @@ bus_connection_get_loginfo (DBusConnection        *connection)
   BusConnectionData *d;
     
   d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert(d != NULL);
 
   if (!bus_connection_is_active (connection))
     return "inactive";
@@ -1176,6 +1255,19 @@ bus_connection_get_selinux_id (DBusConnection *connection)
   return d->selinux_id;
 }
 
+BusAppArmorConfinement*
+bus_connection_dup_apparmor_confinement (DBusConnection *connection)
+{
+  BusConnectionData *d;
+
+  d = BUS_CONNECTION_DATA (connection);
+
+  _dbus_assert (d != NULL);
+
+  bus_apparmor_confinement_ref (d->apparmor_confinement);
+  return d->apparmor_confinement;
+}
+
 /**
  * Checks whether the connection is registered with the message bus.
  *
@@ -1188,8 +1280,9 @@ bus_connection_is_active (DBusConnection *connection)
   BusConnectionData *d;
 
   d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert(d != NULL);
   
-  return d != NULL && d->name != NULL;
+  return d->name != NULL;
 }
 
 dbus_bool_t
@@ -1255,6 +1348,10 @@ bus_connection_send_oom_error (DBusConnection *connection,
 
   _dbus_assert (d != NULL);  
   _dbus_assert (d->oom_message != NULL);
+
+  bus_context_log (d->connections->context, DBUS_SYSTEM_LOG_WARNING,
+                   "dbus-daemon transaction failed (OOM), sending error to "
+                   "sender %s", bus_connection_get_loginfo (connection));
 
   /* should always succeed since we set it to a placeholder earlier */
   if (!dbus_message_set_reply_serial (d->oom_message,
@@ -1627,7 +1724,12 @@ bus_pending_reply_send_no_reply (BusConnections  *connections,
                                     DBUS_ERROR_NO_REPLY))
     goto out;
 
-  errmsg = "Message did not receive a reply (timeout by message bus)";
+  /* If you change these messages, adjust test/dbus-daemon.c to match */
+  if (pending->will_send_reply == NULL)
+    errmsg = "Message recipient disconnected from message bus without replying";
+  else
+    errmsg = "Message did not receive a reply (timeout by message bus)";
+
   dbus_message_iter_init_append (message, &iter);
   if (!dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &errmsg))
     goto out;
@@ -2099,11 +2201,97 @@ bus_transaction_get_context (BusTransaction  *transaction)
   return transaction->context;
 }
 
+/**
+ * Reserve enough memory to capture the given message if the
+ * transaction goes through.
+ */
+dbus_bool_t
+bus_transaction_capture (BusTransaction *transaction,
+                         DBusConnection *sender,
+                         DBusConnection *addressed_recipient,
+                         DBusMessage    *message)
+{
+  BusConnections *connections;
+  BusMatchmaker *mm;
+  DBusList *link;
+  DBusList *recipients = NULL;
+  dbus_bool_t ret = FALSE;
+
+  connections = bus_context_get_connections (transaction->context);
+
+  /* shortcut: don't compose the message unless someone wants it */
+  if (connections->monitors == NULL)
+    return TRUE;
+
+  mm = connections->monitor_matchmaker;
+  /* This is non-null if there has ever been a monitor - we don't GC it.
+   * There's little point, since there is up to 1 per process. */
+  _dbus_assert (mm != NULL);
+
+  if (!bus_matchmaker_get_recipients (mm, connections, sender,
+        addressed_recipient, message, &recipients))
+    goto out;
+
+  for (link = _dbus_list_get_first_link (&recipients);
+      link != NULL;
+      link = _dbus_list_get_next_link (&recipients, link))
+    {
+      DBusConnection *recipient = link->data;
+
+      if (!bus_transaction_send (transaction, recipient, message))
+        goto out;
+    }
+
+  ret = TRUE;
+
+out:
+  _dbus_list_clear (&recipients);
+  return ret;
+}
+
+dbus_bool_t
+bus_transaction_capture_error_reply (BusTransaction  *transaction,
+                                     DBusConnection  *addressed_recipient,
+                                     const DBusError *error,
+                                     DBusMessage     *in_reply_to)
+{
+  BusConnections *connections;
+  DBusMessage *reply;
+  dbus_bool_t ret = FALSE;
+
+  _dbus_assert (error != NULL);
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+
+  connections = bus_context_get_connections (transaction->context);
+
+  /* shortcut: don't compose the message unless someone wants it */
+  if (connections->monitors == NULL)
+    return TRUE;
+
+  reply = dbus_message_new_error (in_reply_to,
+                                  error->name,
+                                  error->message);
+
+  if (reply == NULL)
+    return FALSE;
+
+  if (!dbus_message_set_sender (reply, DBUS_SERVICE_DBUS))
+    goto out;
+
+  ret = bus_transaction_capture (transaction, NULL, addressed_recipient, reply);
+
+out:
+  dbus_message_unref (reply);
+  return ret;
+}
+
 dbus_bool_t
 bus_transaction_send_from_driver (BusTransaction *transaction,
                                   DBusConnection *connection,
                                   DBusMessage    *message)
 {
+  DBusError error = DBUS_ERROR_INIT;
+
   /* We have to set the sender to the driver, and have
    * to check security policy since it was not done in
    * dispatch.c
@@ -2128,14 +2316,35 @@ bus_transaction_send_from_driver (BusTransaction *transaction,
   
   /* bus driver never wants a reply */
   dbus_message_set_no_reply (message, TRUE);
-  
-  /* If security policy doesn't allow the message, we silently
-   * eat it; the driver doesn't care about getting a reply.
+
+  /* Capture it for monitors, even if the real recipient's receive policy
+   * does not allow it to receive this message from us (which would be odd).
+   */
+  if (!bus_transaction_capture (transaction, NULL, connection, message))
+    return FALSE;
+
+  /* If security policy doesn't allow the message, we would silently
+   * eat it; the driver doesn't care about getting a reply. However,
+   * if we're actively capturing messages, it's nice to log that we
+   * tried to send it and did not allow ourselves to do so.
    */
   if (!bus_context_check_security_policy (bus_transaction_get_context (transaction),
                                           transaction,
-                                          NULL, connection, connection, message, NULL))
-    return TRUE;
+                                          NULL, connection, connection, message, &error))
+    {
+      if (!bus_transaction_capture_error_reply (transaction, connection,
+                                                &error, message))
+        {
+          bus_context_log (transaction->context, DBUS_SYSTEM_LOG_WARNING,
+                           "message from dbus-daemon rejected but not enough "
+                           "memory to capture it");
+        }
+
+      /* This is not fatal to the transaction so silently eat the disallowed
+       * message (see reasoning above) */
+      dbus_error_free (&error);
+      return TRUE;
+    }
 
   return bus_transaction_send (transaction, connection, message);
 }
@@ -2476,6 +2685,8 @@ bus_connection_get_peak_match_rules (DBusConnection *connection)
   BusConnectionData *d;
 
   d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert(d != NULL);
+
   return d->peak_match_rules;
 }
 
@@ -2485,6 +2696,145 @@ bus_connection_get_peak_bus_names (DBusConnection *connection)
   BusConnectionData *d;
 
   d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert(d != NULL);
+
   return d->peak_bus_names;
 }
 #endif /* DBUS_ENABLE_STATS */
+
+dbus_bool_t
+bus_connection_is_monitor (DBusConnection *connection)
+{
+  BusConnectionData *d;
+
+  d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert(d != NULL);
+
+  return d->link_in_monitors != NULL;
+}
+
+static dbus_bool_t
+bcd_add_monitor_rules (BusConnectionData  *d,
+                       DBusConnection     *connection,
+                       DBusList          **rules)
+{
+  BusMatchmaker *mm = d->connections->monitor_matchmaker;
+  DBusList *iter;
+
+  if (mm == NULL)
+    {
+      mm = bus_matchmaker_new ();
+
+      if (mm == NULL)
+        return FALSE;
+
+      d->connections->monitor_matchmaker = mm;
+    }
+
+  for (iter = _dbus_list_get_first_link (rules);
+      iter != NULL;
+      iter = _dbus_list_get_next_link (rules, iter))
+    {
+      if (!bus_matchmaker_add_rule (mm, iter->data))
+        {
+          bus_matchmaker_disconnected (mm, connection);
+          return FALSE;
+        }
+    }
+
+  return TRUE;
+}
+
+static void
+bcd_drop_monitor_rules (BusConnectionData *d,
+                        DBusConnection *connection)
+{
+  BusMatchmaker *mm = d->connections->monitor_matchmaker;
+
+  if (mm != NULL)
+    bus_matchmaker_disconnected (mm, connection);
+}
+
+dbus_bool_t
+bus_connection_be_monitor (DBusConnection  *connection,
+                           BusTransaction  *transaction,
+                           DBusList       **rules,
+                           DBusError       *error)
+{
+  BusConnectionData *d;
+  DBusList *link;
+  DBusList *tmp;
+  DBusList *iter;
+
+  d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert (d != NULL);
+
+  link = _dbus_list_alloc_link (connection);
+
+  if (link == NULL)
+    {
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  if (!bcd_add_monitor_rules (d, connection, rules))
+    {
+      _dbus_list_free_link (link);
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  /* release all its names */
+  if (!_dbus_list_copy (&d->services_owned, &tmp))
+    {
+      bcd_drop_monitor_rules (d, connection);
+      _dbus_list_free_link (link);
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  for (iter = _dbus_list_get_first_link (&tmp);
+      iter != NULL;
+      iter = _dbus_list_get_next_link (&tmp, iter))
+    {
+      BusService *service = iter->data;
+
+      /* This call is transactional: if there isn't enough memory to
+       * do everything, then the service gets all its names back when
+       * the transaction is cancelled due to OOM. */
+      if (!bus_service_remove_owner (service, connection, transaction, error))
+        {
+          bcd_drop_monitor_rules (d, connection);
+          _dbus_list_free_link (link);
+          _dbus_list_clear (&tmp);
+          return FALSE;
+        }
+    }
+
+  /* We have now done everything that can fail, so there is no problem
+   * with doing the irrevocable stuff. */
+
+  _dbus_list_clear (&tmp);
+
+  bus_context_log (transaction->context, DBUS_SYSTEM_LOG_INFO,
+                   "Connection %s (%s) became a monitor.", d->name,
+                   d->cached_loginfo_string);
+
+  if (d->n_match_rules > 0)
+    {
+      BusMatchmaker *mm;
+
+      mm = bus_context_get_matchmaker (d->connections->context);
+      bus_matchmaker_disconnected (mm, connection);
+    }
+
+  /* flag it as a monitor */
+  d->link_in_monitors = link;
+  _dbus_list_append_link (&d->connections->monitors, link);
+
+  /* it isn't allowed to reply, and it is no longer relevant whether it
+   * receives replies */
+  bus_connection_drop_pending_replies (d->connections, connection);
+
+  return TRUE;
+}

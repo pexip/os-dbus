@@ -7,7 +7,7 @@ timeout="timeout 300s"
 ret=0
 i=0
 
-for dir in /usr/lib/*/dbus-1.0/test /usr/lib/*/dbus-1.0/debug-build/lib/dbus-1.0/test; do
+for dir in /usr/lib/dbus-1.0/installed-tests/dbus; do
     for t in "$dir"/test-*; do
         i=$(( $i + 1 ))
         echo "# $i - $t ..."

@@ -133,11 +133,11 @@ _dbus_string_init_preallocated (DBusString *str,
                                 int         allocate_size)
 {
   DBusRealString *real;
-  
+
+  _DBUS_STATIC_ASSERT (sizeof (DBusString) == sizeof (DBusRealString));
+
   _dbus_assert (str != NULL);
 
-  _dbus_assert (sizeof (DBusString) == sizeof (DBusRealString));
-  
   real = (DBusRealString*) str;
 
   /* It's very important not to touch anything
@@ -231,6 +231,23 @@ _dbus_string_init_const_len (DBusString *str,
   /* We don't require const strings to be 8-byte aligned as the
    * memory is coming from elsewhere.
    */
+}
+
+/**
+ * Initializes a string from another string. The
+ * string must eventually be freed with _dbus_string_free().
+ *
+ * @param str memory to hold the string
+ * @param from instance from which the string is initialized
+ * @returns #TRUE on success, #FALSE if no memory
+ */
+dbus_bool_t
+_dbus_string_init_from_string(DBusString       *str,
+                              const DBusString *from)
+{
+ if (!_dbus_string_init (str))
+     return FALSE;
+ return _dbus_string_append (str, _dbus_string_get_const_data (from));
 }
 
 /**
@@ -1056,6 +1073,7 @@ _dbus_string_append_printf_valist  (DBusString        *str,
                                     const char        *format,
                                     va_list            args)
 {
+  dbus_bool_t ret = FALSE;
   int len;
   va_list args_copy;
 
@@ -1067,21 +1085,21 @@ _dbus_string_append_printf_valist  (DBusString        *str,
   len = _dbus_printf_string_upper_bound (format, args);
 
   if (len < 0)
-    return FALSE;
+    goto out;
 
   if (!_dbus_string_lengthen (str, len))
     {
-      /* don't leak the copy */
-      va_end (args_copy);
-      return FALSE;
+      goto out;
     }
   
   vsprintf ((char*) (real->str + (real->len - len)),
             format, args_copy);
+  ret = TRUE;
 
+out:
   va_end (args_copy);
 
-  return TRUE;
+  return ret;
 }
 
 /**

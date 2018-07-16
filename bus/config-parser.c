@@ -28,6 +28,7 @@
 #include "utils.h"
 #include "policy.h"
 #include "selinux.h"
+#include "apparmor.h"
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-misc.h>
@@ -1136,6 +1137,27 @@ start_busconfig_child (BusConfigParser   *parser,
 
       return TRUE;
     }
+  else if (element_type == ELEMENT_APPARMOR)
+    {
+      Element *e;
+      const char *mode;
+
+      if ((e = push_element (parser, ELEMENT_APPARMOR)) == NULL)
+        {
+          BUS_SET_OOM (error);
+          return FALSE;
+        }
+
+      if (!locate_attributes (parser, "apparmor",
+                              attribute_names,
+                              attribute_values,
+                              error,
+                              "mode", &mode,
+                              NULL))
+        return FALSE;
+
+      return bus_apparmor_set_mode_from_config (mode, error);
+    }
   else
     {
       dbus_set_error (error, DBUS_ERROR_FAILED,
@@ -2074,6 +2096,7 @@ bus_config_parser_end_element (BusConfigParser   *parser,
     case ELEMENT_STANDARD_SESSION_SERVICEDIRS:
     case ELEMENT_STANDARD_SYSTEM_SERVICEDIRS:
     case ELEMENT_ALLOW_ANONYMOUS:
+    case ELEMENT_APPARMOR:
       break;
     }
 
@@ -2242,7 +2265,15 @@ include_dir (BusConfigParser   *parser,
   dir = _dbus_directory_open (dirname, error);
 
   if (dir == NULL)
-    goto failed;
+    {
+      if (dbus_error_has_name (error, DBUS_ERROR_FILE_NOT_FOUND))
+        {
+          dbus_error_free (error);
+          goto success;
+        }
+      else
+        goto failed;
+    }
 
   dbus_error_init (&tmp_error);
   while (_dbus_directory_get_next_file (dir, &filename, &tmp_error))
@@ -2312,6 +2343,7 @@ include_dir (BusConfigParser   *parser,
       goto failed;
     }
 
+ success:
   retval = TRUE;
   
  failed:
@@ -2373,6 +2405,7 @@ bus_config_parser_content (BusConfigParser   *parser,
     case ELEMENT_ALLOW_ANONYMOUS:
     case ELEMENT_SELINUX:
     case ELEMENT_ASSOCIATE:
+    case ELEMENT_APPARMOR:
       if (all_whitespace (content))
         return TRUE;
       else
@@ -3368,41 +3401,46 @@ test_default_session_servicedirs (void)
   DBusList *dirs;
   DBusList *link;
   DBusString progs;
+  DBusString install_root_based;
   int i;
-
+  dbus_bool_t ret = FALSE;
 #ifdef DBUS_WIN
+  const char *tmp;
   const char *common_progs;
-  char buffer[1024];
-
-  if (_dbus_get_install_root(buffer, sizeof(buffer)))
-    {
-      strcat(buffer,DBUS_DATADIR);
-      strcat(buffer,"/dbus-1/services");
-      test_session_service_dir_matches[0] = buffer;
-    }
 #endif
 
-  /* On Unix we don't actually use this variable, but it's easier to handle the
-   * deallocation if we always allocate it, whether needed or not */
-  if (!_dbus_string_init (&progs))
-    _dbus_assert_not_reached ("OOM allocating progs");
+  /* On Unix we don't actually use these, but it's easier to handle the
+   * deallocation if we always allocate them, whether needed or not */
+  if (!_dbus_string_init (&progs) ||
+      !_dbus_string_init (&install_root_based))
+    _dbus_assert_not_reached ("OOM allocating strings");
 
-#ifndef DBUS_UNIX
+#ifdef DBUS_WIN
+  if (!_dbus_string_append (&install_root_based, DBUS_DATADIR) ||
+      !_dbus_string_append (&install_root_based, "/dbus-1/services"))
+    goto out;
+
+  tmp = _dbus_replace_install_prefix (
+      _dbus_string_get_const_data (&install_root_based));
+
+  if (tmp == NULL ||
+      !_dbus_string_set_length (&install_root_based, 0) ||
+      !_dbus_string_append (&install_root_based, tmp))
+    goto out;
+
+  test_session_service_dir_matches[0] = _dbus_string_get_const_data (
+      &install_root_based);
+
   common_progs = _dbus_getenv ("CommonProgramFiles");
 
   if (common_progs) 
     {
       if (!_dbus_string_append (&progs, common_progs)) 
-        {
-          _dbus_string_free (&progs);
-          return FALSE;
-        }
+        goto out;
 
       if (!_dbus_string_append (&progs, "/dbus-1/services")) 
-        {
-          _dbus_string_free (&progs);
-          return FALSE;
-        }
+        goto out;
+
       test_session_service_dir_matches[1] = _dbus_string_get_const_data(&progs);
     }
 #endif
@@ -3424,8 +3462,7 @@ test_default_session_servicedirs (void)
           printf ("error with default session service directories\n");
 	      dbus_free (link->data);
     	  _dbus_list_free_link (link);
-          _dbus_string_free (&progs);
-          return FALSE;
+          goto out;
         }
  
       dbus_free (link->data);
@@ -3452,8 +3489,7 @@ test_default_session_servicedirs (void)
           printf ("more directories parsed than in match set\n");
           dbus_free (link->data);
           _dbus_list_free_link (link);
-          _dbus_string_free (&progs);
-          return FALSE;
+          goto out;
         }
  
       if (strcmp (test_session_service_dir_matches[i], 
@@ -3464,8 +3500,7 @@ test_default_session_servicedirs (void)
                   test_session_service_dir_matches[i]);
           dbus_free (link->data);
           _dbus_list_free_link (link);
-          _dbus_string_free (&progs);
-          return FALSE;
+          goto out;
         }
 
       ++i;
@@ -3478,13 +3513,15 @@ test_default_session_servicedirs (void)
     {
       printf ("extra data %s in the match set was not matched\n",
               test_session_service_dir_matches[i]);
-
-      _dbus_string_free (&progs);
-      return FALSE;
+      goto out;
     }
-    
+
+  ret = TRUE;
+
+out:
+  _dbus_string_free (&install_root_based);
   _dbus_string_free (&progs);
-  return TRUE;
+  return ret;
 }
 
 static const char *test_system_service_dir_matches[] = 
@@ -3642,6 +3679,11 @@ bus_config_parser_test (const DBusString *test_data_dir)
 
   if (!process_test_valid_subdir (test_data_dir, "valid-config-files", VALID))
     return FALSE;
+
+#ifndef DBUS_WIN
+  if (!process_test_valid_subdir (test_data_dir, "valid-config-files-system", VALID))
+    return FALSE;
+#endif
 
   if (!process_test_valid_subdir (test_data_dir, "invalid-config-files", INVALID))
     return FALSE;

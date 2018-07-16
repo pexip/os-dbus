@@ -102,6 +102,9 @@
 /* Where to put test sockets */
 #undef DBUS_TEST_SOCKET_DIR
 
+/* Unprivileged user used in some regression tests */
+#undef DBUS_TEST_USER
+
 /* Defined if we run on a Unix-based system */
 #undef DBUS_UNIX
 
@@ -132,10 +135,10 @@
 /* The name of the gettext domain */
 #undef GETTEXT_PACKAGE
 
-/* Prevent post-2.32 APIs */
+/* Prevent post-2.38 APIs */
 #undef GLIB_VERSION_MAX_ALLOWED
 
-/* Ignore post-2.26 deprecations */
+/* Ignore post-2.36 deprecations */
 #undef GLIB_VERSION_MIN_REQUIRED
 
 /* Disable GLib public API sanity checking */
@@ -153,7 +156,10 @@
 /* Define to 1 if you have the <alloca.h> header file. */
 #undef HAVE_ALLOCA_H
 
-/* Define to 1 if you have the `backtrace' function. */
+/* AppArmor Support */
+#undef HAVE_APPARMOR
+
+/* Define to 1 if you have backtrace(). */
 #undef HAVE_BACKTRACE
 
 /* Define to 1 if you have the <byteswap.h> header file. */
@@ -215,6 +221,9 @@
 /* Define to 1 if you have the `getresuid' function. */
 #undef HAVE_GETRESUID
 
+/* Define to 1 if you have the `getrlimit' function. */
+#undef HAVE_GETRLIMIT
+
 /* Have GNU-style varargs macros */
 #undef HAVE_GNUC_VARARGS
 
@@ -269,6 +278,9 @@
 /* Define to 1 if you have the `prctl' function. */
 #undef HAVE_PRCTL
 
+/* Define to 1 if you have the `prlimit' function. */
+#undef HAVE_PRLIMIT
+
 /* Define to 1 if you have the `raise' function. */
 #undef HAVE_RAISE
 
@@ -280,6 +292,9 @@
 
 /* Define to 1 if you have the `setlocale' function. */
 #undef HAVE_SETLOCALE
+
+/* Define to 1 if you have the `setresuid' function. */
+#undef HAVE_SETRESUID
 
 /* Define to 1 if you have the `setrlimit' function. */
 #undef HAVE_SETRLIMIT
@@ -332,6 +347,9 @@
 /* Define to 1 if you have the <sys/syslimits.h> header file. */
 #undef HAVE_SYS_SYSLIMITS_H
 
+/* Define to 1 if you have the <sys/time.h> header file. */
+#undef HAVE_SYS_TIME_H
+
 /* Define to 1 if you have the <sys/types.h> header file. */
 #undef HAVE_SYS_TYPES_H
 
@@ -344,6 +362,9 @@
 /* Supports sending UNIX file descriptors */
 #undef HAVE_UNIX_FD_PASSING
 
+/* Have unpcbid structure */
+#undef HAVE_UNPCBID
+
 /* Define to 1 if you have the `unsetenv' function. */
 #undef HAVE_UNSETENV
 
@@ -353,6 +374,10 @@
 /* Define to 1 if you have the `vasprintf' function. */
 #undef HAVE_VASPRINTF
 
+/* Define to 1 or 0, depending whether the compiler supports simple visibility
+   declarations. */
+#undef HAVE_VISIBILITY
+
 /* Define to 1 if you have the `vsnprintf' function. */
 #undef HAVE_VSNPRINTF
 
@@ -361,6 +386,9 @@
 
 /* Define to 1 if you have the <ws2tcpip.h> header file. */
 #undef HAVE_WS2TCPIP_H
+
+/* Define to 1 if you have the `XML_SetHashSalt' function. */
+#undef HAVE_XML_SETHASHSALT
 
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
@@ -473,6 +501,17 @@
 # define environ (*_NSGetEnviron())
 #endif
 
+
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef _DARWIN_USE_64_BIT_INODE
+# define _DARWIN_USE_64_BIT_INODE 1
+#endif
+
+/* Number of bits in a file offset, on hosts where this is settable. */
+#undef _FILE_OFFSET_BITS
+
+/* Define for large files, on AIX-style hosts. */
+#undef _LARGE_FILES
 
 /* Define to 1 if on MINIX. */
 #undef _MINIX

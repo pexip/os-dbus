@@ -40,11 +40,14 @@ DBUS_BEGIN_DECLS
  * @{
  */
 
+DBUS_PRIVATE_EXPORT
 dbus_bool_t
 _dbus_close     (int               fd,
                  DBusError        *error);
+DBUS_PRIVATE_EXPORT
 int _dbus_dup   (int               fd,
                  DBusError        *error);
+DBUS_PRIVATE_EXPORT
 int
 _dbus_read      (int               fd,
                  DBusString       *buffer,
@@ -74,8 +77,8 @@ int _dbus_connect_exec (const char     *path,
                         char *const    argv[],
                         DBusError      *error);
 
-int _dbus_listen_systemd_sockets (int       **fd,
-                                 DBusError *error);
+int _dbus_listen_systemd_sockets (DBusSocket  **fd,
+                                  DBusError    *error);
 
 dbus_bool_t _dbus_read_credentials (int               client_fd,
                                     DBusCredentials  *credentials,
@@ -86,6 +89,11 @@ dbus_bool_t _dbus_send_credentials (int              server_fd,
 dbus_bool_t _dbus_lookup_launchd_socket (DBusString *socket_path,
                                          const char *launchd_env_var,
                                          DBusError  *error);
+
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_lookup_user_bus (dbus_bool_t *supported,
+                                   DBusString  *address,
+                                   DBusError   *error);
 
 /** Information about a UNIX user */
 typedef struct DBusUserInfo  DBusUserInfo;
@@ -130,17 +138,32 @@ dbus_bool_t _dbus_group_info_fill_gid (DBusGroupInfo    *info,
                                        DBusError        *error);
 void        _dbus_group_info_free     (DBusGroupInfo    *info);
 
-dbus_uid_t    _dbus_getuid (void);
+DBUS_PRIVATE_EXPORT
 dbus_uid_t    _dbus_geteuid (void);
 
 dbus_bool_t _dbus_parse_uid (const DBusString  *uid_str,
                              dbus_uid_t        *uid);
 
+DBUS_PRIVATE_EXPORT
 void _dbus_close_all (void);
 
-dbus_bool_t _dbus_append_address_from_socket (int         fd,
+dbus_bool_t _dbus_append_address_from_socket (DBusSocket  fd,
                                               DBusString *address,
                                               DBusError  *error);
+
+DBUS_PRIVATE_EXPORT
+void _dbus_fd_set_close_on_exec (int fd);
+
+typedef enum
+{
+  DBUS_FORCE_STDIN_NULL = (1 << 0),
+  DBUS_FORCE_STDOUT_NULL = (1 << 1),
+  DBUS_FORCE_STDERR_NULL = (1 << 2)
+} DBusEnsureStandardFdsFlags;
+
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_ensure_standard_fds (DBusEnsureStandardFdsFlags   flags,
+                                       const char                 **error_str_p);
 
 /** @} */
 

@@ -31,6 +31,10 @@
 #include <locale.h>
 #endif
 
+#ifdef DBUS_UNIX
+# include <dbus/dbus-sysdeps-unix.h>
+#endif
+
 int
 main (int    argc,
       char **argv)
@@ -38,11 +42,16 @@ main (int    argc,
   const char *test_data_dir;
   const char *specific_test;
 
+#ifdef DBUS_UNIX
+  /* close any inherited fds so dbus-spawn's check for close-on-exec works */
+  _dbus_close_all ();
+#endif
+
 #if HAVE_SETLOCALE
   setlocale(LC_ALL, "");
 #endif
   
-  if (argc > 1)
+  if (argc > 1 && strcmp (argv[1], "--tap") != 0)
     test_data_dir = argv[1];
   else
     test_data_dir = NULL;
