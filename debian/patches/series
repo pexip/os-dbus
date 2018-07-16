@@ -2,4 +2,3 @@ backports/Replace-DBUS_USE_TEST_BINARY-with-DBUS_TEST_DBUS_LAUNCH.patch
 debian/Don-t-abort-on-fatal-warnings-by-default.patch
 debian/session.conf-system.conf-include-legacy-files-as-.dpkg-ba.patch
 20_system_conf_limit.patch
-81-session.conf-timeout.patch
