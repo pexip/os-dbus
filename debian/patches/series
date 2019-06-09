@@ -1,3 +1,3 @@
-backports/Replace-DBUS_USE_TEST_BINARY-with-DBUS_TEST_DBUS_LAUNCH.patch
-debian/Don-t-abort-on-fatal-warnings-by-default.patch
+dbus-daemon-test-Don-t-test-fd-limits-if-in-an-unprivileg.patch
 debian/session.conf-system.conf-include-legacy-files-as-.dpkg-ba.patch
+debian/tests-Multiply-timeouts-by-20-on-riscv64.patch

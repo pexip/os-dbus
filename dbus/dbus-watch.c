@@ -326,8 +326,8 @@ _dbus_watch_list_set_functions (DBusWatchList           *watch_list,
               link2 = _dbus_list_get_first_link (&watch_list->watches);
               while (link2 != link)
                 {
-                  DBusList *next = _dbus_list_get_next_link (&watch_list->watches,
-                                                             link2);
+                  DBusList *next2 = _dbus_list_get_next_link (&watch_list->watches,
+                                                              link2);
 #ifdef DBUS_ENABLE_VERBOSE_MODE
                   DBusWatch *watch2 = link2->data;
                   
@@ -337,7 +337,7 @@ _dbus_watch_list_set_functions (DBusWatchList           *watch_list,
                   
                   (* remove_function) (link2->data, data);
                   
-                  link2 = next;
+                  link2 = next2;
                 }
 
               return FALSE;
@@ -739,7 +739,7 @@ dbus_watch_handle (DBusWatch    *watch,
 #ifndef DBUS_DISABLE_CHECKS
   if (!_dbus_pollable_is_valid (watch->fd) || watch->flags == 0)
     {
-      _dbus_warn_check_failed ("Watch is invalid, it should have been removed\n");
+      _dbus_warn_check_failed ("Watch is invalid, it should have been removed");
       return TRUE;
     }
 #endif

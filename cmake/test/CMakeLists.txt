@@ -73,6 +73,7 @@ add_helper_executable(test-exit ${test-exit_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 add_helper_executable(test-segfault ${test-segfault_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 add_helper_executable(test-sleep-forever ${test-sleep-forever_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 add_helper_executable(manual-tcp ${manual-tcp_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
+add_helper_executable(manual-backtrace ${CMAKE_SOURCE_DIR}/../test/manual-backtrace.c dbus-1)
 if(WIN32)
     add_helper_executable(manual-paths ${manual-paths_SOURCES} ${DBUS_INTERNAL_LIBRARIES})
 endif()
@@ -106,9 +107,12 @@ if(DBUS_WITH_GLIB)
     add_test_executable(test-monitor ${CMAKE_SOURCE_DIR}/../test/monitor.c ${TEST_LIBRARIES})
     add_test_executable(test-refs ${CMAKE_SOURCE_DIR}/../test/internals/refs.c ${TEST_LIBRARIES})
     add_test_executable(test-relay ${CMAKE_SOURCE_DIR}/../test/relay.c ${TEST_LIBRARIES})
+    add_test_executable(test-server-oom ${CMAKE_SOURCE_DIR}/../test/internals/server-oom.c ${TEST_LIBRARIES})
     add_test_executable(test-syntax ${CMAKE_SOURCE_DIR}/../test/syntax.c ${TEST_LIBRARIES})
     add_test_executable(test-syslog ${CMAKE_SOURCE_DIR}/../test/internals/syslog.c ${TEST_LIBRARIES})
+    add_test_executable(test-uid-permissions ${CMAKE_SOURCE_DIR}/../test/uid-permissions.c ${TEST_LIBRARIES})
     add_helper_executable(manual-authz ${CMAKE_SOURCE_DIR}/../test/manual-authz.c ${TEST_LIBRARIES})
+    add_helper_executable(manual-test-thread-blocking ${CMAKE_SOURCE_DIR}/../test/thread-blocking.c ${TEST_LIBRARIES})
 endif()
 
 ### keep these in creation order, i.e. uppermost dirs first 
@@ -125,7 +129,6 @@ set (TESTDIRS
     test/data/valid-config-files/session.d
     test/data/valid-config-files-system
     test/data/valid-config-files-system/system.d
-    test/data/valid-introspection-files
     test/data/valid-messages
     test/data/valid-service-files
     test/data/valid-service-files-system

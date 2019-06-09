@@ -52,6 +52,8 @@
 #elif (defined __APPLE__)
 # include <crt_externs.h>
 # define environ (*_NSGetEnviron())
+#elif HAVE_DECL_ENVIRON && defined(HAVE_UNISTD_H)
+# include <unistd.h>
 #else
 extern char **environ;
 #endif
@@ -668,9 +670,9 @@ _dbus_error_from_errno (int error_number)
     case ENOENT:
       return DBUS_ERROR_FILE_NOT_FOUND;
 #endif
+    default:
+      return DBUS_ERROR_FAILED;
     }
-
-  return DBUS_ERROR_FAILED;
 }
 
 /**
@@ -749,6 +751,26 @@ const char*
 _dbus_strerror_from_errno (void)
 {
   return _dbus_strerror (errno);
+}
+
+/**
+ * Log a message to the system log file (e.g. syslog on Unix) and/or stderr.
+ *
+ * @param severity a severity value
+ * @param msg a printf-style format string
+ */
+void
+_dbus_log (DBusSystemLogSeverity  severity,
+           const char            *msg,
+           ...)
+{
+  va_list args;
+
+  va_start (args, msg);
+
+  _dbus_logv (severity, msg, args);
+
+  va_end (args);
 }
 
 /** @} end of sysdeps */

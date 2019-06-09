@@ -83,9 +83,9 @@ _dbus_validate_signature_with_reason (const DBusString *type_str,
       goto out;
     }
 
-  p = _dbus_string_get_const_data_len (type_str, type_pos, 0);
+  p = _dbus_string_get_const_udata_len (type_str, type_pos, 0);
 
-  end = _dbus_string_get_const_data_len (type_str, type_pos + len, 0);
+  end = _dbus_string_get_const_udata_len (type_str, type_pos + len, 0);
   struct_depth = 0;
   array_depth = 0;
   dict_entry_depth = 0;
@@ -233,7 +233,7 @@ _dbus_validate_signature_with_reason (const DBusString *type_str,
         {
           if (*p == DBUS_TYPE_ARRAY && p != end)
             {
-	       const char *p1;
+               const unsigned char *p1;
 	       p1 = p + 1;
                if (*p1 == DBUS_STRUCT_END_CHAR ||
                    *p1 == DBUS_DICT_ENTRY_END_CHAR)
@@ -425,7 +425,7 @@ validate_body_helper (DBusTypeReader       *reader,
             if (current_type == DBUS_TYPE_OBJECT_PATH)
               {
                 DBusString str;
-                _dbus_string_init_const_len (&str, p, claimed_len);
+                _dbus_string_init_const_len (&str, (const char *) p, claimed_len);
                 if (!_dbus_validate_path (&str, 0,
                                           _dbus_string_get_length (&str)))
                   return DBUS_INVALID_BAD_PATH;
@@ -435,7 +435,7 @@ validate_body_helper (DBusTypeReader       *reader,
             else if (current_type == DBUS_TYPE_STRING)
               {
                 DBusString str;
-                _dbus_string_init_const_len (&str, p, claimed_len);
+                _dbus_string_init_const_len (&str, (const char *) p, claimed_len);
                 if (!_dbus_string_validate_utf8 (&str, 0,
                                                  _dbus_string_get_length (&str)))
                   return DBUS_INVALID_BAD_UTF8_IN_STRING;
@@ -534,7 +534,7 @@ validate_body_helper (DBusTypeReader       *reader,
             if (claimed_len + 1 > (unsigned long) (end - p))
               return DBUS_INVALID_SIGNATURE_LENGTH_OUT_OF_BOUNDS;
 
-            _dbus_string_init_const_len (&str, p, claimed_len);
+            _dbus_string_init_const_len (&str, (const char *) p, claimed_len);
             validity =
               _dbus_validate_signature_with_reason (&str, 0,
                                                     _dbus_string_get_length (&str));
@@ -578,7 +578,7 @@ validate_body_helper (DBusTypeReader       *reader,
             if (claimed_len + 1 > (unsigned long) (end - p))
               return DBUS_INVALID_VARIANT_SIGNATURE_LENGTH_OUT_OF_BOUNDS;
 
-            _dbus_string_init_const_len (&sig, p, claimed_len);
+            _dbus_string_init_const_len (&sig, (const char *) p, claimed_len);
             reason = _dbus_validate_signature_with_reason (&sig, 0,
                                            _dbus_string_get_length (&sig));
             if (!(reason == DBUS_VALID))
@@ -730,7 +730,7 @@ _dbus_validate_body_with_reason (const DBusString *expected_signature,
   _dbus_type_reader_init_types_only (&reader,
                                      expected_signature, expected_signature_start);
 
-  p = _dbus_string_get_const_data_len (value_str, value_pos, len);
+  p = _dbus_string_get_const_udata_len (value_str, value_pos, len);
   end = p + len;
 
   validity = validate_body_helper (&reader, byte_order, TRUE, 0, p, end, &p);
@@ -805,7 +805,7 @@ _dbus_validate_path (const DBusString  *str,
   if (len == 0)
     return FALSE;
 
-  s = _dbus_string_get_const_data (str) + start;
+  s = _dbus_string_get_const_udata (str) + start;
   end = s + len;
 
   if (*s != '/')
@@ -903,7 +903,9 @@ _dbus_validity_to_error_message (DBusValidity validity)
     case DBUS_INVALID_DICT_ENTRY_HAS_TOO_MANY_FIELDS:              return "Dict entry has too many fields";
     case DBUS_INVALID_DICT_ENTRY_NOT_INSIDE_ARRAY:                 return "Dict entry not inside array";
     case DBUS_INVALID_DICT_KEY_MUST_BE_BASIC_TYPE:                 return "Dict key must be basic type";
+    case DBUS_INVALID_MISSING_UNIX_FDS:                            return "Unix file descriptor missing";
     case DBUS_INVALID_NESTED_TOO_DEEPLY:                           return "Variants cannot be used to create a hugely recursive tree of values";
+    case DBUS_VALIDITY_LAST:
     default:
       return "Invalid";
     }
@@ -946,7 +948,7 @@ _dbus_validate_interface (const DBusString  *str,
     return FALSE;
 
   last_dot = NULL;
-  iface = _dbus_string_get_const_data (str) + start;
+  iface = _dbus_string_get_const_udata (str) + start;
   end = iface + len;
   s = iface;
 
@@ -1020,7 +1022,7 @@ _dbus_validate_member (const DBusString  *str,
   if (len == 0)
     return FALSE;
 
-  member = _dbus_string_get_const_data (str) + start;
+  member = _dbus_string_get_const_udata (str) + start;
   end = member + len;
   s = member;
 
@@ -1112,7 +1114,7 @@ _dbus_validate_bus_name_full (const DBusString  *str,
     return FALSE;
 
   last_dot = NULL;
-  iface = _dbus_string_get_const_data (str) + start;
+  iface = _dbus_string_get_const_udata (str) + start;
   end = iface + len;
   s = iface;
 
@@ -1217,33 +1219,6 @@ _dbus_validate_bus_namespace (const DBusString  *str,
   return _dbus_validate_bus_name_full (str, start, len, TRUE);
 }
 
-/**
- * Checks that the given range of the string is a valid message type
- * signature in the D-Bus protocol.
- *
- * @todo this is inconsistent with most of DBusString in that
- * it allows a start,len range that extends past the string end.
- *
- * @param str the string
- * @param start first byte index to check
- * @param len number of bytes to check
- * @returns #TRUE if the byte range exists and is a valid signature
- */
-dbus_bool_t
-_dbus_validate_signature (const DBusString  *str,
-                          int                start,
-                          int                len)
-{
-  _dbus_assert (start >= 0);
-  _dbus_assert (start <= _dbus_string_get_length (str));
-  _dbus_assert (len >= 0);
-
-  if (len > _dbus_string_get_length (str) - start)
-    return FALSE;
-
-  return _dbus_validate_signature_with_reason (str, start, len) == DBUS_VALID;
-}
-
 /** define _dbus_check_is_valid_path() */
 DEFINE_DBUS_NAME_CHECK(path)
 /** define _dbus_check_is_valid_interface() */
@@ -1254,8 +1229,6 @@ DEFINE_DBUS_NAME_CHECK(member)
 DEFINE_DBUS_NAME_CHECK(error_name)
 /** define _dbus_check_is_valid_bus_name() */
 DEFINE_DBUS_NAME_CHECK(bus_name)
-/** define _dbus_check_is_valid_signature() */
-DEFINE_DBUS_NAME_CHECK(signature)
 /** define _dbus_check_is_valid_utf8() */
 DEFINE_DBUS_NAME_CHECK(utf8)
 

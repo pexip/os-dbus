@@ -46,6 +46,7 @@
 #include <libaudit.h>
 #endif /* HAVE_LIBAUDIT */
 
+#include "activation.h"
 #include "audit.h"
 #include "connection.h"
 #include "utils.h"
@@ -606,7 +607,9 @@ bus_apparmor_allows_acquire_service (DBusConnection     *connection,
   BusAppArmorConfinement *con = NULL;
   DBusString qstr, auxdata;
   dbus_bool_t free_auxdata = FALSE;
-  dbus_bool_t allow = FALSE, audit = TRUE;
+  /* the AppArmor API uses pointers to int for pointers to boolean, and
+   * int is not strictly guaranteed to be the same as dbus_bool_t */
+  int allow = FALSE, audit = TRUE;
   unsigned long pid;
   int res, serrno = 0;
 
@@ -737,18 +740,21 @@ bus_apparmor_allows_send (DBusConnection     *sender,
                           const char         *error_name,
                           const char         *destination,
                           const char         *source,
+                          BusActivationEntry *activation_entry,
                           DBusError          *error)
 {
 #ifdef HAVE_APPARMOR
   BusAppArmorConfinement *src_con = NULL, *dst_con = NULL;
   DBusString qstr, auxdata;
-  dbus_bool_t src_allow = FALSE, dst_allow = FALSE;
-  dbus_bool_t src_audit = TRUE, dst_audit = TRUE;
+  int src_allow = FALSE, dst_allow = FALSE;
+  int src_audit = TRUE, dst_audit = TRUE;
   dbus_bool_t free_auxdata = FALSE;
   unsigned long pid;
   int len, res, src_errno = 0, dst_errno = 0;
   uint32_t src_perm = AA_DBUS_SEND, dst_perm = AA_DBUS_RECEIVE;
   const char *msgtypestr = dbus_message_type_to_string(msgtype);
+  const char *dst_label = NULL;
+  const char *dst_mode = NULL;
 
   if (!apparmor_enabled)
     return TRUE;
@@ -761,10 +767,20 @@ bus_apparmor_allows_send (DBusConnection     *sender,
     {
       dst_con = bus_connection_dup_apparmor_confinement (proposed_recipient);
     }
+  else if (activation_entry != NULL)
+    {
+      dst_label = bus_activation_entry_get_assumed_apparmor_label (activation_entry);
+    }
   else
     {
       dst_con = bus_con;
       bus_apparmor_confinement_ref (dst_con);
+    }
+
+  if (dst_con != NULL)
+    {
+      dst_label = dst_con->label;
+      dst_mode = dst_con->mode;
     }
 
   /* map reply messages to initial send and receive permission. That is
@@ -794,7 +810,7 @@ bus_apparmor_allows_send (DBusConnection     *sender,
         goto oom;
 
       if (!build_message_query (&qstr, src_con->label, bustype, destination,
-                                dst_con->label, path, interface, member))
+                                dst_label, path, interface, member))
         {
           _dbus_string_free (&qstr);
           goto oom;
@@ -813,7 +829,11 @@ bus_apparmor_allows_send (DBusConnection     *sender,
         }
     }
 
-  if (is_unconfined (dst_con->label, dst_con->mode))
+  /* When deciding whether we can activate a service, we only check that
+   * we are allowed to send a message to it, not that it is allowed to
+   * receive that message from us.
+   */
+  if (activation_entry != NULL || is_unconfined (dst_label, dst_mode))
     {
       dst_allow = TRUE;
       dst_audit = FALSE;
@@ -823,7 +843,7 @@ bus_apparmor_allows_send (DBusConnection     *sender,
       if (!_dbus_string_init (&qstr))
         goto oom;
 
-      if (!build_message_query (&qstr, dst_con->label, bustype, source,
+      if (!build_message_query (&qstr, dst_label, bustype, source,
                                 src_con->label, path, interface, member))
         {
           _dbus_string_free (&qstr);
@@ -846,7 +866,7 @@ bus_apparmor_allows_send (DBusConnection     *sender,
   /* Don't fail operations on profiles in complain mode */
   if (modestr_is_complain (src_con->mode))
     src_allow = TRUE;
-  if (modestr_is_complain (dst_con->mode))
+  if (modestr_is_complain (dst_mode))
     dst_allow = TRUE;
 
   if (!src_allow || !dst_allow)
@@ -917,8 +937,8 @@ bus_apparmor_allows_send (DBusConnection     *sender,
           !_dbus_append_pair_uint (&auxdata, "peer_pid", pid))
         goto oom;
 
-      if (dst_con->label &&
-          !_dbus_append_pair_str (&auxdata, "peer_label", dst_con->label))
+      if (dst_label &&
+          !_dbus_append_pair_str (&auxdata, "peer_label", dst_label))
         goto oom;
 
       if (src_errno && !_dbus_append_pair_str (&auxdata, "info", strerror (src_errno)))
@@ -945,8 +965,8 @@ bus_apparmor_allows_send (DBusConnection     *sender,
           !_dbus_append_pair_uint (&auxdata, "pid", pid))
         goto oom;
 
-      if (dst_con->label &&
-          !_dbus_append_pair_str (&auxdata, "label", dst_con->label))
+      if (dst_label &&
+          !_dbus_append_pair_str (&auxdata, "label", dst_label))
         goto oom;
 
       if (sender && dbus_connection_get_unix_process_id (sender, &pid) &&
@@ -1006,7 +1026,7 @@ bus_apparmor_allows_eavesdropping (DBusConnection     *connection,
 #ifdef HAVE_APPARMOR
   BusAppArmorConfinement *con = NULL;
   DBusString qstr, auxdata;
-  dbus_bool_t allow = FALSE, audit = TRUE;
+  int allow = FALSE, audit = TRUE;
   dbus_bool_t free_auxdata = FALSE;
   unsigned long pid;
   int res, serrno = 0;

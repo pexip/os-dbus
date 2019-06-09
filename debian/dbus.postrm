@@ -3,10 +3,6 @@
 set -e
 
 if [ "$1" = "purge" ] ; then
-	for bus in system session; do
-		rm -f "/etc/dbus-1/${bus}.conf"
-	done
-
 	rmdir /var/run/dbus || true
 
 	rm -f /var/lib/dbus/machine-id

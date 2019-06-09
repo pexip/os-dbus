@@ -25,25 +25,42 @@ test_command_line_internal (dbus_bool_t should_work,
   DBusList *list = NULL, *node;
   DBusError error;
 
-  _dbus_list_append (&list, (char *)arg1);
+  if (!_dbus_list_append (&list, (char *)arg1))
+    return FALSE;
+
   do
     {
       tmp = va_arg (var_args, char *);
       if (!tmp)
         break;
-      _dbus_list_append (&list, tmp);
+      if (!_dbus_list_append (&list, tmp))
+        {
+          _dbus_list_clear (&list);
+          return FALSE;
+        }
     } while (tmp);
 
   original_argc = _dbus_list_get_length (&list);
   original_argv = dbus_new (char *, original_argc);
-  _dbus_string_init (&str);
+  if (!_dbus_string_init (&str))
+    {
+      _dbus_list_clear (&list);
+      dbus_free (original_argv);
+      return FALSE;
+    }
+
   for (i = 0, node = _dbus_list_get_first_link (&list); i < original_argc && node;
        i++, node = _dbus_list_get_next_link (&list, node))
     {
       original_argv[i] = node->data;
-      if (i > 0)
-        _dbus_string_append_byte (&str, ' ');
-      _dbus_string_append (&str, original_argv[i]);
+      if ((i > 0 && !_dbus_string_append_byte (&str, ' ')) ||
+          !_dbus_string_append (&str, original_argv[i]))
+        {
+          _dbus_list_clear (&list);
+          dbus_free (original_argv);
+          _dbus_string_free (&str);
+          return FALSE;
+        }
     }
   
   _dbus_list_clear (&list);
@@ -57,6 +74,7 @@ test_command_line_internal (dbus_bool_t should_work,
           should_work ? "" : " (as expected)",
           error.message ? error.message : "");
       dbus_free (original_argv);
+      _dbus_string_free (&str);
       return !should_work;
     }
   else
@@ -154,7 +172,7 @@ main (int argc, char **argv)
   test_command_line ("/opt/gnome/bin/service-start", NULL);
   test_command_line ("grep", "-l", "-r", "-i", "'whatever'", "files*.c", NULL);
   test_command_line ("/home/boston/johnp/devel-local/dbus/test/test-segfault", NULL);
-  test_command_line ("ls", "-l", "-a", "--colors", _dbus_get_tmpdir(), NULL);
+  test_command_line ("ls", "-l", "-a", "--colors", NULL);
   test_command_line ("rsync-to-server", NULL);
   test_command_line ("test-segfault", "--no-segfault", NULL);
   test_command_line ("evolution", "mailto:pepe@cuco.com", NULL);

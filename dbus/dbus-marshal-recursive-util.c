@@ -31,6 +31,13 @@
 #include "dbus-internals.h"
 #include <string.h>
 
+#if !defined(PRIx64) && defined(DBUS_WIN)
+#define PRIx64 "I64x"
+#endif
+
+/** turn this on to get deluged in TypeWriter verbose spam */
+#define RECURSIVE_MARSHAL_WRITE_TRACE 0
+
 static void
 basic_value_zero (DBusBasicValue *value)
 {
@@ -300,7 +307,7 @@ real_check_expected_type (DBusTypeReader *reader,
 
   if (t != expected)
     {
-      _dbus_warn ("Read type %s while expecting %s at %s line %d\n",
+      _dbus_warn ("Read type %s while expecting %s at %s line %d",
                   _dbus_type_to_string (t),
                   _dbus_type_to_string (expected),
                   funcname, line);
@@ -313,7 +320,7 @@ real_check_expected_type (DBusTypeReader *reader,
 
 #define NEXT_EXPECTING_TRUE(reader)  do { if (!_dbus_type_reader_next (reader))         \
  {                                                                                      \
-    _dbus_warn ("_dbus_type_reader_next() should have returned TRUE at %s %d\n",        \
+    _dbus_warn ("_dbus_type_reader_next() should have returned TRUE at %s %d",          \
                               _DBUS_FUNCTION_NAME, __LINE__);                           \
     _dbus_assert_not_reached ("test failed");                                           \
  }                                                                                      \
@@ -321,7 +328,7 @@ real_check_expected_type (DBusTypeReader *reader,
 
 #define NEXT_EXPECTING_FALSE(reader) do { if (_dbus_type_reader_next (reader))          \
  {                                                                                      \
-    _dbus_warn ("_dbus_type_reader_next() should have returned FALSE at %s %d\n",       \
+    _dbus_warn ("_dbus_type_reader_next() should have returned FALSE at %s %d",         \
                               _DBUS_FUNCTION_NAME, __LINE__);                           \
     _dbus_assert_not_reached ("test failed");                                           \
  }                                                                                      \
@@ -1316,7 +1323,7 @@ run_test_delete_values (NodeIterationData *nid)
               while (elem > 0)
                 {
                   if (!_dbus_type_reader_next (&array))
-                    _dbus_assert_not_reached ("should have had another element\n");
+                    _dbus_assert_not_reached ("should have had another element");
                   --elem;
                 }
 
@@ -1391,7 +1398,7 @@ run_test_nodes_iteration (void *data)
   if (!_dbus_string_equal_substring (nid->signature, 0, _dbus_string_get_length (nid->signature),
                                      &nid->block->signature, nid->type_offset))
     {
-      _dbus_warn ("Expected signature '%s' and got '%s' with initial offset %d\n",
+      _dbus_warn ("Expected signature '%s' and got '%s' with initial offset %d",
                   _dbus_string_get_const_data (nid->signature),
                   _dbus_string_get_const_data_len (&nid->block->signature, nid->type_offset, 0),
                   nid->type_offset);
@@ -1697,14 +1704,14 @@ make_and_run_values_inside_container (const TestTypeNodeClass *container_klass,
 }
 
 static void
-start_next_test (const char *format,
+start_next_test (const char *description,
                  int         expected)
 {
   n_iterations_completed_this_test = 0;
   n_iterations_expected_this_test = expected;
 
-  fprintf (stderr, ">>> >>> ");
-  fprintf (stderr, format,
+  fprintf (stderr, ">>> >>> %s %d iterations\n",
+           description,
            n_iterations_expected_this_test);
 }
 
@@ -1745,7 +1752,7 @@ make_and_run_test_nodes (void)
 
   /* FIXME test just an empty body, no types at all */
 
-  start_next_test ("Each value by itself %d iterations\n", N_VALUES);
+  start_next_test ("Each value by itself", N_VALUES);
   {
     TestTypeNode *node;
     i = 0;
@@ -1757,7 +1764,7 @@ make_and_run_test_nodes (void)
       }
   }
 
-  start_next_test ("Each value by itself with arrays as blocks %d iterations\n", N_VALUES);
+  start_next_test ("Each value by itself with arrays as blocks", N_VALUES);
   arrays_write_fixed_in_blocks = TRUE;
   {
     TestTypeNode *node;
@@ -1771,7 +1778,7 @@ make_and_run_test_nodes (void)
   }
   arrays_write_fixed_in_blocks = FALSE;
 
-  start_next_test ("All values in one big toplevel %d iteration\n", 1);
+  start_next_test ("All values in one big toplevel", 1);
   {
     TestTypeNode *nodes[N_VALUES];
     TestTypeNode *node;
@@ -1788,7 +1795,7 @@ make_and_run_test_nodes (void)
       node_destroy (nodes[i]);
   }
 
-  start_next_test ("Each value,value pair combination as toplevel, in both orders %d iterations\n",
+  start_next_test ("Each value,value pair combination as toplevel, in both orders",
                    N_VALUES * N_VALUES);
   {
     TestTypeNode *nodes[2];
@@ -1808,7 +1815,7 @@ make_and_run_test_nodes (void)
       }
   }
 
-  start_next_test ("Each container containing each value %d iterations\n",
+  start_next_test ("Each container containing each value",
                    N_CONTAINERS * N_VALUES);
   for (i = 0; i < N_CONTAINERS; i++)
     {
@@ -1817,7 +1824,7 @@ make_and_run_test_nodes (void)
       make_and_run_values_inside_container (container_klass, 1);
     }
 
-  start_next_test ("Each container containing each value with arrays as blocks %d iterations\n",
+  start_next_test ("Each container containing each value with arrays as blocks",
                    N_CONTAINERS * N_VALUES);
   arrays_write_fixed_in_blocks = TRUE;
   for (i = 0; i < N_CONTAINERS; i++)
@@ -1828,7 +1835,7 @@ make_and_run_test_nodes (void)
     }
   arrays_write_fixed_in_blocks = FALSE;
 
-  start_next_test ("Each container of same container of each value %d iterations\n",
+  start_next_test ("Each container of same container of each value",
                    N_CONTAINERS * N_VALUES);
   for (i = 0; i < N_CONTAINERS; i++)
     {
@@ -1837,7 +1844,7 @@ make_and_run_test_nodes (void)
       make_and_run_values_inside_container (container_klass, 2);
     }
 
-  start_next_test ("Each container of same container of same container of each value %d iterations\n",
+  start_next_test ("Each container of same container of same container of each value",
                    N_CONTAINERS * N_VALUES);
   for (i = 0; i < N_CONTAINERS; i++)
     {
@@ -1846,7 +1853,7 @@ make_and_run_test_nodes (void)
       make_and_run_values_inside_container (container_klass, 3);
     }
 
-  start_next_test ("Each value,value pair inside a struct %d iterations\n",
+  start_next_test ("Each value,value pair inside a struct",
                    N_VALUES * N_VALUES);
   {
     TestTypeNode *val1, *val2;
@@ -1875,8 +1882,7 @@ make_and_run_test_nodes (void)
     node_destroy (node);
   }
 
-  start_next_test ("All values in one big struct %d iteration\n",
-                   1);
+  start_next_test ("All values in one big struct", 1);
   {
     TestTypeNode *node;
     TestTypeNode *child;
@@ -1892,8 +1898,7 @@ make_and_run_test_nodes (void)
     node_destroy (node);
   }
 
-  start_next_test ("Each value in a large array %d iterations\n",
-                   N_VALUES);
+  start_next_test ("Each value in a large array", N_VALUES);
   {
     TestTypeNode *val;
     TestTypeNode *node;
@@ -1924,7 +1929,7 @@ make_and_run_test_nodes (void)
       goto out;
     }
 
-  start_next_test ("Each container of each container of each value %d iterations\n",
+  start_next_test ("Each container of each container of each value",
                    N_CONTAINERS * N_CONTAINERS * N_VALUES);
   for (i = 0; i < N_CONTAINERS; i++)
     {
@@ -1955,7 +1960,7 @@ make_and_run_test_nodes (void)
       node_destroy (outer_container);
     }
 
-  start_next_test ("Each container of each container of each container of each value %d iterations\n",
+  start_next_test ("Each container of each container of each container of each value",
                    N_CONTAINERS * N_CONTAINERS * N_CONTAINERS * N_VALUES);
   for (i = 0; i < N_CONTAINERS; i++)
     {
@@ -2005,7 +2010,7 @@ make_and_run_test_nodes (void)
       goto out;
     }
 
-  start_next_test ("Each value,value,value triplet combination as toplevel, in all orders %d iterations\n",
+  start_next_test ("Each value,value,value triplet combination as toplevel, in all orders",
                    N_VALUES * N_VALUES * N_VALUES);
   {
     TestTypeNode *nodes[3];
@@ -2065,27 +2070,15 @@ int16_from_seed (int seed)
    * just use seed itself, but that would only ever touch one byte of
    * the int so would miss some kinds of bug.
    */
-  dbus_int16_t v;
+  static const dbus_int16_t v_of_seed[5] = {
+    SAMPLE_INT16,
+    SAMPLE_INT16_ALTERNATE,
+    -1,
+    _DBUS_INT16_MAX,
+    1
+  };
 
-  v = 42; /* just to quiet compiler afaik */
-  switch (seed % 5)
-    {
-    case 0:
-      v = SAMPLE_INT16;
-      break;
-    case 1:
-      v = SAMPLE_INT16_ALTERNATE;
-      break;
-    case 2:
-      v = -1;
-      break;
-    case 3:
-      v = _DBUS_INT16_MAX;
-      break;
-    case 4:
-      v = 1;
-      break;
-    }
+  dbus_int16_t v = v_of_seed[seed % _DBUS_N_ELEMENTS(v_of_seed)];
 
   if (seed > 1)
     v *= seed; /* wraps around eventually, which is fine */
@@ -2181,7 +2174,7 @@ int16_read_multi (TestTypeNode   *node,
                                       &n_elements);
 
   if (n_elements != count)
-    _dbus_warn ("got %d elements expected %d\n", n_elements, count);
+    _dbus_warn ("got %d elements expected %d", n_elements, count);
   _dbus_assert (n_elements == count);
 
   for (i = 0; i < count; i++)
@@ -2202,27 +2195,15 @@ int32_from_seed (int seed)
    * just use seed itself, but that would only ever touch one byte of
    * the int so would miss some kinds of bug.
    */
-  dbus_int32_t v;
+  static const dbus_int32_t v_of_seed[5] = {
+    SAMPLE_INT32,
+    SAMPLE_INT32_ALTERNATE,
+    -1,
+    _DBUS_INT_MAX,
+    1
+  };
 
-  v = 42; /* just to quiet compiler afaik */
-  switch (seed % 5)
-    {
-    case 0:
-      v = SAMPLE_INT32;
-      break;
-    case 1:
-      v = SAMPLE_INT32_ALTERNATE;
-      break;
-    case 2:
-      v = -1;
-      break;
-    case 3:
-      v = _DBUS_INT_MAX;
-      break;
-    case 4:
-      v = 1;
-      break;
-    }
+  dbus_int32_t v = v_of_seed[seed % _DBUS_N_ELEMENTS(v_of_seed)];
 
   if (seed > 1)
     v *= seed; /* wraps around eventually, which is fine */
@@ -2318,7 +2299,7 @@ int32_read_multi (TestTypeNode   *node,
                                       &n_elements);
 
   if (n_elements != count)
-    _dbus_warn ("got %d elements expected %d\n", n_elements, count);
+    _dbus_warn ("got %d elements expected %d", n_elements, count);
   _dbus_assert (n_elements == count);
 
   for (i = 0; i < count; i++)
@@ -2409,6 +2390,9 @@ string_from_seed (char *buf,
    */
   switch (seed % 3)
     {
+    default:
+      /* don't alter it */
+      break;
     case 1:
       len += 2;
       break;
@@ -2473,7 +2457,7 @@ string_read_value (TestTypeNode   *node,
 
   if (strcmp (buf, v) != 0)
     {
-      _dbus_warn ("read string '%s' expected '%s'\n",
+      _dbus_warn ("read string '%s' expected '%s'",
                   v, buf);
       _dbus_assert_not_reached ("test failed");
     }
@@ -2644,12 +2628,10 @@ double_read_value (TestTypeNode   *node,
 
   if (!_DBUS_DOUBLES_BITWISE_EQUAL (v, expected))
     {
-#ifdef DBUS_INT64_PRINTF_MODIFIER
-      _dbus_warn ("Expected double %g got %g\n bits = 0x%" DBUS_INT64_PRINTF_MODIFIER "x vs.\n bits = 0x%" DBUS_INT64_PRINTF_MODIFIER "x)\n",
+      _dbus_warn ("Expected double %g got %g\n bits = 0x%" PRIx64 " vs.\n bits = 0x%" PRIx64,
                   expected, v,
                   *(dbus_uint64_t*)(char*)&expected,
                   *(dbus_uint64_t*)(char*)&v);
-#endif
       _dbus_assert_not_reached ("test failed");
     }
 
@@ -2743,7 +2725,7 @@ object_path_read_value (TestTypeNode   *node,
 
   if (strcmp (buf, v) != 0)
     {
-      _dbus_warn ("read object path '%s' expected '%s'\n",
+      _dbus_warn ("read object path '%s' expected '%s'",
                   v, buf);
       _dbus_assert_not_reached ("test failed");
     }
@@ -2818,7 +2800,7 @@ signature_read_value (TestTypeNode   *node,
 
   if (strcmp (buf, v) != 0)
     {
-      _dbus_warn ("read signature value '%s' expected '%s'\n",
+      _dbus_warn ("read signature value '%s' expected '%s'",
                   v, buf);
       _dbus_assert_not_reached ("test failed");
     }
@@ -3068,10 +3050,10 @@ array_write_value (TestTypeNode   *node,
           link = _dbus_list_get_first_link (&container->children);
           while (link != NULL)
             {
-              TestTypeNode *child = link->data;
+              TestTypeNode *child2 = link->data;
               DBusList *next = _dbus_list_get_next_link (&container->children, link);
 
-              if (!node_write_value (child, block, &sub, seed + i))
+              if (!node_write_value (child2, block, &sub, seed + i))
                 goto oom;
 
               link = next;
@@ -3132,20 +3114,20 @@ array_read_or_set_value (TestTypeNode   *node,
               link = _dbus_list_get_first_link (&container->children);
               while (link != NULL)
                 {
-                  TestTypeNode *child = link->data;
+                  TestTypeNode *child2 = link->data;
                   DBusList *next = _dbus_list_get_next_link (&container->children, link);
 
-                  _dbus_assert (child->klass->typecode ==
+                  _dbus_assert (child2->klass->typecode ==
                                 _dbus_type_reader_get_element_type (reader));
 
                   if (realign_root == NULL)
                     {
-                      if (!node_read_value (child, &sub, seed + i))
+                      if (!node_read_value (child2, &sub, seed + i))
                         return FALSE;
                     }
                   else
                     {
-                      if (!node_set_value (child, &sub, realign_root, seed + i))
+                      if (!node_set_value (child2, &sub, realign_root, seed + i))
                         return FALSE;
                     }
 

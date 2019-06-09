@@ -27,15 +27,17 @@
 #include <config.h>
 #include "test-utils-glib.h"
 
+#include <errno.h>
 #include <string.h>
 
 #ifdef DBUS_WIN
 # include <io.h>
 # include <windows.h>
 #else
-# include <errno.h>
+# include <netdb.h>
 # include <signal.h>
 # include <unistd.h>
+# include <sys/socket.h>
 # include <sys/types.h>
 # include <pwd.h>
 #endif
@@ -95,12 +97,14 @@ spawn_dbus_daemon (const gchar *binary,
     const gchar *configuration,
     const gchar *listen_address,
     TestUser user,
+    const gchar *runtime_dir,
     GPid *daemon_pid)
 {
   GError *error = NULL;
   GString *address;
   gint address_fd;
   GPtrArray *argv;
+  gchar **envp;
 #ifdef DBUS_UNIX
   const struct passwd *pwd = NULL;
 #endif
@@ -149,6 +153,8 @@ spawn_dbus_daemon (const gchar *binary,
 
             break;
 
+          case TEST_USER_ME:
+            /* cannot get here, fall through */
           default:
             g_assert_not_reached ();
         }
@@ -157,6 +163,11 @@ spawn_dbus_daemon (const gchar *binary,
       return NULL;
 #endif
     }
+
+  envp = g_get_environ ();
+
+  if (runtime_dir != NULL)
+    envp = g_environ_setenv (envp, "XDG_RUNTIME_DIR", runtime_dir, TRUE);
 
   argv = g_ptr_array_new_with_free_func (g_free);
   g_ptr_array_add (argv, g_strdup (binary));
@@ -175,7 +186,7 @@ spawn_dbus_daemon (const gchar *binary,
 
   g_spawn_async_with_pipes (NULL, /* working directory */
       (gchar **) argv->pdata,
-      NULL, /* envp */
+      envp,
       G_SPAWN_DO_NOT_REAP_CHILD | G_SPAWN_SEARCH_PATH,
 #ifdef DBUS_UNIX
       child_setup, (gpointer) pwd,
@@ -190,6 +201,7 @@ spawn_dbus_daemon (const gchar *binary,
   g_assert_no_error (error);
 
   g_ptr_array_free (argv, TRUE);
+  g_strfreev (envp);
 
   address = g_string_new (NULL);
 
@@ -228,6 +240,7 @@ spawn_dbus_daemon (const gchar *binary,
 gchar *
 test_get_dbus_daemon (const gchar *config_file,
                       TestUser     user,
+                      const gchar *runtime_dir,
                       GPid        *daemon_pid)
 {
   gchar *dbus_daemon;
@@ -296,7 +309,7 @@ test_get_dbus_daemon (const gchar *config_file,
   else
     {
       address = spawn_dbus_daemon (dbus_daemon, arg,
-          listen_address, user, daemon_pid);
+          listen_address, user, runtime_dir, daemon_pid);
     }
 
   g_free (dbus_daemon);
@@ -321,7 +334,9 @@ test_connect_to_bus (TestMainContext *ctx,
   g_assert (ok);
   g_assert (dbus_bus_get_unique_name (conn) != NULL);
 
-  test_connection_setup (ctx, conn);
+  if (ctx != NULL)
+    test_connection_setup (ctx, conn);
+
   return conn;
 }
 
@@ -400,18 +415,39 @@ test_connect_to_bus_as_user (TestMainContext *ctx,
       case TEST_USER_ME:
         return test_connect_to_bus (ctx, address);
 
-      default:
+      case TEST_USER_ROOT:
+      case TEST_USER_MESSAGEBUS:
+      case TEST_USER_OTHER:
         g_test_skip ("setresuid() not available, or unsure about "
             "credentials-passing semantics on this platform");
         return NULL;
+
+      default:
+        g_return_val_if_reached (NULL);
     }
 
 #endif
 }
 
+static void
+pid_died (GPid pid,
+          gint status,
+          gpointer user_data)
+{
+  gboolean *result = user_data;
+
+  g_assert (result != NULL);
+  g_assert (!*result);
+  *result = TRUE;
+}
+
 void
 test_kill_pid (GPid pid)
 {
+  gint died = FALSE;
+
+  g_child_watch_add (pid, pid_died, &died);
+
 #ifdef DBUS_WIN
   if (pid != NULL)
     TerminateProcess (pid, 1);
@@ -419,41 +455,60 @@ test_kill_pid (GPid pid)
   if (pid > 0)
     kill (pid, SIGTERM);
 #endif
+
+  while (!died)
+    g_main_context_iteration (NULL, TRUE);
 }
 
 static gboolean
 time_out (gpointer data)
 {
-  g_error ("timed out");
+  puts ("Bail out! Test timed out (GLib main loop timeout callback reached)");
+  fflush (stdout);
+  abort ();
   return FALSE;
 }
 
 #ifdef G_OS_UNIX
+static void wrap_abort (int signal) _DBUS_GNUC_NORETURN;
+
 static void
 wrap_abort (int signal)
 {
+  /* We might be halfway through writing out something else, so force this
+   * onto its own line */
+  const char message [] = "\nBail out! Test timed out (SIGALRM received)\n";
+
+  if (write (STDOUT_FILENO, message, sizeof (message) - 1) <
+      (ssize_t) sizeof (message) - 1)
+    {
+      /* ignore short write - what would we do about it? */
+    }
+
   abort ();
 }
 #endif
 
-void
-test_init (int *argcp, char ***argvp)
+static void
+set_timeout (guint factor)
 {
-  g_test_init (argcp, argvp, NULL);
-  g_test_bug_base ("https://bugs.freedesktop.org/show_bug.cgi?id=");
+  static guint timeout = 0;
 
   /* Prevent tests from hanging forever. This is intended to be long enough
    * that any reasonable regression test on any reasonable hardware would
    * have finished. */
 #define TIMEOUT 60
 
-  g_timeout_add_seconds (TIMEOUT, time_out, NULL);
+  if (timeout != 0)
+    g_source_remove (timeout);
+
+  timeout = g_timeout_add_seconds (TIMEOUT * factor, time_out, NULL);
 #ifdef G_OS_UNIX
   /* The GLib main loop might not be running (we don't use it in every
    * test). Die with SIGALRM shortly after if necessary. */
-  alarm (TIMEOUT + 10);
+  alarm ((TIMEOUT * factor) + 10);
 
-  /* Get a core dump from the SIGALRM. */
+  /* Get a log message and a core dump from the SIGALRM. */
     {
       struct sigaction act = { };
 
@@ -465,8 +520,185 @@ test_init (int *argcp, char ***argvp)
 }
 
 void
+test_init (int *argcp, char ***argvp)
+{
+  g_test_init (argcp, argvp, NULL);
+  g_test_bug_base ("https://bugs.freedesktop.org/show_bug.cgi?id=");
+  set_timeout (1);
+}
+
+static void
+report_and_destroy (gpointer p)
+{
+  GTimer *timer = p;
+
+  g_test_message ("Time since timeout reset %p: %.3f seconds",
+      timer, g_timer_elapsed (timer, NULL));
+  g_timer_destroy (timer);
+}
+
+void
+test_timeout_reset (guint factor)
+{
+  GTimer *timer = g_timer_new ();
+
+  g_test_message ("Resetting test timeout (reference: %p; factor: %u)",
+      timer, factor);
+  set_timeout (factor);
+
+  g_test_queue_destroy (report_and_destroy, timer);
+}
+
+void
 test_progress (char symbol)
 {
   if (g_test_verbose () && isatty (1))
     g_print ("%c", symbol);
+}
+
+/*
+ * Delete @path, with a retry loop if the system call is interrupted by
+ * an async signal. If @path does not exist, ignore; otherwise, it is
+ * required to be a non-directory.
+ */
+void
+test_remove_if_exists (const gchar *path)
+{
+  while (g_remove (path) != 0)
+    {
+      int saved_errno = errno;
+
+      if (saved_errno == ENOENT)
+        return;
+
+#ifdef G_OS_UNIX
+      if (saved_errno == EINTR)
+        continue;
+#endif
+
+      g_error ("Unable to remove file \"%s\": %s", path,
+               g_strerror (saved_errno));
+    }
+}
+
+/*
+ * Delete empty directory @path, with a retry loop if the system call is
+ * interrupted by an async signal. @path is required to exist.
+ */
+void
+test_rmdir_must_exist (const gchar *path)
+{
+  while (g_remove (path) != 0)
+    {
+      int saved_errno = errno;
+
+#ifdef G_OS_UNIX
+      if (saved_errno == EINTR)
+        continue;
+#endif
+
+      g_error ("Unable to remove directory \"%s\": %s", path,
+               g_strerror (saved_errno));
+    }
+}
+
+/*
+ * Delete empty directory @path, with a retry loop if the system call is
+ * interrupted by an async signal. If @path does not exist, ignore.
+ */
+void
+test_rmdir_if_exists (const gchar *path)
+{
+  while (g_remove (path) != 0)
+    {
+      int saved_errno = errno;
+
+      if (saved_errno == ENOENT)
+        return;
+
+#ifdef G_OS_UNIX
+      if (saved_errno == EINTR)
+        continue;
+#endif
+
+      g_error ("Unable to remove directory \"%s\": %s", path,
+               g_strerror (saved_errno));
+    }
+}
+
+/*
+ * Create directory @path, with a retry loop if the system call is
+ * interrupted by an async signal.
+ */
+void
+test_mkdir (const gchar *path,
+            gint mode)
+{
+  while (g_mkdir (path, mode) != 0)
+    {
+      int saved_errno = errno;
+
+#ifdef G_OS_UNIX
+      if (saved_errno == EINTR)
+        continue;
+#endif
+
+      g_error ("Unable to create directory \"%s\": %s", path,
+               g_strerror (saved_errno));
+    }
+}
+
+gboolean
+test_check_tcp_works (void)
+{
+#ifdef DBUS_UNIX
+  /* In pathological container environments, we might not have a
+   * working 127.0.0.1 */
+  int res;
+  struct addrinfo *addrs = NULL;
+  struct addrinfo hints;
+  int saved_errno;
+
+  _DBUS_ZERO (hints);
+#ifdef AI_ADDRCONFIG
+  hints.ai_flags |= AI_ADDRCONFIG;
+#endif
+  hints.ai_flags = AI_ADDRCONFIG;
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+
+  res = getaddrinfo ("127.0.0.1", "0", &hints, &addrs);
+  saved_errno = errno;
+
+  if (res != 0)
+    {
+      const gchar *system_message;
+      gchar *skip_message;
+
+#ifdef EAI_SYSTEM
+      if (res == EAI_SYSTEM)
+        system_message = g_strerror (saved_errno);
+      else
+#endif
+        system_message = gai_strerror (res);
+
+      skip_message = g_strdup_printf ("Name resolution does not work here: "
+                                      "getaddrinfo(\"127.0.0.1\", \"0\", "
+                                      "{flags=ADDRCONFIG, family=INET,"
+                                      "socktype=STREAM, protocol=TCP}): "
+                                      "%s",
+                                      system_message);
+      g_test_skip (skip_message);
+      free (skip_message);
+    }
+
+  if (addrs != NULL)
+    freeaddrinfo (addrs);
+
+  return (res == 0);
+#else
+  /* Assume that on Windows, TCP always works */
+  return TRUE;
+#endif
 }

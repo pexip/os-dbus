@@ -117,12 +117,12 @@ save_machine_uuid (const char *uuid_arg)
 /* Read the machine uuid from file if needed. Returns TRUE if machine_uuid is
  * set after this function */
 static int
-read_machine_uuid_if_needed (void)
+read_machine_uuid_if_needed (DBusError *error)
 {
   if (machine_uuid != NULL)
     return TRUE;
 
-  machine_uuid = dbus_get_local_machine_id ();
+  machine_uuid = dbus_try_get_local_machine_id (error);
 
   if (machine_uuid == NULL)
     return FALSE;
@@ -164,15 +164,19 @@ verbose (const char *format,
 #endif /* DBUS_ENABLE_VERBOSE_MODE */
 }
 
+static void usage (int ecode) _DBUS_GNUC_NORETURN;
+
 static void
 usage (int ecode)
 {
   fprintf (stderr, "dbus-launch [--version] [--help] [--sh-syntax]"
            " [--csh-syntax] [--auto-syntax] [--binary-syntax] [--close-stderr]"
-           " [--exit-with-session] [--autolaunch=MACHINEID]"
+           " [--exit-with-session|--exit-with-x11] [--autolaunch=MACHINEID]"
            " [--config-file=FILENAME] [PROGRAM] [ARGS...]\n");
   exit (ecode);
 }
+
+static void version (void) _DBUS_GNUC_NORETURN;
 
 static void
 version (void)
@@ -205,6 +209,7 @@ xstrdup (const char *str)
   return copy;
 }
 
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 static char *
 concat2 (const char *a,
     const char *b)
@@ -224,6 +229,7 @@ concat2 (const char *a,
   memcpy (ret + la, b, lb + 1);
   return ret;
 }
+#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
 typedef enum
 {
@@ -453,20 +459,15 @@ print_variables (const char *bus_address, pid_t bus_pid, long bus_wid,
     }
 }
 
-static int got_sighup = FALSE;
+static int got_fatal_signal = 0;
 
 static void
 signal_handler (int sig)
 {
-  switch (sig)
-    {
-    case SIGHUP:
-    case SIGINT:
-    case SIGTERM:
-      got_sighup = TRUE;
-      break;
-    }
+  got_fatal_signal = sig;
 }
+
+static void kill_bus_when_session_ends (void) _DBUS_GNUC_NORETURN;
 
 static void
 kill_bus_when_session_ends (void)
@@ -479,7 +480,7 @@ kill_bus_when_session_ends (void)
   sigset_t empty_mask;
   
   /* install SIGHUP handler */
-  got_sighup = FALSE;
+  got_fatal_signal = 0;
   sigemptyset (&empty_mask);
   act.sa_handler = signal_handler;
   act.sa_mask    = empty_mask;
@@ -556,9 +557,10 @@ kill_bus_when_session_ends (void)
       select (MAX (tty_fd, x_fd) + 1,
               &read_set, NULL, &err_set, NULL);
 
-      if (got_sighup)
+      if (got_fatal_signal)
         {
-          verbose ("Got SIGHUP, exiting\n");
+          verbose ("Got fatal signal %d, killing dbus-daemon\n",
+                   got_fatal_signal);
           kill_bus_and_exit (0);
         }
       
@@ -605,15 +607,16 @@ kill_bus_when_session_ends (void)
             }
         }
     }
+  /* not reached */
 }
 
-static void
+_DBUS_GNUC_NORETURN static void
 babysit (int   exit_with_session,
          pid_t child_pid,
          int   read_bus_pid_fd)  /* read pid from here */
 {
+  DBusEnsureStandardFdsFlags flags;
   int ret;
-  int dev_null_fd;
   const char *s;
 
   verbose ("babysitting, exit_with_session = %d, child_pid = %ld, read_bus_pid_fd = %d\n",
@@ -633,28 +636,26 @@ babysit (int   exit_with_session,
       exit (1);
     }
 
+  flags = DBUS_FORCE_STDOUT_NULL;
+
+  if (!exit_with_session)
+    flags |= DBUS_FORCE_STDIN_NULL;
+
+  s = getenv ("DBUS_DEBUG_OUTPUT");
+
+  if (s == NULL || *s == '\0')
+    flags |= DBUS_FORCE_STDERR_NULL;
+
   /* Close stdout/stderr so we don't block an "eval" or otherwise
    * lock up. stdout is still chaining through to dbus-launch
    * and in turn to the parent shell.
    */
-  dev_null_fd = open ("/dev/null", O_RDWR);
-  if (dev_null_fd >= 0)
+  if (!_dbus_ensure_standard_fds (flags, &s))
     {
-      if (!exit_with_session)
-        dup2 (dev_null_fd, 0);
-      dup2 (dev_null_fd, 1);
-      s = getenv ("DBUS_DEBUG_OUTPUT");
-      if (s == NULL || *s == '\0')
-        dup2 (dev_null_fd, 2);
-      close (dev_null_fd);
+      fprintf (stderr, "%s: %s\n", s, strerror (errno));
+      exit (1);
     }
-  else
-    {
-      fprintf (stderr, "Failed to open /dev/null: %s\n",
-               strerror (errno));
-      /* continue, why not */
-    }
-  
+
   ret = fork ();
 
   if (ret < 0)
@@ -702,6 +703,8 @@ babysit (int   exit_with_session,
 	       strerror (errno));
       exit (1);
       break;
+    default:
+      _dbus_assert_not_reached ("Invalid read result");
     }
 
   verbose ("Got PID %ld from daemon\n",
@@ -725,28 +728,22 @@ babysit (int   exit_with_session,
 static void
 do_close_stderr (void)
 {
-  int fd;
+  const char *err;
 
   fflush (stderr);
 
-  /* dbus-launch is a Unix-only program, so we can rely on /dev/null being there.
-   * We're including unistd.h and we're dealing with sh/csh launch sequences...
-   */
-  fd = open ("/dev/null", O_RDWR);
-  if (fd == -1)
+  if (!_dbus_ensure_standard_fds (DBUS_FORCE_STDERR_NULL, &err))
     {
-      fprintf (stderr, "Internal error: cannot open /dev/null: %s", strerror (errno));
+      fprintf (stderr, "%s: %s\n", err, strerror (errno));
       exit (1);
     }
-
-  close (2);
-  if (dup2 (fd, 2) == -1)
-    {
-      /* error; we can't report an error anymore... */
-      exit (1);
-    }
-  close (fd);
 }
+
+static void pass_info (const char *runprog, const char *bus_address,
+                       pid_t bus_pid, long bus_wid, int c_shell_syntax,
+                       int bourne_shell_syntax, int binary_syntax,
+                       int argc, char **argv,
+                       int remaining_args) _DBUS_GNUC_NORETURN;
 
 static void
 pass_info (const char *runprog, const char *bus_address, pid_t bus_pid,
@@ -827,6 +824,7 @@ main (int argc, char **argv)
   const char *runprog = NULL;
   int remaining_args = 0;
   int exit_with_session;
+  int exit_with_x11 = FALSE;
   int binary_syntax = FALSE;
   int c_shell_syntax = FALSE;
   int bourne_shell_syntax = FALSE;
@@ -843,6 +841,7 @@ main (int argc, char **argv)
   dbus_bool_t user_bus_supported = FALSE;
   DBusString user_bus;
   const char *error_str;
+  DBusError error = DBUS_ERROR_INIT;
 
   exit_with_session = FALSE;
   config_file = NULL;
@@ -885,6 +884,8 @@ main (int argc, char **argv)
         version ();
       else if (strcmp (arg, "--exit-with-session") == 0)
         exit_with_session = TRUE;
+      else if (strcmp (arg, "--exit-with-x11") == 0)
+        exit_with_x11 = TRUE;
       else if (strcmp (arg, "--close-stderr") == 0)
         close_stderr = TRUE;
       else if (strstr (arg, "--autolaunch=") == arg)
@@ -996,6 +997,9 @@ main (int argc, char **argv)
   if (exit_with_session)
     verbose ("--exit-with-session enabled\n");
 
+  if (exit_with_x11)
+    verbose ("--exit-with-x11 enabled\n");
+
   if (autolaunch)
     {      
 #ifndef DBUS_BUILD_X11
@@ -1010,7 +1014,6 @@ main (int argc, char **argv)
       char *address;
       pid_t pid;
       long wid;
-      DBusError error = DBUS_ERROR_INIT;
       
       if (get_machine_uuid () == NULL)
         {
@@ -1050,10 +1053,10 @@ main (int argc, char **argv)
         }
 
       verbose ("Autolaunch enabled (using X11).\n");
-      if (!exit_with_session)
+      if (!exit_with_x11)
 	{
-	  verbose ("--exit-with-session automatically enabled\n");
-	  exit_with_session = TRUE;
+          verbose ("--exit-with-x11 automatically enabled\n");
+          exit_with_x11 = TRUE;
 	}
 
       if (!x11_init ())
@@ -1076,12 +1079,40 @@ main (int argc, char **argv)
 	  exit (0);
 	}
 #endif /* DBUS_ENABLE_X11_AUTOLAUNCH */
-    }
-  else if (read_machine_uuid_if_needed())
-    {
-      x11_init();
 #endif /* DBUS_BUILD_X11 */
     }
+  else if (exit_with_x11)
+    {
+#ifndef DBUS_BUILD_X11
+      fprintf (stderr, "Session lifetime based on X11 requested, but X11 support not compiled in.\n");
+      exit (1);
+#else /* DBUS_BUILD_X11 */
+      if (!read_machine_uuid_if_needed (&error))
+        {
+          fprintf (stderr, "Session lifetime based on X11 requested, but machine UUID unavailable: %s.\n", error.message);
+          dbus_error_free (&error);
+          exit (1);
+        }
+
+      if (!x11_init ())
+        {
+          fprintf (stderr, "Session lifetime based on X11 requested, but X11 initialization failed.\n");
+          exit (1);
+        }
+#endif /* DBUS_BUILD_X11 */
+    }
+#ifdef DBUS_BUILD_X11
+  else if (read_machine_uuid_if_needed (&error))
+    {
+      x11_init();
+    }
+  else
+    {
+      /* Survive this misconfiguration, but complain about it. */
+      fprintf (stderr, "%s\n", error.message);
+      dbus_error_free (&error);
+    }
+#endif /* DBUS_BUILD_X11 */
 
 
   if (pipe (bus_pid_to_launcher_pipe) < 0 ||
@@ -1143,7 +1174,7 @@ main (int argc, char **argv)
            * and will also reap the pre-forked bus
            * daemon
            */
-          babysit (exit_with_session, ret,
+          babysit (exit_with_session || exit_with_x11, ret,
                    bus_pid_to_babysitter_pipe[READ_END]);
           exit (0);
         }
@@ -1184,10 +1215,10 @@ main (int argc, char **argv)
  
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
       {
-        const char *test_daemon;
         /* exec from testdir */
-        if (getenv ("DBUS_USE_TEST_BINARY") != NULL &&
-            (test_daemon = getenv ("DBUS_TEST_DAEMON")) != NULL)
+        const char *test_daemon = getenv ("DBUS_TEST_DAEMON");
+
+        if (test_daemon != NULL)
           {
             if (config_file == NULL && getenv ("DBUS_TEST_DATA") != NULL)
               {
@@ -1203,6 +1234,7 @@ main (int argc, char **argv)
 
             execl (test_daemon,
                    test_daemon,
+                   close_stderr ? "--syslog-only" : "--syslog",
                    "--fork",
                    "--print-pid", write_pid_fd_as_string,
                    "--print-address", write_address_fd_as_string,
@@ -1220,6 +1252,7 @@ main (int argc, char **argv)
 
       execl (DBUS_DAEMONDIR"/dbus-daemon",
              DBUS_DAEMONDIR"/dbus-daemon",
+             close_stderr ? "--syslog-only" : "--syslog",
              "--fork",
              "--print-pid", write_pid_fd_as_string,
              "--print-address", write_address_fd_as_string,
@@ -1239,6 +1272,7 @@ main (int argc, char **argv)
        */
       execlp ("dbus-daemon",
               "dbus-daemon",
+              close_stderr ? "--syslog-only" : "--syslog",
               "--fork",
               "--print-pid", write_pid_fd_as_string,
               "--print-address", write_address_fd_as_string,
@@ -1297,6 +1331,8 @@ main (int argc, char **argv)
                    strerror (errno));
           exit (1);
           break;
+        default:
+          _dbus_assert_not_reached ("Invalid read result");
         }
         
       close (bus_address_to_launcher_pipe[READ_END]);
@@ -1316,6 +1352,8 @@ main (int argc, char **argv)
 		   strerror (errno));
 	  exit (1);
 	  break;
+	default:
+	  _dbus_assert_not_reached ("Invalid read result");
 	}
 
       end = NULL;

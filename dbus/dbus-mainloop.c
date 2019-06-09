@@ -30,6 +30,7 @@
 #include <dbus/dbus-hash.h>
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-socket-set.h>
+#include <dbus/dbus-timeout.h>
 #include <dbus/dbus-watch.h>
 
 #define MAINLOOP_SPEW 0
@@ -199,7 +200,7 @@ cull_watches_for_invalid_fd (DBusLoop     *loop,
   DBusList *link;
   DBusList **watches;
 
-  _dbus_warn ("invalid request, socket fd %" DBUS_POLLABLE_FORMAT " not open\n",
+  _dbus_warn ("invalid request, socket fd %" DBUS_POLLABLE_FORMAT " not open",
               _dbus_pollable_printable (fd));
   watches = _dbus_hash_table_lookup_pollable (loop->watches, fd);
 
@@ -363,7 +364,7 @@ _dbus_loop_remove_watch (DBusLoop         *loop,
          }
      }
 
-  _dbus_warn ("could not find watch %p to remove\n", watch);
+  _dbus_warn ("could not find watch %p to remove", watch);
 }
 
 dbus_bool_t
@@ -415,7 +416,7 @@ _dbus_loop_remove_timeout (DBusLoop           *loop,
       link = next;
     }
 
-  _dbus_warn ("could not find timeout %p to remove\n", timeout);
+  _dbus_warn ("could not find timeout %p to remove", timeout);
 }
 
 /* Convolutions from GLib, there really must be a better way
@@ -608,6 +609,13 @@ _dbus_loop_iterate (DBusLoop     *loop,
             {
               int msecs_remaining;
 
+              if (_dbus_timeout_needs_restart (tcb->timeout))
+                {
+                  tcb->last_tv_sec = tv_sec;
+                  tcb->last_tv_usec = tv_usec;
+                  _dbus_timeout_restarted (tcb->timeout);
+                }
+
               check_timeout (tv_sec, tv_usec, tcb, &msecs_remaining);
 
               if (timeout < 0)
@@ -621,9 +629,6 @@ _dbus_loop_iterate (DBusLoop     *loop,
 #endif
               
               _dbus_assert (timeout >= 0);
-                  
-              if (timeout == 0)
-                break; /* it's not going to get shorter... */
             }
 #if MAINLOOP_SPEW
           else

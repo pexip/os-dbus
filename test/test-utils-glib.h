@@ -69,6 +69,7 @@ void _test_assert_no_error (const DBusError *e,
 
 gchar *test_get_dbus_daemon (const gchar *config_file,
     TestUser user,
+    const gchar *runtime_dir,
     GPid *daemon_pid);
 
 DBusConnection *test_connect_to_bus (TestMainContext *ctx,
@@ -83,12 +84,28 @@ void test_init (int *argcp, char ***argvp);
 
 void test_progress (char symbol);
 
-#if !GLIB_CHECK_VERSION (2, 38, 0)
-#define g_test_skip(s) my_test_skip (s)
-static inline void my_test_skip (const gchar *s)
+void test_remove_if_exists (const gchar *path);
+void test_rmdir_must_exist (const gchar *path);
+void test_rmdir_if_exists (const gchar *path);
+void test_mkdir (const gchar *path, gint mode);
+
+void test_timeout_reset (guint factor);
+
+#if !GLIB_CHECK_VERSION(2, 44, 0)
+#define g_steal_pointer(x) backported_g_steal_pointer (x)
+/* A simplified version of g_steal_pointer without type-safety. */
+static inline gpointer
+backported_g_steal_pointer (gpointer pointer_to_pointer)
 {
-  g_test_message ("SKIP: %s", s);
+  gpointer *pp = pointer_to_pointer;
+  gpointer ret;
+
+  ret = *pp;
+  *pp = NULL;
+  return ret;
 }
 #endif
+
+gboolean test_check_tcp_works (void);
 
 #endif

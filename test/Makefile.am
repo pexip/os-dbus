@@ -1,21 +1,28 @@
-## the "name-test" subdir in fact contains a bunch of tests now that need a temporary bus 
+## the "name-test" subdir in fact contains a bunch of tests now that need a temporary bus
 ## to be running to do stuff with. The directory should be renamed.
 ## We want to build the current directory first to pick up the testutils lib
-SUBDIRS= . name-test 
+SUBDIRS= . name-test
 DIST_SUBDIRS=name-test
 
 CLEANFILES =
 EXTRA_DIST =
 
 AM_CPPFLAGS = \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	-I$(top_srcdir) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
 	-DDBUS_COMPILATION \
+	$(APPARMOR_CFLAGS) \
 	$(GLIB_CFLAGS) \
+	$(GIO_UNIX_CFLAGS) \
 	$(NULL)
 
 # improve backtraces from test stuff
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
+
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
 
 noinst_LTLIBRARIES = libdbus-testutils.la
 
@@ -32,6 +39,7 @@ libdbus_testutils_la_SOURCES += \
 endif
 
 libdbus_testutils_la_LIBADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(NULL)
@@ -107,8 +115,17 @@ test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_refs_SOURCES = internals/refs.c
 test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
+test_server_oom_SOURCES = internals/server-oom.c
+test_server_oom_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
 test_syslog_SOURCES = internals/syslog.c
 test_syslog_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
+test_variant_SOURCES = internals/variant.c
+test_variant_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
+manual_backtrace_SOURCES = manual-backtrace.c
+manual_backtrace_LDADD = $(top_builddir)/dbus/libdbus-1.la
 
 manual_dir_iter_SOURCES = manual-dir-iter.c
 manual_dir_iter_LDADD = $(top_builddir)/dbus/libdbus-internal.la
@@ -124,19 +141,24 @@ EXTRA_DIST += dbus-test-runner
 testexecdir = $(libexecdir)/installed-tests/dbus
 testmetadir = $(datadir)/installed-tests/dbus
 
-dist_testexec_SCRIPTS =
-testexec_PROGRAMS =
-testmeta_DATA =
+nobase_dist_testexec_SCRIPTS =
+nobase_testexec_PROGRAMS =
+nobase_testmeta_DATA =
 
+installable_helpers = \
+	$(NULL)
 installable_tests = \
 	test-shell \
 	test-printf \
 	$(NULL)
 installable_manual_tests = \
+	manual-backtrace \
 	manual-dir-iter \
 	manual-tcp \
 	$(NULL)
 dist_installable_test_scripts = \
+	$(NULL)
+dist_installed_test_scripts = \
 	$(NULL)
 
 if DBUS_WIN
@@ -149,23 +171,37 @@ installable_tests += \
 	test-dbus-daemon \
 	test-dbus-daemon-eavesdrop \
 	test-fdpass \
+	test-message \
 	test-monitor \
 	test-loopback \
 	test-marshal \
 	test-refs \
 	test-relay \
+	test-server-oom \
 	test-syntax \
 	test-syslog \
 	test-uid-permissions \
+	test-variant \
 	$(NULL)
 
 if DBUS_UNIX
+# These binaries are used in tests but are not themselves tests
+installable_helpers += \
+	test-apparmor-activation \
+	$(NULL)
+
 installable_tests += \
 	test-sd-activation \
 	$(NULL)
 
 dist_installable_test_scripts += \
 	test-dbus-daemon-fork.sh \
+	$(NULL)
+
+# Only runnable when installed, not from the source tree
+dist_installed_test_scripts += \
+	integration/transient-services.sh \
+	test-apparmor-activation.sh \
 	$(NULL)
 
 # Testing dbus-launch relies on special code in that binary.
@@ -185,40 +221,59 @@ endif DBUS_UNIX
 
 installable_manual_tests += \
 	manual-authz \
+	manual-test-thread-blocking \
 	$(NULL)
 endif DBUS_WITH_GLIB
 
 installable_test_meta = \
 	$(dist_installable_test_scripts:=.test) \
+	$(dist_installed_test_scripts:=.test) \
 	$(installable_tests:=.test) \
 	$(NULL)
 installable_test_meta_with_config = \
 	$(dist_installable_test_scripts:=_with_config.test) \
+	$(dist_installed_test_scripts:=_with_config.test) \
 	$(installable_tests:=_with_config.test) \
 	$(NULL)
 
 installcheck_tests =
 installcheck_environment = \
+	export XDG_DATA_HOME=@abs_top_builddir@/test/XDG_DATA_HOME; \
+	export XDG_DATA_DIRS=@abs_top_builddir@/test/XDG_DATA_DIRS:$(DESTDIR)$(datadir); \
 	export XDG_RUNTIME_DIR=@abs_top_builddir@/test/XDG_RUNTIME_DIR; \
 	export DBUS_SESSION_BUS_ADDRESS=do-not-use-real-session:; \
 	export DBUS_TEST_DAEMON=$(DESTDIR)$(DBUS_DAEMONDIR)/dbus-daemon$(EXEEXT); \
 	export DBUS_TEST_DBUS_LAUNCH=$(DESTDIR)$(bindir)/dbus-launch$(EXEEXT); \
 	export DBUS_TEST_DBUS_MONITOR=$(DESTDIR)$(bindir)/dbus-monitor$(EXEEXT); \
 	export DBUS_TEST_DBUS_SEND=$(DESTDIR)$(bindir)/dbus-send$(EXEEXT); \
+	export DBUS_TEST_DBUS_UUIDGEN=$(DESTDIR)$(bindir)/dbus-uuidgen$(EXEEXT); \
+	export DBUS_TEST_EXEC=@abs_top_builddir@/test; \
 	export DBUS_TEST_HOMEDIR=@abs_top_builddir@/dbus; \
 	export DBUS_TEST_DATADIR=$(DESTDIR)$(datadir); \
+	export DBUS_TEST_UNINSTALLED=1; \
+	export HOME=@abs_top_builddir@/dbus; \
 	${NULL}
 
+# Tests in bus/config-parser.c rely on these specific values for XDG_* and
+# DBUS_TEST_BUILDDIR.
 AM_TESTS_ENVIRONMENT = \
+	export XDG_DATA_HOME=@abs_top_builddir@/test/XDG_DATA_HOME; \
+	export XDG_DATA_DIRS=@abs_top_builddir@/test/XDG_DATA_DIRS:@abs_top_builddir@/test/XDG_DATA_DIRS2; \
 	export XDG_RUNTIME_DIR=@abs_top_builddir@/test/XDG_RUNTIME_DIR; \
 	export DBUS_FATAL_WARNINGS=1; \
 	export DBUS_SESSION_BUS_ADDRESS=do-not-use-real-session:; \
+	export DBUS_TEST_BUILDDIR=@abs_builddir@; \
+	export DBUS_TEST_SRCDIR=@abs_srcdir@; \
 	export DBUS_TEST_DAEMON=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT); \
 	export DBUS_TEST_DBUS_LAUNCH=@abs_top_builddir@/tools/dbus-launch$(EXEEXT); \
 	export DBUS_TEST_DBUS_MONITOR=@abs_top_builddir@/tools/dbus-monitor$(EXEEXT); \
 	export DBUS_TEST_DBUS_SEND=@abs_top_builddir@/tools/dbus-send$(EXEEXT); \
+	export DBUS_TEST_DBUS_UUIDGEN=@abs_top_builddir@/tools/dbus-uuidgen$(EXEEXT); \
 	export DBUS_TEST_DATA=@abs_top_builddir@/test/data; \
+	export DBUS_TEST_EXEC=@abs_top_builddir@/test; \
 	export DBUS_TEST_HOMEDIR=@abs_top_builddir@/dbus; \
+	export DBUS_TEST_UNINSTALLED=1; \
+	export HOME=@abs_top_builddir@/dbus; \
 	$(NULL)
 
 manual_authz_SOURCES = manual-authz.c
@@ -226,6 +281,21 @@ manual_authz_LDADD = \
     libdbus-testutils.la \
     $(GLIB_LIBS) \
     $(NULL)
+
+if DBUS_UNIX
+test_apparmor_activation_CPPFLAGS = \
+    $(AM_CPPFLAGS) \
+    -DDBUS_TEST_APPARMOR_ACTIVATION \
+    $(NULL)
+test_apparmor_activation_SOURCES = \
+    sd-activation.c \
+    $(NULL)
+test_apparmor_activation_LDADD = \
+    libdbus-testutils.la \
+    $(APPARMOR_LIBS) \
+    $(GLIB_LIBS) \
+    $(NULL)
+endif
 
 test_corrupt_SOURCES = corrupt.c
 test_corrupt_LDADD = \
@@ -249,6 +319,7 @@ test_dbus_daemon_SOURCES = dbus-daemon.c
 test_dbus_daemon_LDADD = \
     libdbus-testutils.la \
     $(GLIB_LIBS) \
+    $(GIO_UNIX_LIBS) \
     $(NULL)
 
 test_dbus_daemon_eavesdrop_SOURCES = dbus-daemon-eavesdrop.c
@@ -273,6 +344,15 @@ test_marshal_LDADD = \
     $(GLIB_LIBS) \
     $(NULL)
 
+test_message_SOURCES = \
+    message.c \
+    $(NULL)
+test_message_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
 test_monitor_SOURCES = \
     monitor.c \
     $(NULL)
@@ -283,6 +363,12 @@ test_monitor_LDADD = \
 
 test_syntax_SOURCES = syntax.c
 test_syntax_LDADD = \
+    libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+manual_test_thread_blocking_SOURCES = thread-blocking.c
+manual_test_thread_blocking_LDADD = \
     libdbus-testutils.la \
     $(GLIB_LIBS) \
     $(NULL)
@@ -311,11 +397,14 @@ TESTS += $(installable_tests)
 installcheck_tests += $(installable_tests)
 
 if DBUS_ENABLE_INSTALLED_TESTS
-  testexec_PROGRAMS += $(installable_tests) $(installable_manual_tests)
-  dist_testexec_SCRIPTS += $(dist_installable_test_scripts)
+  nobase_testexec_PROGRAMS += $(installable_helpers)
+  nobase_testexec_PROGRAMS += $(installable_manual_tests)
+  nobase_testexec_PROGRAMS += $(installable_tests)
+  nobase_dist_testexec_SCRIPTS += $(dist_installed_test_scripts)
+  nobase_dist_testexec_SCRIPTS += $(dist_installable_test_scripts)
 
-  testmeta_DATA += $(installable_test_meta)
-  testmeta_DATA += $(installable_test_meta_with_config)
+  nobase_testmeta_DATA += $(installable_test_meta)
+  nobase_testmeta_DATA += $(installable_test_meta_with_config)
 else !DBUS_ENABLE_INSTALLED_TESTS
   noinst_PROGRAMS += $(installable_tests) $(installable_manual_tests)
 endif !DBUS_ENABLE_INSTALLED_TESTS
@@ -337,15 +426,27 @@ if DBUS_ENABLE_INSTALLED_TESTS
 endif DBUS_ENABLE_INSTALLED_TESTS
 
 in_data = \
+	data/dbus-installed-tests.aaprofile.in \
+	data/systemd-activation/com.example.ReceiveDeniedByAppArmorLabel.service.in \
+	data/systemd-activation/com.example.SendDeniedByAppArmorLabel.service.in \
+	data/systemd-activation/com.example.SendDeniedByNonexistentAppArmorLabel.service.in \
+	data/systemd-activation/com.example.SystemdActivatable3.service.in \
 	data/valid-config-files-system/debug-allow-all-fail.conf.in \
 	data/valid-config-files-system/debug-allow-all-pass.conf.in \
 	data/valid-config-files/as-another-user.conf.in \
+	data/valid-config-files/count-fds.conf.in \
 	data/valid-config-files/debug-allow-all-sha1.conf.in \
 	data/valid-config-files/debug-allow-all.conf.in \
 	data/valid-config-files/finite-timeout.conf.in \
 	data/valid-config-files/forbidding.conf.in \
 	data/valid-config-files/incoming-limit.conf.in \
+	data/valid-config-files/max-completed-connections.conf.in \
+	data/valid-config-files/max-connections-per-user.conf.in \
+	data/valid-config-files/max-match-rules-per-connection.conf.in \
+	data/valid-config-files/max-names-per-connection.conf.in \
+	data/valid-config-files/max-replies-per-connection.conf.in \
 	data/valid-config-files/multi-user.conf.in \
+	data/valid-config-files/pending-fd-timeout.conf.in \
 	data/valid-config-files/systemd-activation.conf.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoExec.service.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoService.service.in \
@@ -395,8 +496,10 @@ static_data = \
 	data/invalid-config-files/circular-1.conf \
 	data/invalid-config-files/circular-2.conf \
 	data/invalid-config-files/circular-3.conf \
+	data/invalid-config-files/impossible-send.conf \
 	data/invalid-config-files/not-well-formed.conf \
 	data/invalid-config-files/truncated-file.conf \
+	data/invalid-config-files/send-and-receive.conf \
 	data/invalid-messages/array-of-nil.message \
 	data/invalid-messages/array-with-mixed-types.message \
 	data/invalid-messages/bad-boolean-array.message \
@@ -417,15 +520,20 @@ static_data = \
 	data/sha-1/bit-messages.sha1 \
 	data/sha-1/byte-hashes.sha1 \
 	data/sha-1/byte-messages.sha1 \
+	data/systemd-activation/com.example.ReceiveDenied.service \
+	data/systemd-activation/com.example.SendDenied.service \
+	data/systemd-activation/com.example.SendDeniedByAppArmorName.service \
 	data/systemd-activation/com.example.SystemdActivatable1.service \
 	data/systemd-activation/com.example.SystemdActivatable2.service \
-	data/systemd-activation/com.example.SystemdActivatable3.service \
 	data/systemd-activation/org.freedesktop.systemd1.service \
 	data/valid-config-files/basic.conf \
 	data/valid-config-files/basic.d/basic.conf \
+	data/valid-config-files/check-own-rules.conf \
 	data/valid-config-files/entities.conf \
 	data/valid-config-files/listen-unix-runtime.conf \
 	data/valid-config-files/many-rules.conf \
+	data/valid-config-files/standard-session-dirs.conf \
+	data/valid-config-files-system/many-rules.conf \
 	data/valid-config-files-system/system.d/test.conf \
 	data/valid-messages/array-of-array-of-uint32.message \
 	data/valid-messages/dict-simple.message \
@@ -448,8 +556,11 @@ EXTRA_DIST += $(static_data)
 
 ## copy tests to builddir so that generated tests and static tests
 ## are all in one place.
+## Note that we can't create the XDG_RUNTIME_DIR with permissions 0700
+## on MSYS2, which rejects attempts to change permissions, hence "|| true".
 all-local: copy-config-local uninstalled-config-local
-	@:
+	$(AM_V_at)$(MKDIR_P) XDG_RUNTIME_DIR
+	$(AM_V_at)chmod 0700 XDG_RUNTIME_DIR || true
 
 copy-config-local:
 	$(AM_V_at)$(MKDIR_P) data/valid-config-files/session.d
@@ -527,6 +638,7 @@ clean-local:
 			rm -f "$${F%.in}"; \
 		done; \
 	fi
+	rm -fr ./XDG_RUNTIME_DIR ./installable
 
 imported_data = \
 	data/valid-config-files/session.conf \
@@ -536,8 +648,6 @@ imported_data = \
 noinst_DATA = $(imported_data)
 CLEANFILES += \
 	$(noinst_DATA) \
-	XDG_RUNTIME_DIR \
-	installable \
 	$(NULL)
 
 data/valid-config-files/session.conf: $(top_builddir)/bus/session.conf
@@ -549,6 +659,7 @@ data/valid-config-files-system/system.conf: $(top_builddir)/bus/system.conf
 	$(AM_V_GEN)cp $< $@
 
 $(installable_test_meta): %.test: %$(EXEEXT) Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN) ( \
 		echo '[Test]'; \
 		echo 'Type=session'; \
@@ -557,9 +668,13 @@ $(installable_test_meta): %.test: %$(EXEEXT) Makefile
 	) > $@.tmp && mv $@.tmp $@
 
 $(installable_test_meta_with_config): %_with_config.test: %$(EXEEXT) Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN) ( \
 		echo '[Test]'; \
 		echo 'Type=session'; \
 		echo 'Output=TAP'; \
-		echo 'Exec=env DBUS_TEST_DATA=$(testexecdir)/data $(testexecdir)/$* --tap'; \
+		echo 'Exec=env DBUS_TEST_EXEC=$(testexecdir) DBUS_TEST_DATA=$(testexecdir)/data $(testexecdir)/$* --tap'; \
 	) > $@.tmp && mv $@.tmp $@
+
+# Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
+include $(top_srcdir)/aminclude_static.am

@@ -29,6 +29,10 @@
 
 #include <string.h>
 
+#if !defined(PRIx64) && defined(DBUS_WIN)
+#define PRIx64 "I64x"
+#endif
+
 #if defined(__GNUC__) && (__GNUC__ >= 4)
 # define _DBUS_ASSERT_ALIGNMENT(type, op, val) \
   _DBUS_STATIC_ASSERT (__extension__ __alignof__ (type) op val)
@@ -204,7 +208,7 @@ set_2_octets (DBusString          *str,
 
   data = _dbus_string_get_data_len (str, offset, 2);
 
-  pack_2_octets (value, byte_order, data);
+  pack_2_octets (value, byte_order, (unsigned char *) data);
 }
 
 static void
@@ -220,7 +224,7 @@ set_4_octets (DBusString          *str,
 
   data = _dbus_string_get_data_len (str, offset, 4);
 
-  pack_4_octets (value, byte_order, data);
+  pack_4_octets (value, byte_order, (unsigned char *) data);
 }
 
 static void
@@ -236,7 +240,7 @@ set_8_octets (DBusString          *str,
 
   data = _dbus_string_get_data_len (str, offset, 8);
 
-  pack_8_octets (value, byte_order, data);
+  pack_8_octets (value, byte_order, (unsigned char *) data);
 }
 
 /**
@@ -292,7 +296,7 @@ set_string (DBusString          *str,
 
   _dbus_assert (_DBUS_ALIGN_VALUE (pos, 4) == (unsigned) pos);
   old_len = _dbus_unpack_uint32 (byte_order,
-                                 _dbus_string_get_const_data_len (str, pos, 4));
+                                 _dbus_string_get_const_udata_len (str, pos, 4));
 
   new_len = _dbus_string_get_length (&dstr);
 
@@ -464,7 +468,7 @@ _dbus_marshal_read_uint32  (const DBusString *str,
   _dbus_assert (pos + 4 <= _dbus_string_get_length (str));
   
   return _dbus_unpack_uint32 (byte_order,
-                              _dbus_string_get_const_data (str) + pos);
+                              _dbus_string_get_const_udata (str) + pos);
 }
 
 /**
@@ -579,7 +583,7 @@ _dbus_marshal_read_basic (const DBusString      *str,
       }
       break;
     default:
-      _dbus_warn_check_failed ("type %s %d not a basic type\n",
+      _dbus_warn_check_failed ("type %s %d not a basic type",
                                _dbus_type_to_string (type), type);
       _dbus_assert_not_reached ("not a basic type");
       break;
@@ -694,7 +698,7 @@ marshal_len_followed_by_bytes (int                  marshal_as,
 
   _dbus_assert (byte_order == DBUS_LITTLE_ENDIAN || byte_order == DBUS_BIG_ENDIAN);
   if (insert_at > _dbus_string_get_length (str))
-    _dbus_warn ("insert_at = %d string len = %d data_len = %d\n",
+    _dbus_warn ("insert_at = %d string len = %d data_len = %d",
                 insert_at, _dbus_string_get_length (str), data_len);
   
   if (marshal_as == MARSHAL_AS_BYTE_ARRAY)
@@ -702,7 +706,7 @@ marshal_len_followed_by_bytes (int                  marshal_as,
   else
     value_len = data_len + 1; /* value has a nul */
 
-  _dbus_string_init_const_len (&value_str, value, value_len);
+  _dbus_string_init_const_len (&value_str, (const char *) value, value_len);
 
   pos = insert_at;
 
@@ -756,7 +760,7 @@ marshal_string (DBusString    *str,
                 int           *pos_after)
 {
   return marshal_len_followed_by_bytes (MARSHAL_AS_STRING,
-                                        str, insert_at, value,
+                                        str, insert_at, (const unsigned char *) value,
                                         strlen (value),
                                         byte_order, pos_after);
 }
@@ -768,7 +772,7 @@ marshal_signature (DBusString    *str,
                    int           *pos_after)
 {
   return marshal_len_followed_by_bytes (MARSHAL_AS_SIGNATURE,
-                                        str, insert_at, value,
+                                        str, insert_at, (const unsigned char *) value,
                                         strlen (value),
                                         DBUS_COMPILER_BYTE_ORDER, /* irrelevant */
                                         pos_after);
@@ -861,7 +865,7 @@ marshal_1_octets_array (DBusString          *str,
   int pos;
   DBusString value_str;
 
-  _dbus_string_init_const_len (&value_str, value, n_elements);
+  _dbus_string_init_const_len (&value_str, (const char *) value, n_elements);
 
   pos = insert_at;
 
@@ -978,7 +982,7 @@ marshal_fixed_multi (DBusString           *str,
     goto error;
 
   _dbus_string_init_const_len (&t,
-                               (const unsigned char*) value,
+                               (const char *) value,
                                len_in_bytes);
 
   if (!_dbus_string_copy (&t, 0,
@@ -1125,7 +1129,7 @@ _dbus_marshal_skip_basic (const DBusString      *str,
       }
       break;
     default:
-      _dbus_warn ("type %s not a basic type\n",
+      _dbus_warn ("type %s not a basic type",
                   _dbus_type_to_string (type));
       _dbus_assert_not_reached ("not a basic type");
       break;
@@ -1334,10 +1338,8 @@ _dbus_verbose_bytes (const unsigned char *data,
           if (i > 7 &&
               _DBUS_ALIGN_ADDRESS (&data[i], 8) == &data[i])
             {
-#ifdef DBUS_INT64_PRINTF_MODIFIER
-              _dbus_verbose (" u64: 0x%" DBUS_INT64_PRINTF_MODIFIER "x",
+              _dbus_verbose (" u64: 0x%" PRIx64,
                              *(dbus_uint64_t*)&data[i-8]);
-#endif
               _dbus_verbose (" dbl: %g",
                              *(double*)&data[i-8]);
             }
@@ -1384,7 +1386,7 @@ _dbus_verbose_bytes_of_string (const DBusString    *str,
 
   d = _dbus_string_get_const_data_len (str, start, len);
 
-  _dbus_verbose_bytes (d, len, start);
+  _dbus_verbose_bytes ((const unsigned char *) d, len, start);
 }
 
 static int
@@ -1546,7 +1548,7 @@ swap_test_array (void *array,
       {                                                                                 \
         _dbus_verbose_bytes_of_string (&str, dump_pos,                                  \
                                        _dbus_string_get_length (&str) - dump_pos);      \
-        _dbus_warn ("literal '%s'\nvalue  '%s'\n", literal, v_##typename);              \
+        _dbus_warn ("literal '%s'\nvalue  '%s'", literal, v_##typename);              \
         _dbus_assert_not_reached ("demarshaled wrong value");                           \
       }                                                                                 \
   } while (0)
@@ -1586,9 +1588,9 @@ swap_test_array (void *array,
         _dbus_verbose_bytes_of_string (&str, dump_pos,                                  \
                                       _dbus_string_get_length (&str) - dump_pos);       \
         _dbus_verbose ("LITERAL DATA\n");                                               \
-        _dbus_verbose_bytes ((char*)literal, sizeof (literal), 0);                      \
+        _dbus_verbose_bytes ((const unsigned char *) literal, sizeof (literal), 0);                      \
         _dbus_verbose ("READ DATA\n");                                                  \
-        _dbus_verbose_bytes ((char*)v_ARRAY_##typename, sizeof (literal), 0);           \
+        _dbus_verbose_bytes ((const unsigned char *) v_ARRAY_##typename, sizeof (literal), 0);           \
         _dbus_assert_not_reached ("demarshaled wrong fixed array value");               \
       }                                                                                 \
   } while (0)
@@ -1608,7 +1610,9 @@ _dbus_marshal_test (void)
   int pos, dump_pos;
   unsigned char array1[5] = { 3, 4, 0, 1, 9 };
   dbus_int16_t array2[3] = { 124, 457, 780 };
+  dbus_uint16_t array2u[3] = { 124, 457, 780 };
   dbus_int32_t array4[3] = { 123, 456, 789 };
+  dbus_uint32_t array4u[3] = { 123, 456, 789 };
   dbus_int64_t array8[3] = { DBUS_INT64_CONSTANT (0x123ffffffff),
                              DBUS_INT64_CONSTANT (0x456ffffffff),
                              DBUS_INT64_CONSTANT (0x789ffffffff) };
@@ -1705,13 +1709,13 @@ _dbus_marshal_test (void)
   /* Arrays */
   MARSHAL_TEST_FIXED_ARRAY (INT16, DBUS_BIG_ENDIAN, array2);
   MARSHAL_TEST_FIXED_ARRAY (INT16, DBUS_LITTLE_ENDIAN, array2);
-  MARSHAL_TEST_FIXED_ARRAY (UINT16, DBUS_BIG_ENDIAN, array2);
-  MARSHAL_TEST_FIXED_ARRAY (UINT16, DBUS_LITTLE_ENDIAN, array2);
+  MARSHAL_TEST_FIXED_ARRAY (UINT16, DBUS_BIG_ENDIAN, array2u);
+  MARSHAL_TEST_FIXED_ARRAY (UINT16, DBUS_LITTLE_ENDIAN, array2u);
   
   MARSHAL_TEST_FIXED_ARRAY (INT32, DBUS_BIG_ENDIAN, array4);
   MARSHAL_TEST_FIXED_ARRAY (INT32, DBUS_LITTLE_ENDIAN, array4);
-  MARSHAL_TEST_FIXED_ARRAY (UINT32, DBUS_BIG_ENDIAN, array4);
-  MARSHAL_TEST_FIXED_ARRAY (UINT32, DBUS_LITTLE_ENDIAN, array4);
+  MARSHAL_TEST_FIXED_ARRAY (UINT32, DBUS_BIG_ENDIAN, array4u);
+  MARSHAL_TEST_FIXED_ARRAY (UINT32, DBUS_LITTLE_ENDIAN, array4u);
 
   MARSHAL_TEST_FIXED_ARRAY (BYTE, DBUS_BIG_ENDIAN, array1);
   MARSHAL_TEST_FIXED_ARRAY (BYTE, DBUS_LITTLE_ENDIAN, array1);

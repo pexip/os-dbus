@@ -43,6 +43,20 @@ do_check_nonce (DBusSocket fd, const DBusString *nonce, DBusError *error)
 
   nleft = 16;
 
+  /* This is a trick to make it safe to call _dbus_string_free on these
+   * strings during error unwinding, even if allocating memory for them
+   * fails. A constant DBusString is considered to be valid to "free",
+   * even though there is nothing to free (of course the free operation
+   * is trivial, because it does not own its own buffer); but
+   * unlike a mutable DBusString, initializing a constant DBusString
+   * cannot fail.
+   *
+   * We must successfully re-initialize the strings to be mutable before
+   * writing to them, of course.
+   */
+  _dbus_string_init_const (&buffer, "");
+  _dbus_string_init_const (&p, "");
+
   if (   !_dbus_string_init (&buffer)
       || !_dbus_string_init (&p) ) {
         dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
@@ -64,7 +78,7 @@ do_check_nonce (DBusSocket fd, const DBusString *nonce, DBusError *error)
         _dbus_sleep_milliseconds (100);
       else if (n==-1)
         {
-          dbus_set_error (error, DBUS_ERROR_IO_ERROR, "Could not read nonce from socket (fd=%d)", fd );
+          dbus_set_error (error, DBUS_ERROR_IO_ERROR, "Could not read nonce from socket (fd=%" DBUS_SOCKET_FORMAT ")", _dbus_socket_printable (fd));
           _dbus_string_free (&p);
           _dbus_string_free (&buffer);
           return FALSE;
@@ -73,7 +87,7 @@ do_check_nonce (DBusSocket fd, const DBusString *nonce, DBusError *error)
         {
           _dbus_string_free (&p);
           _dbus_string_free (&buffer);
-          dbus_set_error (error, DBUS_ERROR_IO_ERROR, "Could not read nonce from socket (fd=%d)", fd );
+          dbus_set_error (error, DBUS_ERROR_IO_ERROR, "Could not read nonce from socket (fd=%" DBUS_SOCKET_FORMAT ")", _dbus_socket_printable (fd));
           return FALSE;
         }
       else
@@ -91,7 +105,7 @@ do_check_nonce (DBusSocket fd, const DBusString *nonce, DBusError *error)
 
   result =  _dbus_string_equal_len (&buffer, nonce, 16);
   if (!result)
-    dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED, "Nonces do not match, access denied (fd=%d)", fd );
+    dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED, "Nonces do not match, access denied (fd=%" DBUS_SOCKET_FORMAT ")", _dbus_socket_printable (fd));
 
   _dbus_string_free (&p);
   _dbus_string_free (&buffer);
@@ -151,24 +165,36 @@ _dbus_read_nonce (const DBusString *fname, DBusString *nonce, DBusError* error)
 DBusSocket
 _dbus_accept_with_noncefile (DBusSocket listen_fd, const DBusNonceFile *noncefile)
 {
-  DBusSocket fd;
+  DBusSocket fd = _dbus_socket_get_invalid ();
   DBusString nonce;
 
   _dbus_assert (noncefile != NULL);
+
+  /* Make it valid to "free" this even if _dbus_string_init() runs
+   * out of memory: see comment in do_check_nonce() */
+  _dbus_string_init_const (&nonce, "");
+
   if (!_dbus_string_init (&nonce))
-    return _dbus_socket_get_invalid ();
+    goto out;
+
   //PENDING(kdab): set better errors
   if (_dbus_read_nonce (_dbus_noncefile_get_path(noncefile), &nonce, NULL) != TRUE)
-    return _dbus_socket_get_invalid ();
+    goto out;
+
   fd = _dbus_accept (listen_fd);
+
   if (!_dbus_socket_is_valid (fd))
-    return fd;
+    goto out;
+
   if (do_check_nonce(fd, &nonce, NULL) != TRUE) {
     _dbus_verbose ("nonce check failed. Closing socket.\n");
     _dbus_close_socket(fd, NULL);
-    return _dbus_socket_get_invalid ();
+    _dbus_socket_invalidate (&fd);
+    goto out;
   }
 
+out:
+  _dbus_string_free (&nonce);
   return fd;
 }
 
@@ -245,8 +271,9 @@ _dbus_send_nonce (DBusSocket        fd,
     {
       dbus_set_error (error,
                       _dbus_error_from_system_errno (),
-                      "Failed to send nonce (fd=%d): %s",
-                      fd, _dbus_strerror_from_errno ());
+                      "Failed to send nonce (fd=%" DBUS_SOCKET_FORMAT "): %s",
+                      _dbus_socket_printable (fd),
+                      _dbus_strerror_from_errno ());
       return FALSE;
     }
 
@@ -264,6 +291,12 @@ do_noncefile_create (DBusNonceFile *noncefile,
     _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
     _dbus_assert (noncefile);
+
+    /* Make it valid to "free" these even if _dbus_string_init() runs
+     * out of memory: see comment in do_check_nonce() */
+    _dbus_string_init_const (&randomStr, "");
+    _dbus_string_init_const (&noncefile->dir, "");
+    _dbus_string_init_const (&noncefile->path, "");
 
     if (!_dbus_string_init (&randomStr))
       {
@@ -334,7 +367,7 @@ do_noncefile_create (DBusNonceFile *noncefile,
 
     return TRUE;
   on_error:
-    if (use_subdir)
+    if (use_subdir && _dbus_string_get_length (&noncefile->dir) != 0)
       _dbus_delete_directory (&noncefile->dir, NULL);
     _dbus_string_free (&noncefile->dir);
     _dbus_string_free (&noncefile->path);

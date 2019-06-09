@@ -2,15 +2,28 @@
 # Run some tests as root. Output TAP format because why not
 
 set -e
+set -u
+NULL=
+
+: "${AUTOPKGTEST_TMP:="${ADTTMP}"}"
+
+if [ -z "${HOME-}" ] || ! [ -w "${HOME}" ]; then
+    export HOME="${AUTOPKGTEST_TMP}"
+fi
 
 timeout="timeout 300s"
 ret=0
 i=0
 
-for d in /usr/lib/dbus-1.0/installed-tests/dbus
+for d in /usr/lib/dbus-1.0/installed-tests/dbus /usr/lib/dbus-1.0/debug-build/libexec/installed-tests/dbus
 do
     export DBUS_TEST_DATA="$d/data"
     export DBUS_TEST_EXEC="$d"
+    case "$d" in
+        (*/debug-build/*)
+            export PATH="/usr/lib/dbus-1.0/debug-build/bin:$PATH"
+            ;;
+    esac
 
     for t in \
         $d/test-dbus-daemon \
@@ -18,17 +31,17 @@ do
         ${NULL}
     do
         i=$(( $i + 1 ))
-        echo "# $i - $t ..."
-        echo "x" > "$ADTTMP/result"
+        echo "# Subtest: $t"
+        echo "x" > "$AUTOPKGTEST_TMP/result"
         (
             set +e
             # One test needs us to have a small fd limit
             ulimit -S -n 1024
             ulimit -H -n 1024
             $timeout $t --tap
-            echo "$?" > "$ADTTMP/result"
+            echo "$?" > "$AUTOPKGTEST_TMP/result"
         ) | sed 's/^/    /'
-        e="$(cat "$ADTTMP/result")"
+        e="$(cat "$AUTOPKGTEST_TMP/result")"
         case "$e" in
             (0)
                 echo "ok $i - $t"

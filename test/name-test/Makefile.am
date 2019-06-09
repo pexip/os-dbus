@@ -4,6 +4,10 @@ AM_CPPFLAGS = \
 	-DDBUS_COMPILATION \
 	$(NULL)
 
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
+
 # if assertions are enabled, improve backtraces
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 
@@ -35,23 +39,31 @@ AM_TESTS_ENVIRONMENT = \
         export PYTHON=@PYTHON@; \
         export DBUS_TEST_DATA=@abs_top_builddir@/test/data; \
         export DBUS_TEST_DAEMON=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT); \
+        export DBUS_TEST_DBUS_LAUNCH=@abs_top_builddir@/tools/dbus-launch$(EXEEXT); \
         export XDG_RUNTIME_DIR=@abs_top_builddir@/test/XDG_RUNTIME_DIR; \
+        unset DBUS_SESSION_BUS_ADDRESS; \
         unset DBUS_SESSION_BUS_PID; \
         $(NULL)
 
 uninstalled-session.conf: $(top_builddir)/bus/session.conf Makefile
 	$(SED) -e 's|<standard_session_servicedirs.*$$|<servicedir>@abs_top_builddir@/test/data/valid-service-files</servicedir>|g' \
-               -e 's|<include.*$$||g' \
-               < $< > $@
+		-e 's|<include.*$$||g' \
+		< $< > $@
 
 check_DATA = \
-       uninstalled-session.conf \
-       $(NULL)
+	uninstalled-session.conf \
+	$(NULL)
 
 TESTS += \
 	run-test.sh \
 	run-test-systemserver.sh \
+	test-ids \
+	test-pending-call-dispatch \
+	test-pending-call-timeout \
 	test-pending-call-disconnected \
+	test-privserver-client \
+	test-shutdown \
+	test-threads-init \
 	$(NULL)
 endif
 endif

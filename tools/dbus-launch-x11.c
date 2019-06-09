@@ -43,7 +43,7 @@ static Atom address_atom;
 static Atom pid_atom;
 
 static int
-x_io_error_handler (Display *xdisplay)
+x_io_error_handler (Display *local_xdisplay)
 {
   verbose ("X IO error\n");
   kill_bus_and_exit (0);
@@ -52,7 +52,7 @@ x_io_error_handler (Display *xdisplay)
 
 static void
 remove_prefix (char *s,
-               char *prefix)
+               const char *prefix)
 {
   int plen;
 
@@ -367,7 +367,8 @@ set_address_in_x11(char *address, pid_t pid)
   wid = XCreateWindow (xdisplay, RootWindow (xdisplay, 0), -20, -20, 10, 10,
                        0, CopyFromParent, InputOnly, CopyFromParent,
                        0, NULL);
-  verbose ("Created window %d\n", wid);
+  /* The type of a Window varies, so cast it to something reasonable */
+  verbose ("Created window %lu\n", (unsigned long) wid);
 
   /* Save the property in the window */
   XChangeProperty (xdisplay, wid, address_atom, XA_STRING, 8, PropModeReplace,

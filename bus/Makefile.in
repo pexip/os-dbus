@@ -14,6 +14,8 @@
 
 @SET_MAKE@
 
+# aminclude_static.am generated automatically by Autoconf
+# from AX_AM_MACROS_STATIC on Sun Jun  9 13:09:33 BST 2019
 
 
 VPATH = @srcdir@
@@ -104,23 +106,19 @@ dbus_daemon_exec_PROGRAMS = dbus-daemon$(EXEEXT)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__append_4 = test-bus-launch-helper \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-bus-system \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	dbus-daemon-launch-helper-test
-@HAVE_SYSTEMD_TRUE@am__append_5 = \
-@HAVE_SYSTEMD_TRUE@	dbus.service.in \
-@HAVE_SYSTEMD_TRUE@	dbus.socket.in \
-@HAVE_SYSTEMD_TRUE@	systemd-user/dbus.service.in \
-@HAVE_SYSTEMD_TRUE@	systemd-user/dbus.socket.in \
-@HAVE_SYSTEMD_TRUE@	$(NULL)
-
 subdir = bus
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
-	$(top_srcdir)/m4/compiler.m4 \
+	$(top_srcdir)/m4/ax_ac_append_to_file.m4 \
+	$(top_srcdir)/m4/ax_ac_print_to_file.m4 \
+	$(top_srcdir)/m4/ax_add_am_macro_static.m4 \
+	$(top_srcdir)/m4/ax_am_macros_static.m4 \
+	$(top_srcdir)/m4/ax_code_coverage.m4 \
+	$(top_srcdir)/m4/ax_file_escapes.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
 	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/tp-compiler-flag.m4 \
-	$(top_srcdir)/m4/tp-compiler-warnings.m4 \
 	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -129,15 +127,15 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES = system.conf session.conf \
 	example-system-enable-stats.conf \
-	example-session-disable-stats.conf messagebus \
-	messagebus-config org.freedesktop.dbus-session.plist \
-	rc.messagebus dbus.service dbus.socket
+	example-session-disable-stats.conf \
+	org.freedesktop.dbus-session.plist dbus.service dbus.socket
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(dbus_daemon_execdir)" \
-	"$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(bindir)" \
-	"$(DESTDIR)$(initddir)" "$(DESTDIR)$(agentdir)" \
+	"$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(agentdir)" \
 	"$(DESTDIR)$(dbusdatadir)" "$(DESTDIR)$(examplesdir)" \
 	"$(DESTDIR)$(legacydbusdatadir)" \
+	"$(DESTDIR)$(systemdsysusersdir)" \
+	"$(DESTDIR)$(systemdtmpfilesdir)" \
 	"$(DESTDIR)$(systemdsystemunitdir)" \
 	"$(DESTDIR)$(systemduserunitdir)"
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_1 = test-bus$(EXEEXT)
@@ -148,33 +146,33 @@ PROGRAMS = $(dbus_daemon_exec_PROGRAMS) $(libexec_PROGRAMS) \
 	$(noinst_PROGRAMS)
 am__dbus_daemon_SOURCES_DIST = activation.c activation.h \
 	activation-exit-codes.h apparmor.c apparmor.h audit.c audit.h \
-	bus.c bus.h config-parser.c config-parser.h \
-	config-parser-common.c config-parser-common.h connection.c \
-	connection.h desktop-file.c desktop-file.h dir-watch-default.c \
-	dir-watch-inotify.c dir-watch-kqueue.c dir-watch.h dispatch.c \
-	dispatch.h driver.c driver.h expirelist.c expirelist.h \
-	policy.c policy.h selinux.h selinux.c services.c services.h \
-	signals.c signals.h stats.c stats.h test.c test.h utils.c \
-	utils.h config-loader-expat.c main.c
+	bus.c bus.h config-loader-expat.c config-parser.c \
+	config-parser.h config-parser-common.c config-parser-common.h \
+	connection.c connection.h desktop-file.c desktop-file.h \
+	dir-watch-default.c dir-watch-inotify.c dir-watch-kqueue.c \
+	dir-watch.h dispatch.c dispatch.h driver.c driver.h \
+	expirelist.c expirelist.h policy.c policy.h selinux.h \
+	selinux.c services.c services.h signals.c signals.h stats.c \
+	stats.h test.c test.h utils.c utils.h main.c
 @DBUS_BUS_ENABLE_INOTIFY_FALSE@@DBUS_BUS_ENABLE_KQUEUE_FALSE@am__objects_1 = dir-watch-default.$(OBJEXT)
 @DBUS_BUS_ENABLE_INOTIFY_TRUE@@DBUS_BUS_ENABLE_KQUEUE_FALSE@am__objects_1 = dir-watch-inotify.$(OBJEXT)
 @DBUS_BUS_ENABLE_KQUEUE_TRUE@am__objects_1 =  \
 @DBUS_BUS_ENABLE_KQUEUE_TRUE@	dir-watch-kqueue.$(OBJEXT)
-am__objects_2 = config-loader-expat.$(OBJEXT)
-am__objects_3 = activation.$(OBJEXT) apparmor.$(OBJEXT) \
-	audit.$(OBJEXT) bus.$(OBJEXT) config-parser.$(OBJEXT) \
-	config-parser-common.$(OBJEXT) connection.$(OBJEXT) \
-	desktop-file.$(OBJEXT) $(am__objects_1) dispatch.$(OBJEXT) \
-	driver.$(OBJEXT) expirelist.$(OBJEXT) policy.$(OBJEXT) \
-	selinux.$(OBJEXT) services.$(OBJEXT) signals.$(OBJEXT) \
-	stats.$(OBJEXT) test.$(OBJEXT) utils.$(OBJEXT) \
-	$(am__objects_2)
-am_dbus_daemon_OBJECTS = $(am__objects_3) main.$(OBJEXT)
+am__objects_2 = activation.$(OBJEXT) apparmor.$(OBJEXT) \
+	audit.$(OBJEXT) bus.$(OBJEXT) config-loader-expat.$(OBJEXT) \
+	config-parser.$(OBJEXT) config-parser-common.$(OBJEXT) \
+	connection.$(OBJEXT) desktop-file.$(OBJEXT) $(am__objects_1) \
+	dispatch.$(OBJEXT) driver.$(OBJEXT) expirelist.$(OBJEXT) \
+	policy.$(OBJEXT) selinux.$(OBJEXT) services.$(OBJEXT) \
+	signals.$(OBJEXT) stats.$(OBJEXT) test.$(OBJEXT) \
+	utils.$(OBJEXT)
+am_dbus_daemon_OBJECTS = $(am__objects_2) main.$(OBJEXT)
 dbus_daemon_OBJECTS = $(am_dbus_daemon_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1)
 dbus_daemon_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_1) \
 	$(am__DEPENDENCIES_2)
@@ -182,28 +180,28 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am__objects_4 = $(am__objects_2) config-parser-common.$(OBJEXT) \
-	config-parser-trivial.$(OBJEXT) desktop-file.$(OBJEXT) \
-	utils.$(OBJEXT) activation-helper.$(OBJEXT)
+am__objects_3 = config-loader-expat.$(OBJEXT) \
+	config-parser-common.$(OBJEXT) config-parser-trivial.$(OBJEXT) \
+	desktop-file.$(OBJEXT) utils.$(OBJEXT) \
+	activation-helper.$(OBJEXT)
 am_dbus_daemon_launch_helper_OBJECTS =  \
-	activation-helper-bin.$(OBJEXT) $(am__objects_4)
+	activation-helper-bin.$(OBJEXT) $(am__objects_3)
 dbus_daemon_launch_helper_OBJECTS =  \
 	$(am_dbus_daemon_launch_helper_OBJECTS)
 am__DEPENDENCIES_3 = $(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 dbus_daemon_launch_helper_DEPENDENCIES =  \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_3)
-am__objects_5 =  \
-	dbus_daemon_launch_helper_test-config-loader-expat.$(OBJEXT)
-am__objects_6 = $(am__objects_5) \
+am__objects_4 =  \
+	dbus_daemon_launch_helper_test-config-loader-expat.$(OBJEXT) \
 	dbus_daemon_launch_helper_test-config-parser-common.$(OBJEXT) \
 	dbus_daemon_launch_helper_test-config-parser-trivial.$(OBJEXT) \
 	dbus_daemon_launch_helper_test-desktop-file.$(OBJEXT) \
 	dbus_daemon_launch_helper_test-utils.$(OBJEXT) \
 	dbus_daemon_launch_helper_test-activation-helper.$(OBJEXT)
 am_dbus_daemon_launch_helper_test_OBJECTS = dbus_daemon_launch_helper_test-activation-helper-bin.$(OBJEXT) \
-	$(am__objects_6)
+	$(am__objects_4)
 dbus_daemon_launch_helper_test_OBJECTS =  \
 	$(am_dbus_daemon_launch_helper_test_OBJECTS)
 dbus_daemon_launch_helper_test_DEPENDENCIES =  \
@@ -211,20 +209,19 @@ dbus_daemon_launch_helper_test_DEPENDENCIES =  \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_3)
 am__test_bus_SOURCES_DIST = activation.c activation.h \
 	activation-exit-codes.h apparmor.c apparmor.h audit.c audit.h \
-	bus.c bus.h config-parser.c config-parser.h \
-	config-parser-common.c config-parser-common.h connection.c \
-	connection.h desktop-file.c desktop-file.h dir-watch-default.c \
-	dir-watch-inotify.c dir-watch-kqueue.c dir-watch.h dispatch.c \
-	dispatch.h driver.c driver.h expirelist.c expirelist.h \
-	policy.c policy.h selinux.h selinux.c services.c services.h \
-	signals.c signals.h stats.c stats.h test.c test.h utils.c \
-	utils.h config-loader-expat.c test-main.c
-am_test_bus_OBJECTS = $(am__objects_3) test-main.$(OBJEXT)
+	bus.c bus.h config-loader-expat.c config-parser.c \
+	config-parser.h config-parser-common.c config-parser-common.h \
+	connection.c connection.h desktop-file.c desktop-file.h \
+	dir-watch-default.c dir-watch-inotify.c dir-watch-kqueue.c \
+	dir-watch.h dispatch.c dispatch.h driver.c driver.h \
+	expirelist.c expirelist.h policy.c policy.h selinux.h \
+	selinux.c services.c services.h signals.c signals.h stats.c \
+	stats.h test.c test.h utils.c utils.h test-main.c
+am_test_bus_OBJECTS = $(am__objects_2) test-main.$(OBJEXT)
 test_bus_OBJECTS = $(am_test_bus_OBJECTS)
 test_bus_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_2)
-am__objects_7 = test_bus_launch_helper-config-loader-expat.$(OBJEXT)
-am__objects_8 = $(am__objects_7) \
+am__objects_5 = test_bus_launch_helper-config-loader-expat.$(OBJEXT) \
 	test_bus_launch_helper-config-parser-common.$(OBJEXT) \
 	test_bus_launch_helper-config-parser-trivial.$(OBJEXT) \
 	test_bus_launch_helper-desktop-file.$(OBJEXT) \
@@ -232,45 +229,17 @@ am__objects_8 = $(am__objects_7) \
 	test_bus_launch_helper-activation-helper.$(OBJEXT)
 am_test_bus_launch_helper_OBJECTS =  \
 	test_bus_launch_helper-test-launch-helper.$(OBJEXT) \
-	$(am__objects_8)
+	$(am__objects_5)
 test_bus_launch_helper_OBJECTS = $(am_test_bus_launch_helper_OBJECTS)
 test_bus_launch_helper_DEPENDENCIES =  \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_3)
-am_test_bus_system_OBJECTS = $(am__objects_2) \
+am_test_bus_system_OBJECTS = config-loader-expat.$(OBJEXT) \
 	config-parser-common.$(OBJEXT) config-parser-trivial.$(OBJEXT) \
 	utils.$(OBJEXT) test-system.$(OBJEXT)
 test_bus_system_OBJECTS = $(am_test_bus_system_OBJECTS)
 test_bus_system_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_2)
-am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
-am__vpath_adj = case $$p in \
-    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
-    *) f=$$p;; \
-  esac;
-am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
-am__install_max = 40
-am__nobase_strip_setup = \
-  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
-am__nobase_strip = \
-  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
-am__nobase_list = $(am__nobase_strip_setup); \
-  for p in $$list; do echo "$$p $$p"; done | \
-  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
-  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
-    if (++n[$$2] == $(am__install_max)) \
-      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
-    END { for (dir in files) print dir, files[dir] }'
-am__base_list = \
-  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
-  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
-am__uninstall_files_from_dir = { \
-  test -z "$$files" \
-    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
-    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
-         $(am__cd) "$$dir" && rm -f $$files; }; \
-  }
-SCRIPTS = $(bin_SCRIPTS) $(initd_SCRIPTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -349,8 +318,36 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
+am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
+am__vpath_adj = case $$p in \
+    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
+    *) f=$$p;; \
+  esac;
+am__strip_dir = f=`echo $$p | sed -e 's|^.*/||'`;
+am__install_max = 40
+am__nobase_strip_setup = \
+  srcdirstrip=`echo "$(srcdir)" | sed 's/[].[^$$\\*|]/\\\\&/g'`
+am__nobase_strip = \
+  for p in $$list; do echo "$$p"; done | sed -e "s|$$srcdirstrip/||"
+am__nobase_list = $(am__nobase_strip_setup); \
+  for p in $$list; do echo "$$p $$p"; done | \
+  sed "s| $$srcdirstrip/| |;"' / .*\//!s/ .*/ ./; s,\( .*\)/[^/]*$$,\1,' | \
+  $(AWK) 'BEGIN { files["."] = "" } { files[$$2] = files[$$2] " " $$1; \
+    if (++n[$$2] == $(am__install_max)) \
+      { print $$2, files[$$2]; n[$$2] = 0; files[$$2] = "" } } \
+    END { for (dir in files) print dir, files[dir] }'
+am__base_list = \
+  sed '$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;$$!N;s/\n/ /g' | \
+  sed '$$!N;$$!N;$$!N;$$!N;s/\n/ /g'
+am__uninstall_files_from_dir = { \
+  test -z "$$files" \
+    || { test ! -d "$$dir" && test ! -f "$$dir" && test ! -r "$$dir"; } \
+    || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
+         $(am__cd) "$$dir" && rm -f $$files; }; \
+  }
 DATA = $(agent_DATA) $(dbusdata_DATA) $(examples_DATA) \
-	$(legacydbusdata_DATA) $(systemdsystemunit_DATA) \
+	$(legacydbusdata_DATA) $(nodist_systemdsysusers_DATA) \
+	$(nodist_systemdtmpfiles_DATA) $(systemdsystemunit_DATA) \
 	$(systemduserunit_DATA)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 # Read a list of newline-separated strings from the standard input,
@@ -375,15 +372,17 @@ am__DIST_COMMON = $(srcdir)/Makefile.in $(srcdir)/dbus.service.in \
 	$(srcdir)/dbus.socket.in \
 	$(srcdir)/example-session-disable-stats.conf.in \
 	$(srcdir)/example-system-enable-stats.conf.in \
-	$(srcdir)/messagebus-config.in $(srcdir)/messagebus.in \
 	$(srcdir)/org.freedesktop.dbus-session.plist.in \
-	$(srcdir)/rc.messagebus.in $(srcdir)/session.conf.in \
-	$(srcdir)/system.conf.in $(top_srcdir)/build-aux/depcomp
+	$(srcdir)/session.conf.in $(srcdir)/system.conf.in \
+	$(top_srcdir)/aminclude_static.am \
+	$(top_srcdir)/build-aux/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 ACLOCAL = @ACLOCAL@
 ADT_LIBS = @ADT_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+APPARMOR_2_10_CFLAGS = @APPARMOR_2_10_CFLAGS@
+APPARMOR_2_10_LIBS = @APPARMOR_2_10_LIBS@
 APPARMOR_CFLAGS = @APPARMOR_CFLAGS@
 APPARMOR_LIBS = @APPARMOR_LIBS@
 AR = @AR@
@@ -397,6 +396,11 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CFLAG_VISIBILITY = @CFLAG_VISIBILITY@
+CODE_COVERAGE_CFLAGS = @CODE_COVERAGE_CFLAGS@
+CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
+CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
+CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
+CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
@@ -406,7 +410,6 @@ CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR_FROM_PKGSYSCONFDIR = @DATADIR_FROM_PKGSYSCONFDIR@
 DBUS_BINDIR = @DBUS_BINDIR@
-DBUS_CONSOLE_AUTH_DIR = @DBUS_CONSOLE_AUTH_DIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
@@ -418,7 +421,6 @@ DBUS_LIBEXECDIR = @DBUS_LIBEXECDIR@
 DBUS_MAJOR_VERSION = @DBUS_MAJOR_VERSION@
 DBUS_MICRO_VERSION = @DBUS_MICRO_VERSION@
 DBUS_MINOR_VERSION = @DBUS_MINOR_VERSION@
-DBUS_PATH_OR_ABSTRACT = @DBUS_PATH_OR_ABSTRACT@
 DBUS_PREFIX = @DBUS_PREFIX@
 DBUS_SESSION_BUS_CONNECT_ADDRESS = @DBUS_SESSION_BUS_CONNECT_ADDRESS@
 DBUS_SESSION_BUS_LISTEN_ADDRESS = @DBUS_SESSION_BUS_LISTEN_ADDRESS@
@@ -454,9 +456,19 @@ EXPANDED_LIBDIR = @EXPANDED_LIBDIR@
 EXPANDED_LIBEXECDIR = @EXPANDED_LIBEXECDIR@
 EXPANDED_LOCALSTATEDIR = @EXPANDED_LOCALSTATEDIR@
 EXPANDED_PREFIX = @EXPANDED_PREFIX@
+EXPANDED_RUNSTATEDIR = @EXPANDED_RUNSTATEDIR@
 EXPANDED_SYSCONFDIR = @EXPANDED_SYSCONFDIR@
+EXPAT_CFLAGS = @EXPAT_CFLAGS@
+EXPAT_LIBS = @EXPAT_LIBS@
+EXTRA_CFLAGS = @EXTRA_CFLAGS@
+EXTRA_CXXFLAGS = @EXTRA_CXXFLAGS@
+EXTRA_LDFLAGS = @EXTRA_LDFLAGS@
 FGREP = @FGREP@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETTEXT_PACKAGE = @GETTEXT_PACKAGE@
+GIO_UNIX_CFLAGS = @GIO_UNIX_CFLAGS@
+GIO_UNIX_LIBS = @GIO_UNIX_LIBS@
 GLIB_CFLAGS = @GLIB_CFLAGS@
 GLIB_LIBS = @GLIB_LIBS@
 GREP = @GREP@
@@ -468,6 +480,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LAUNCHCTL = @LAUNCHCTL@
 LAUNCHD_AGENT_DIR = @LAUNCHD_AGENT_DIR@
+LCOV = @LCOV@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBDBUS_LIBS = @LIBDBUS_LIBS@
@@ -510,6 +523,7 @@ RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -526,11 +540,12 @@ THREAD_LIBS = @THREAD_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VERSION = @VERSION@
-WINDRES = @WINDRES@
+WARN_CFLAGS = @WARN_CFLAGS@
+WARN_CXXFLAGS = @WARN_CXXFLAGS@
+WARN_LDFLAGS = @WARN_LDFLAGS@
+WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
 XMKMF = @XMKMF@
 XMLTO = @XMLTO@
-XML_CFLAGS = @XML_CFLAGS@
-XML_LIBS = @XML_LIBS@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
 X_EXTRA_LIBS = @X_EXTRA_LIBS@
@@ -569,6 +584,8 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
+ifnGNUmake = @ifnGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -580,6 +597,7 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgconfig_prefix = @pkgconfig_prefix@
 pkgpyexecdir = @pkgpyexecdir@
 pkgpythondir = @pkgpythondir@
 prefix = @prefix@
@@ -601,8 +619,12 @@ top_srcdir = @top_srcdir@
 dbusdatadir = $(datadir)/dbus-1
 legacydbusdatadir = $(sysconfdir)/dbus-1
 dbus_daemon_execdir = $(DBUS_DAEMONDIR)
+# Always lib, even if ${libdir} is lib64 or lib/x86_64-linux-gnu
+systemdtmpfilesdir = $(prefix)/lib/tmpfiles.d
+systemdsysusersdir = $(prefix)/lib/sysusers.d
 DBUS_BUS_LIBS = \
-	$(XML_LIBS) \
+	$(CODE_COVERAGE_LIBS) \
+	$(EXPAT_LIBS) \
 	$(SELINUX_LIBS) \
 	$(APPARMOR_LIBS) \
 	$(THREAD_LIBS) \
@@ -611,15 +633,17 @@ DBUS_BUS_LIBS = \
 	$(NULL)
 
 DBUS_LAUNCHER_LIBS = \
-	$(XML_LIBS) \
+	$(CODE_COVERAGE_LIBS) \
+	$(EXPAT_LIBS) \
 	$(THREAD_LIBS) \
 	$(NETWORK_libs) \
 	$(NULL)
 
 AM_CPPFLAGS = \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	-I$(top_srcdir) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
-	$(XML_CFLAGS) \
+	$(EXPAT_CFLAGS) \
 	$(APPARMOR_CFLAGS) \
 	-DDBUS_SYSTEM_CONFIG_FILE=\""$(dbusdatadir)/system.conf"\" \
 	-DDBUS_COMPILATION \
@@ -628,17 +652,19 @@ AM_CPPFLAGS = \
 
 # if assertions are enabled, improve backtraces
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
-EFENCE = 
-CONFIG_IN_FILES = \
-	session.conf.in				\
-	system.conf.in				\
-	legacy-config/session.conf.in		\
-	legacy-config/system.conf.in		\
-	org.freedesktop.dbus-session.plist.in	\
-	example-system-enable-stats.conf.in	\
-	example-session-disable-stats.conf.in	\
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
 	$(NULL)
 
+EFENCE = 
+EXTRA_DIST = session.conf.in system.conf.in \
+	legacy-config/session.conf.in legacy-config/system.conf.in \
+	org.freedesktop.dbus-session.plist.in \
+	example-system-enable-stats.conf.in \
+	example-session-disable-stats.conf.in $(NULL) dbus.service.in \
+	dbus.socket.in systemd-user/dbus.service.in \
+	systemd-user/dbus.socket.in sysusers.d/dbus.conf.in \
+	tmpfiles.d/dbus.conf.in $(NULL)
 dbusdata_DATA = session.conf $(am__append_1)
 legacydbusdata_DATA = legacy-config/session.conf $(am__append_2)
 examplesdir = ${docdir}/examples
@@ -649,7 +675,6 @@ examples_DATA = \
 
 @DBUS_ENABLE_LAUNCHD_TRUE@agentdir = $(LAUNCHD_AGENT_DIR)
 @DBUS_ENABLE_LAUNCHD_TRUE@agent_DATA = org.freedesktop.dbus-session.plist
-XML_SOURCES = config-loader-expat.c
 @DBUS_BUS_ENABLE_INOTIFY_FALSE@@DBUS_BUS_ENABLE_KQUEUE_FALSE@DIR_WATCH_SOURCE = dir-watch-default.c
 @DBUS_BUS_ENABLE_INOTIFY_TRUE@@DBUS_BUS_ENABLE_KQUEUE_FALSE@DIR_WATCH_SOURCE = dir-watch-inotify.c
 @DBUS_BUS_ENABLE_KQUEUE_TRUE@DIR_WATCH_SOURCE = dir-watch-kqueue.c
@@ -663,6 +688,7 @@ BUS_SOURCES = \
 	audit.h					\
 	bus.c					\
 	bus.h					\
+	config-loader-expat.c			\
 	config-parser.c				\
 	config-parser.h				\
 	config-parser-common.c			\
@@ -693,7 +719,7 @@ BUS_SOURCES = \
 	test.h					\
 	utils.c					\
 	utils.h					\
-	$(XML_SOURCES)
+	$(NULL)
 
 dbus_daemon_SOURCES = \
 	$(BUS_SOURCES)				\
@@ -706,7 +732,7 @@ dbus_daemon_LDADD = \
 	$(DBUS_BUS_LIBS)
 
 LAUNCH_HELPER_SOURCES = \
-	$(XML_SOURCES)				\
+	config-loader-expat.c			\
 	config-parser-common.c			\
 	config-parser-common.h			\
 	config-parser-trivial.c			\
@@ -756,7 +782,7 @@ test_bus_launch_helper_CPPFLAGS = \
 	-DACTIVATION_LAUNCHER_DO_OOM
 
 test_bus_system_SOURCES = \
-	$(XML_SOURCES)				\
+	config-loader-expat.c			\
 	config-parser-common.c			\
 	config-parser-common.h			\
 	config-parser-trivial.c			\
@@ -781,38 +807,44 @@ test_bus_LDADD = \
 	$(DBUS_BUS_LIBS) \
 	$(NULL)
 
-
-#### Init scripts fun
-SCRIPT_IN_FILES = messagebus.in messagebus-config.in rc.messagebus.in \
-	$(am__append_5)
-@DBUS_INIT_SCRIPTS_RED_HAT_TRUE@initddir = $(sysconfdir)/rc.d/init.d
-@DBUS_INIT_SCRIPTS_SLACKWARE_TRUE@initddir = $(sysconfdir)/rc.d/
-@DBUS_INIT_SCRIPTS_RED_HAT_TRUE@initd_SCRIPTS = \
-@DBUS_INIT_SCRIPTS_RED_HAT_TRUE@	messagebus
-
-@DBUS_INIT_SCRIPTS_SLACKWARE_TRUE@initd_SCRIPTS = \
-@DBUS_INIT_SCRIPTS_SLACKWARE_TRUE@	rc.messagebus
-
-@DBUS_INIT_SCRIPTS_CYGWIN_TRUE@bin_SCRIPTS = \
-@DBUS_INIT_SCRIPTS_CYGWIN_TRUE@	messagebus-config
-
 @HAVE_SYSTEMD_TRUE@systemdsystemunit_DATA = \
 @HAVE_SYSTEMD_TRUE@	dbus.service \
 @HAVE_SYSTEMD_TRUE@	dbus.socket
+
+@HAVE_SYSTEMD_TRUE@nodist_systemdsysusers_DATA = \
+@HAVE_SYSTEMD_TRUE@	sysusers.d/dbus.conf
+
+@HAVE_SYSTEMD_TRUE@nodist_systemdtmpfiles_DATA = \
+@HAVE_SYSTEMD_TRUE@	tmpfiles.d/dbus.conf \
+@HAVE_SYSTEMD_TRUE@	$(NULL)
 
 @DBUS_ENABLE_USER_SESSION_TRUE@systemduserunit_DATA = \
 @DBUS_ENABLE_USER_SESSION_TRUE@	systemd-user/dbus.service \
 @DBUS_ENABLE_USER_SESSION_TRUE@	systemd-user/dbus.socket \
 @DBUS_ENABLE_USER_SESSION_TRUE@	$(NULL)
 
+@CODE_COVERAGE_ENABLED_TRUE@GITIGNOREFILES = $(GITIGNOREFILES) $(CODE_COVERAGE_OUTPUT_FILE) $(CODE_COVERAGE_OUTPUT_DIRECTORY)
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap = $(code_coverage_v_lcov_cap_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap_ = $(code_coverage_v_lcov_cap_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap_0 = @echo "  LCOV   --capture" $(CODE_COVERAGE_OUTPUT_FILE);
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_ign = $(code_coverage_v_lcov_ign_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_ign_ = $(code_coverage_v_lcov_ign_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_ign_0 = @echo "  LCOV   --remove /tmp/*" $(CODE_COVERAGE_IGNORE_PATTERN);
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_genhtml = $(code_coverage_v_genhtml_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_genhtml_ = $(code_coverage_v_genhtml_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_genhtml_0 = @echo "  GEN   " "$(CODE_COVERAGE_OUTPUT_DIRECTORY)";
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_quiet = $(code_coverage_quiet_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_quiet_ = $(code_coverage_quiet_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_quiet_0 = --quiet
 
-#### Extra dist
-EXTRA_DIST = $(CONFIG_IN_FILES) $(SCRIPT_IN_FILES)
+# sanitizes the test-name: replaces with underscores: dashes and dots
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_sanitize = $(subst -,_,$(subst .,_,$(1)))
+@CODE_COVERAGE_ENABLED_TRUE@AM_DISTCHECK_CONFIGURE_FLAGS = $(AM_DISTCHECK_CONFIGURE_FLAGS) --disable-code-coverage
 all: all-am
 
 .SUFFIXES:
 .SUFFIXES: .c .lo .o .obj
-$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
+$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am $(top_srcdir)/aminclude_static.am $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -832,6 +864,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__maybe_remake_depfiles)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__maybe_remake_depfiles);; \
 	esac;
+$(top_srcdir)/aminclude_static.am $(am__empty):
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -849,13 +882,7 @@ example-system-enable-stats.conf: $(top_builddir)/config.status $(srcdir)/exampl
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 example-session-disable-stats.conf: $(top_builddir)/config.status $(srcdir)/example-session-disable-stats.conf.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
-messagebus: $(top_builddir)/config.status $(srcdir)/messagebus.in
-	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
-messagebus-config: $(top_builddir)/config.status $(srcdir)/messagebus-config.in
-	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 org.freedesktop.dbus-session.plist: $(top_builddir)/config.status $(srcdir)/org.freedesktop.dbus-session.plist.in
-	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
-rc.messagebus: $(top_builddir)/config.status $(srcdir)/rc.messagebus.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
 dbus.service: $(top_builddir)/config.status $(srcdir)/dbus.service.in
 	cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@
@@ -992,76 +1019,6 @@ test-bus-launch-helper$(EXEEXT): $(test_bus_launch_helper_OBJECTS) $(test_bus_la
 test-bus-system$(EXEEXT): $(test_bus_system_OBJECTS) $(test_bus_system_DEPENDENCIES) $(EXTRA_test_bus_system_DEPENDENCIES) 
 	@rm -f test-bus-system$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_bus_system_OBJECTS) $(test_bus_system_LDADD) $(LIBS)
-install-binSCRIPTS: $(bin_SCRIPTS)
-	@$(NORMAL_INSTALL)
-	@list='$(bin_SCRIPTS)'; test -n "$(bindir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(bindir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(bindir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  if test -f "$$d$$p"; then echo "$$d$$p"; echo "$$p"; else :; fi; \
-	done | \
-	sed -e 'p;s,.*/,,;n' \
-	    -e 'h;s|.*|.|' \
-	    -e 'p;x;s,.*/,,;$(transform)' | sed 'N;N;N;s,\n, ,g' | \
-	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1; } \
-	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
-	    if ($$2 == $$4) { files[d] = files[d] " " $$1; \
-	      if (++n[d] == $(am__install_max)) { \
-		print "f", d, files[d]; n[d] = 0; files[d] = "" } } \
-	    else { print "f", d "/" $$4, $$1 } } \
-	  END { for (d in files) print "f", d, files[d] }' | \
-	while read type dir files; do \
-	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
-	     test -z "$$files" || { \
-	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(bindir)$$dir'"; \
-	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(bindir)$$dir" || exit $$?; \
-	     } \
-	; done
-
-uninstall-binSCRIPTS:
-	@$(NORMAL_UNINSTALL)
-	@list='$(bin_SCRIPTS)'; test -n "$(bindir)" || exit 0; \
-	files=`for p in $$list; do echo "$$p"; done | \
-	       sed -e 's,.*/,,;$(transform)'`; \
-	dir='$(DESTDIR)$(bindir)'; $(am__uninstall_files_from_dir)
-install-initdSCRIPTS: $(initd_SCRIPTS)
-	@$(NORMAL_INSTALL)
-	@list='$(initd_SCRIPTS)'; test -n "$(initddir)" || list=; \
-	if test -n "$$list"; then \
-	  echo " $(MKDIR_P) '$(DESTDIR)$(initddir)'"; \
-	  $(MKDIR_P) "$(DESTDIR)$(initddir)" || exit 1; \
-	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  if test -f "$$d$$p"; then echo "$$d$$p"; echo "$$p"; else :; fi; \
-	done | \
-	sed -e 'p;s,.*/,,;n' \
-	    -e 'h;s|.*|.|' \
-	    -e 'p;x;s,.*/,,;$(transform)' | sed 'N;N;N;s,\n, ,g' | \
-	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1; } \
-	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
-	    if ($$2 == $$4) { files[d] = files[d] " " $$1; \
-	      if (++n[d] == $(am__install_max)) { \
-		print "f", d, files[d]; n[d] = 0; files[d] = "" } } \
-	    else { print "f", d "/" $$4, $$1 } } \
-	  END { for (d in files) print "f", d, files[d] }' | \
-	while read type dir files; do \
-	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
-	     test -z "$$files" || { \
-	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(initddir)$$dir'"; \
-	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(initddir)$$dir" || exit $$?; \
-	     } \
-	; done
-
-uninstall-initdSCRIPTS:
-	@$(NORMAL_UNINSTALL)
-	@list='$(initd_SCRIPTS)'; test -n "$(initddir)" || exit 0; \
-	files=`for p in $$list; do echo "$$p"; done | \
-	       sed -e 's,.*/,,;$(transform)'`; \
-	dir='$(DESTDIR)$(initddir)'; $(am__uninstall_files_from_dir)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -1427,6 +1384,48 @@ uninstall-legacydbusdataDATA:
 	@list='$(legacydbusdata_DATA)'; test -n "$(legacydbusdatadir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(legacydbusdatadir)'; $(am__uninstall_files_from_dir)
+install-nodist_systemdsysusersDATA: $(nodist_systemdsysusers_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(nodist_systemdsysusers_DATA)'; test -n "$(systemdsysusersdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(systemdsysusersdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(systemdsysusersdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(systemdsysusersdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(systemdsysusersdir)" || exit $$?; \
+	done
+
+uninstall-nodist_systemdsysusersDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(nodist_systemdsysusers_DATA)'; test -n "$(systemdsysusersdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(systemdsysusersdir)'; $(am__uninstall_files_from_dir)
+install-nodist_systemdtmpfilesDATA: $(nodist_systemdtmpfiles_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(nodist_systemdtmpfiles_DATA)'; test -n "$(systemdtmpfilesdir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(systemdtmpfilesdir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(systemdtmpfilesdir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(systemdtmpfilesdir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(systemdtmpfilesdir)" || exit $$?; \
+	done
+
+uninstall-nodist_systemdtmpfilesDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(nodist_systemdtmpfiles_DATA)'; test -n "$(systemdtmpfilesdir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(systemdtmpfilesdir)'; $(am__uninstall_files_from_dir)
 install-systemdsystemunitDATA: $(systemdsystemunit_DATA)
 	@$(NORMAL_INSTALL)
 	@list='$(systemdsystemunit_DATA)'; test -n "$(systemdsystemunitdir)" || list=; \
@@ -1557,9 +1556,9 @@ distdir-am: $(DISTFILES)
 	done
 check-am: all-am
 check: check-am
-all-am: Makefile $(PROGRAMS) $(SCRIPTS) $(DATA)
+all-am: Makefile $(PROGRAMS) $(DATA)
 installdirs:
-	for dir in "$(DESTDIR)$(dbus_daemon_execdir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(bindir)" "$(DESTDIR)$(initddir)" "$(DESTDIR)$(agentdir)" "$(DESTDIR)$(dbusdatadir)" "$(DESTDIR)$(examplesdir)" "$(DESTDIR)$(legacydbusdatadir)" "$(DESTDIR)$(systemdsystemunitdir)" "$(DESTDIR)$(systemduserunitdir)"; do \
+	for dir in "$(DESTDIR)$(dbus_daemon_execdir)" "$(DESTDIR)$(libexecdir)" "$(DESTDIR)$(agentdir)" "$(DESTDIR)$(dbusdatadir)" "$(DESTDIR)$(examplesdir)" "$(DESTDIR)$(legacydbusdatadir)" "$(DESTDIR)$(systemdsysusersdir)" "$(DESTDIR)$(systemdtmpfilesdir)" "$(DESTDIR)$(systemdsystemunitdir)" "$(DESTDIR)$(systemduserunitdir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -1596,8 +1595,8 @@ maintainer-clean-generic:
 clean: clean-am
 
 clean-am: clean-dbus_daemon_execPROGRAMS clean-generic \
-	clean-libexecPROGRAMS clean-libtool clean-local \
-	clean-noinstPROGRAMS mostlyclean-am
+	clean-libexecPROGRAMS clean-libtool clean-noinstPROGRAMS \
+	mostlyclean-am
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/activation-helper-bin.Po
@@ -1659,16 +1658,17 @@ info: info-am
 info-am:
 
 install-data-am: install-agentDATA install-dbusdataDATA \
-	install-examplesDATA install-initdSCRIPTS \
-	install-legacydbusdataDATA install-systemdsystemunitDATA \
-	install-systemduserunitDATA
+	install-examplesDATA install-legacydbusdataDATA \
+	install-nodist_systemdsysusersDATA \
+	install-nodist_systemdtmpfilesDATA \
+	install-systemdsystemunitDATA install-systemduserunitDATA
 	@$(NORMAL_INSTALL)
 	$(MAKE) $(AM_MAKEFLAGS) install-data-hook
 install-dvi: install-dvi-am
 
 install-dvi-am:
 
-install-exec-am: install-binSCRIPTS install-dbus_daemon_execPROGRAMS \
+install-exec-am: install-dbus_daemon_execPROGRAMS \
 	install-libexecPROGRAMS
 	@$(NORMAL_INSTALL)
 	$(MAKE) $(AM_MAKEFLAGS) install-exec-hook
@@ -1751,45 +1751,44 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-agentDATA uninstall-binSCRIPTS \
-	uninstall-dbus_daemon_execPROGRAMS uninstall-dbusdataDATA \
-	uninstall-examplesDATA uninstall-initdSCRIPTS \
+uninstall-am: uninstall-agentDATA uninstall-dbus_daemon_execPROGRAMS \
+	uninstall-dbusdataDATA uninstall-examplesDATA \
 	uninstall-legacydbusdataDATA uninstall-libexecPROGRAMS \
+	uninstall-nodist_systemdsysusersDATA \
+	uninstall-nodist_systemdtmpfilesDATA \
 	uninstall-systemdsystemunitDATA uninstall-systemduserunitDATA
 
 .MAKE: install-am install-data-am install-exec-am install-strip
 
 .PHONY: CTAGS GTAGS TAGS all all-am am--depfiles check check-am clean \
 	clean-dbus_daemon_execPROGRAMS clean-generic \
-	clean-libexecPROGRAMS clean-libtool clean-local \
-	clean-noinstPROGRAMS cscopelist-am ctags ctags-am distclean \
-	distclean-compile distclean-generic distclean-libtool \
-	distclean-tags distdir dvi dvi-am html html-am info info-am \
-	install install-agentDATA install-am install-binSCRIPTS \
-	install-data install-data-am install-data-hook \
+	clean-libexecPROGRAMS clean-libtool clean-noinstPROGRAMS \
+	cscopelist-am ctags ctags-am distclean distclean-compile \
+	distclean-generic distclean-libtool distclean-tags distdir dvi \
+	dvi-am html html-am info info-am install install-agentDATA \
+	install-am install-data install-data-am install-data-hook \
 	install-dbus_daemon_execPROGRAMS install-dbusdataDATA \
 	install-dvi install-dvi-am install-examplesDATA install-exec \
 	install-exec-am install-exec-hook install-html install-html-am \
-	install-info install-info-am install-initdSCRIPTS \
-	install-legacydbusdataDATA install-libexecPROGRAMS install-man \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip install-systemdsystemunitDATA \
-	install-systemduserunitDATA installcheck installcheck-am \
-	installdirs maintainer-clean maintainer-clean-generic \
-	mostlyclean mostlyclean-compile mostlyclean-generic \
-	mostlyclean-libtool pdf pdf-am ps ps-am tags tags-am uninstall \
-	uninstall-agentDATA uninstall-am uninstall-binSCRIPTS \
+	install-info install-info-am install-legacydbusdataDATA \
+	install-libexecPROGRAMS install-man \
+	install-nodist_systemdsysusersDATA \
+	install-nodist_systemdtmpfilesDATA install-pdf install-pdf-am \
+	install-ps install-ps-am install-strip \
+	install-systemdsystemunitDATA install-systemduserunitDATA \
+	installcheck installcheck-am installdirs maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	tags tags-am uninstall uninstall-agentDATA uninstall-am \
 	uninstall-dbus_daemon_execPROGRAMS uninstall-dbusdataDATA \
-	uninstall-examplesDATA uninstall-initdSCRIPTS \
-	uninstall-legacydbusdataDATA uninstall-libexecPROGRAMS \
+	uninstall-examplesDATA uninstall-legacydbusdataDATA \
+	uninstall-libexecPROGRAMS uninstall-nodist_systemdsysusersDATA \
+	uninstall-nodist_systemdtmpfilesDATA \
 	uninstall-systemdsystemunitDATA uninstall-systemduserunitDATA
 
 .PRECIOUS: Makefile
 
 	$(NULL)
-
-clean-local:
-	/bin/rm *.bb *.bbg *.da *.gcov || true
 
 install-data-hook:
 	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/session.d
@@ -1800,8 +1799,6 @@ install-data-hook:
 # Install dbus.socket as default implementation of a D-Bus stack.
 # Deliberately not using $(LN_S) here: ln -fs is not universally portable,
 # but neither is systemd, so it's OK to assume here that ln complies with SUS.
-@HAVE_SYSTEMD_TRUE@	$(mkinstalldirs) $(DESTDIR)$(systemdsystemunitdir)/dbus.target.wants
-@HAVE_SYSTEMD_TRUE@	ln -fs ../dbus.socket $(DESTDIR)$(systemdsystemunitdir)/dbus.target.wants/dbus.socket
 # Unconditionally enable D-Bus on systemd installations
 @HAVE_SYSTEMD_TRUE@	$(mkinstalldirs) $(DESTDIR)$(systemdsystemunitdir)/sockets.target.wants
 @HAVE_SYSTEMD_TRUE@	ln -fs ../dbus.socket $(DESTDIR)$(systemdsystemunitdir)/sockets.target.wants/dbus.socket
@@ -1818,6 +1815,108 @@ install-data-hook:
 @DBUS_UNIX_TRUE@		echo "Not installing $(DESTDIR)$(libexecdir)/dbus-daemon-launch-helper binary setuid!"; \
 @DBUS_UNIX_TRUE@		echo "You'll need to manually set permissions to root:$(DBUS_USER) and permissions 4750"; \
 @DBUS_UNIX_TRUE@	fi
+
+# Code coverage
+#
+# Optional:
+#  - CODE_COVERAGE_DIRECTORY: Top-level directory for code coverage reporting.
+#    Multiple directories may be specified, separated by whitespace.
+#    (Default: $(top_builddir))
+#  - CODE_COVERAGE_OUTPUT_FILE: Filename and path for the .info file generated
+#    by lcov for code coverage. (Default:
+#    $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage.info)
+#  - CODE_COVERAGE_OUTPUT_DIRECTORY: Directory for generated code coverage
+#    reports to be created. (Default:
+#    $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage)
+#  - CODE_COVERAGE_BRANCH_COVERAGE: Set to 1 to enforce branch coverage,
+#    set to 0 to disable it and leave empty to stay with the default.
+#    (Default: empty)
+#  - CODE_COVERAGE_LCOV_SHOPTS_DEFAULT: Extra options shared between both lcov
+#    instances. (Default: based on )
+#  - CODE_COVERAGE_LCOV_SHOPTS: Extra options to shared between both lcov
+#    instances. (Default: )
+#  - CODE_COVERAGE_LCOV_OPTIONS_GCOVPATH: --gcov-tool pathtogcov
+#  - CODE_COVERAGE_LCOV_OPTIONS_DEFAULT: Extra options to pass to the
+#    collecting lcov instance. (Default: )
+#  - CODE_COVERAGE_LCOV_OPTIONS: Extra options to pass to the collecting lcov
+#    instance. (Default: )
+#  - CODE_COVERAGE_LCOV_RMOPTS_DEFAULT: Extra options to pass to the filtering
+#    lcov instance. (Default: empty)
+#  - CODE_COVERAGE_LCOV_RMOPTS: Extra options to pass to the filtering lcov
+#    instance. (Default: )
+#  - CODE_COVERAGE_GENHTML_OPTIONS_DEFAULT: Extra options to pass to the
+#    genhtml instance. (Default: based on )
+#  - CODE_COVERAGE_GENHTML_OPTIONS: Extra options to pass to the genhtml
+#    instance. (Default: )
+#  - CODE_COVERAGE_IGNORE_PATTERN: Extra glob pattern of files to ignore
+#
+# The generated report will be titled using the $(PACKAGE_NAME) and
+# $(PACKAGE_VERSION). In order to add the current git hash to the title,
+# use the git-version-gen script, available online.
+# Optional variables
+# run only on top dir
+@CODE_COVERAGE_ENABLED_TRUE@ ifeq ($(abs_builddir), $(abs_top_builddir))
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_DIRECTORY ?= $(top_builddir)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_OUTPUT_FILE ?= $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage.info
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_OUTPUT_DIRECTORY ?= $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage
+
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_BRANCH_COVERAGE ?=
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_SHOPTS_DEFAULT ?= $(if $(CODE_COVERAGE_BRANCH_COVERAGE),--rc lcov_branch_coverage=$(CODE_COVERAGE_BRANCH_COVERAGE))
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_SHOPTS ?= $(CODE_COVERAGE_LCOV_SHOPTS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_OPTIONS_GCOVPATH ?= --gcov-tool "$(GCOV)"
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_OPTIONS_DEFAULT ?= $(CODE_COVERAGE_LCOV_OPTIONS_GCOVPATH)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_OPTIONS ?= $(CODE_COVERAGE_LCOV_OPTIONS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_RMOPTS_DEFAULT ?=
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_RMOPTS ?= $(CODE_COVERAGE_LCOV_RMOPTS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_GENHTML_OPTIONS_DEFAULT ?=$(if $(CODE_COVERAGE_BRANCH_COVERAGE),--rc genhtml_branch_coverage=$(CODE_COVERAGE_BRANCH_COVERAGE))
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_GENHTML_OPTIONS ?= $(CODE_COVERAGE_GENHTML_OPTIONS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_IGNORE_PATTERN ?=
+
+# Use recursive makes in order to ignore errors during check
+@CODE_COVERAGE_ENABLED_TRUE@check-code-coverage:
+@CODE_COVERAGE_ENABLED_TRUE@	-$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -k check
+@CODE_COVERAGE_ENABLED_TRUE@	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) code-coverage-capture
+
+# Capture code coverage data
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-capture: code-coverage-capture-hook
+@CODE_COVERAGE_ENABLED_TRUE@	$(code_coverage_v_lcov_cap)$(LCOV) $(code_coverage_quiet) $(addprefix --directory ,$(CODE_COVERAGE_DIRECTORY)) --capture --output-file "$(CODE_COVERAGE_OUTPUT_FILE).tmp" --test-name "$(call code_coverage_sanitize,$(PACKAGE_NAME)-$(PACKAGE_VERSION))" --no-checksum --compat-libtool $(CODE_COVERAGE_LCOV_SHOPTS) $(CODE_COVERAGE_LCOV_OPTIONS)
+@CODE_COVERAGE_ENABLED_TRUE@	$(code_coverage_v_lcov_ign)$(LCOV) $(code_coverage_quiet) $(addprefix --directory ,$(CODE_COVERAGE_DIRECTORY)) --remove "$(CODE_COVERAGE_OUTPUT_FILE).tmp" "/tmp/*" $(CODE_COVERAGE_IGNORE_PATTERN) --output-file "$(CODE_COVERAGE_OUTPUT_FILE)" $(CODE_COVERAGE_LCOV_SHOPTS) $(CODE_COVERAGE_LCOV_RMOPTS)
+@CODE_COVERAGE_ENABLED_TRUE@	-@rm -f "$(CODE_COVERAGE_OUTPUT_FILE).tmp"
+@CODE_COVERAGE_ENABLED_TRUE@	$(code_coverage_v_genhtml)LANG=C $(GENHTML) $(code_coverage_quiet) $(addprefix --prefix ,$(CODE_COVERAGE_DIRECTORY)) --output-directory "$(CODE_COVERAGE_OUTPUT_DIRECTORY)" --title "$(PACKAGE_NAME)-$(PACKAGE_VERSION) Code Coverage" --legend --show-details "$(CODE_COVERAGE_OUTPUT_FILE)" $(CODE_COVERAGE_GENHTML_OPTIONS)
+@CODE_COVERAGE_ENABLED_TRUE@	@echo "file://$(abs_builddir)/$(CODE_COVERAGE_OUTPUT_DIRECTORY)/index.html"
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-clean:
+@CODE_COVERAGE_ENABLED_TRUE@	-$(LCOV) --directory $(top_builddir) -z
+@CODE_COVERAGE_ENABLED_TRUE@	-rm -rf "$(CODE_COVERAGE_OUTPUT_FILE)" "$(CODE_COVERAGE_OUTPUT_FILE).tmp" "$(CODE_COVERAGE_OUTPUT_DIRECTORY)"
+@CODE_COVERAGE_ENABLED_TRUE@	-find . \( -name "*.gcda" -o -name "*.gcno" -o -name "*.gcov" \) -delete
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-dist-clean:
+@CODE_COVERAGE_ENABLED_TRUE@ else # ifneq ($(abs_builddir), $(abs_top_builddir))
+@CODE_COVERAGE_ENABLED_TRUE@check-code-coverage:
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-capture: code-coverage-capture-hook
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-clean:
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-dist-clean:
+@CODE_COVERAGE_ENABLED_TRUE@ endif # ifeq ($(abs_builddir), $(abs_top_builddir))
+# Use recursive makes in order to ignore errors during check
+@CODE_COVERAGE_ENABLED_FALSE@check-code-coverage:
+@CODE_COVERAGE_ENABLED_FALSE@	@echo "Need to reconfigure with --enable-code-coverage"
+# Capture code coverage data
+@CODE_COVERAGE_ENABLED_FALSE@code-coverage-capture: code-coverage-capture-hook
+@CODE_COVERAGE_ENABLED_FALSE@	@echo "Need to reconfigure with --enable-code-coverage"
+
+@CODE_COVERAGE_ENABLED_FALSE@code-coverage-clean:
+
+@CODE_COVERAGE_ENABLED_FALSE@code-coverage-dist-clean:
+
+# Hook rule executed before code-coverage-capture, overridable by the user
+code-coverage-capture-hook:
+
+.PHONY: check-code-coverage code-coverage-capture code-coverage-dist-clean code-coverage-clean code-coverage-capture-hook
+
+# Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

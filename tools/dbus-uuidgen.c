@@ -27,8 +27,11 @@
 #include <dbus/dbus-uuidgen.h>
 #include <dbus/dbus.h>
 
+static void usage (const char *name, int ecode) _DBUS_GNUC_NORETURN;
+
 static void
-usage (char *name, int ecode)
+usage (const char *name,
+       int ecode)
 {
   if (name == NULL)
     name = "dbus-uuidgen";
@@ -36,6 +39,8 @@ usage (char *name, int ecode)
   fprintf (stderr, "Usage: %s [--ensure[=FILENAME]] [--get[=FILENAME]]\n", name);
   exit (ecode);
 }
+
+static void version (void) _DBUS_GNUC_NORETURN;
 
 static void
 version (void)

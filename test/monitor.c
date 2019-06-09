@@ -48,8 +48,10 @@ typedef struct {
     DBusConnection *monitor;
     DBusConnection *sender;
     DBusConnection *recipient;
+    gboolean recipient_enqueue_filter_added;
 
     GQueue monitored;
+    GQueue received;
 
     const char *monitor_name;
     const char *sender_name;
@@ -371,7 +373,7 @@ monitor_filter (DBusConnection *connection,
 }
 
 static DBusHandlerResult
-recipient_filter (DBusConnection *connection,
+recipient_check_filter (DBusConnection *connection,
     DBusMessage *message,
     void *user_data)
 {
@@ -380,6 +382,27 @@ recipient_filter (DBusConnection *connection,
   g_assert_cmpstr (dbus_message_get_interface (message), !=,
       "com.example.CannotReceive");
 
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
+static DBusHandlerResult
+recipient_enqueue_filter (DBusConnection *connection,
+    DBusMessage *message,
+    void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+        "NameAcquired") ||
+      dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+        "NameLost") ||
+      dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+        "NameOwnerChanged"))
+    {
+      return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    }
+
+  g_queue_push_tail (&f->received, dbus_message_ref (message));
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
@@ -450,7 +473,7 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
 
   f->address = test_get_dbus_daemon (f->config ? f->config->config_file : NULL,
-      TEST_USER_ME, &f->daemon_pid);
+      TEST_USER_ME, NULL, &f->daemon_pid);
 
   if (f->address == NULL)
     return;
@@ -465,7 +488,8 @@ setup (Fixture *f,
   if (!dbus_connection_add_filter (f->monitor, monitor_filter, f, NULL))
     g_error ("OOM");
 
-  if (!dbus_connection_add_filter (f->recipient, recipient_filter, f, NULL))
+  if (!dbus_connection_add_filter (f->recipient, recipient_check_filter,
+        f, NULL))
     g_error ("OOM");
 }
 
@@ -601,6 +625,49 @@ test_invalid (Fixture *f,
   g_assert_cmpstr (dbus_message_get_error_name (m), ==,
       DBUS_ERROR_INVALID_ARGS);
 
+  /* Try to become a monitor but use the wrong object path - not allowed
+   * (security hardening against inappropriate XML policy rules) */
+
+  dbus_pending_call_unref (pc);
+  dbus_message_unref (m);
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      "/", DBUS_INTERFACE_MONITORING, "BecomeMonitor");
+
+  if (m == NULL)
+    g_error ("OOM");
+
+  dbus_message_iter_init_append (m, &appender);
+
+  if (!dbus_message_iter_open_container (&appender, DBUS_TYPE_ARRAY, "s",
+        &array_appender))
+    g_error ("OOM");
+
+  if (!dbus_message_iter_close_container (&appender, &array_appender) ||
+      !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
+    g_error ("OOM");
+
+  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
+        DBUS_TIMEOUT_USE_DEFAULT) ||
+      pc == NULL)
+    g_error ("OOM");
+
+  dbus_message_unref (m);
+  m = NULL;
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &m);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+        &m, NULL))
+    g_error ("OOM");
+
+  while (m == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+      DBUS_ERROR_UNKNOWN_INTERFACE);
+
   /* Try to become a monitor but specify a bad match rule -
    * also not allowed */
 
@@ -677,6 +744,9 @@ test_invalid (Fixture *f,
 
   while (m == NULL)
     test_main_context_iterate (f->ctx, TRUE);
+
+  if (dbus_set_error_from_message (&f->e, m))
+    g_error ("%s: %s", f->e.name, f->e.message);
 
   ok = dbus_message_get_args (m, &f->e,
       DBUS_TYPE_STRING, &s,
@@ -924,6 +994,11 @@ test_forbidden_broadcast (Fixture *f,
   dbus_bus_add_match (f->recipient, "type='signal'", &f->e);
   test_assert_no_error (&f->e);
 
+  if (!dbus_connection_add_filter (f->recipient, recipient_enqueue_filter,
+        f, NULL))
+    g_error ("OOM");
+  f->recipient_enqueue_filter_added = TRUE;
+
   become_monitor (f, NULL);
 
   m = dbus_message_new_signal ("/foo", "com.example.CannotSend",
@@ -941,7 +1016,28 @@ test_forbidden_broadcast (Fixture *f,
   dbus_connection_send (f->sender, m, NULL);
   dbus_message_unref (m);
 
-  while (g_queue_get_length (&f->monitored) < 6)
+  m = dbus_message_new_signal ("/foo", "com.example.CannotBroadcast",
+      "CannotBroadcast");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+
+  m = dbus_message_new_signal ("/foo", "com.example.CannotBroadcast2",
+      "CannotBroadcast2");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+
+  /* these two will go through: we use them as an indirect way to assert that
+   * the recipient has not received anything earlier */
+  m = dbus_message_new_signal ("/foo", "com.example.CannotUnicast",
+      "CannotUnicast");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+  m = dbus_message_new_signal ("/foo", "com.example.CannotUnicast2",
+      "CannotUnicast2");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+
+  while (g_queue_get_length (&f->monitored) < 12)
     test_main_context_iterate (f->ctx, TRUE);
 
   m = g_queue_pop_head (&f->monitored);
@@ -975,6 +1071,55 @@ test_forbidden_broadcast (Fixture *f,
   dbus_message_unref (m);
 
   m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotBroadcast",
+      "CannotBroadcast", "", NULL);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_error_reply (m, DBUS_SERVICE_DBUS, f->sender_name,
+      DBUS_ERROR_ACCESS_DENIED);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotBroadcast2",
+      "CannotBroadcast2", "", NULL);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_error_reply (m, DBUS_SERVICE_DBUS, f->sender_name,
+      DBUS_ERROR_ACCESS_DENIED);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotUnicast",
+      "CannotUnicast", "", NULL);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotUnicast2",
+      "CannotUnicast2", "", NULL);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  g_assert (m == NULL);
+
+  /* the intended recipient only received the ones that were on the interface
+   * where broadcasts are allowed */
+
+  while (g_queue_get_length (&f->received) < 2)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = g_queue_pop_head (&f->received);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotUnicast",
+      "CannotUnicast", "", NULL);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->received);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotUnicast2",
+      "CannotUnicast2", "", NULL);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->received);
   g_assert (m == NULL);
 }
 
@@ -1038,6 +1183,11 @@ test_forbidden (Fixture *f,
   if (f->address == NULL)
     return;
 
+  if (!dbus_connection_add_filter (f->recipient, recipient_enqueue_filter,
+        f, NULL))
+    g_error ("OOM");
+  f->recipient_enqueue_filter_added = TRUE;
+
   become_monitor (f, NULL);
 
   m = dbus_message_new_signal ("/foo", "com.example.CannotSend",
@@ -1061,7 +1211,36 @@ test_forbidden (Fixture *f,
   dbus_connection_send (f->sender, m, NULL);
   dbus_message_unref (m);
 
-  while (g_queue_get_length (&f->monitored) < 6)
+  m = dbus_message_new_signal ("/foo", "com.example.CannotUnicast",
+      "CannotUnicast");
+  if (!dbus_message_set_destination (m, f->recipient_name))
+    g_error ("OOM");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+
+  m = dbus_message_new_signal ("/foo", "com.example.CannotUnicast2",
+      "CannotUnicast2");
+  if (!dbus_message_set_destination (m, f->recipient_name))
+    g_error ("OOM");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+
+  /* these two will go through: we use them as an indirect way to assert that
+   * the recipient has not received anything earlier */
+  m = dbus_message_new_signal ("/foo", "com.example.CannotBroadcast",
+      "CannotBroadcast");
+  if (!dbus_message_set_destination (m, f->recipient_name))
+    g_error ("OOM");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+  m = dbus_message_new_signal ("/foo", "com.example.CannotBroadcast2",
+      "CannotBroadcast2");
+  if (!dbus_message_set_destination (m, f->recipient_name))
+    g_error ("OOM");
+  dbus_connection_send (f->sender, m, NULL);
+  dbus_message_unref (m);
+
+  while (g_queue_get_length (&f->monitored) < 12)
     test_main_context_iterate (f->ctx, TRUE);
 
   m = g_queue_pop_head (&f->monitored);
@@ -1095,6 +1274,55 @@ test_forbidden (Fixture *f,
   dbus_message_unref (m);
 
   m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotUnicast",
+      "CannotUnicast", "", f->recipient_name);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_error_reply (m, DBUS_SERVICE_DBUS, f->sender_name,
+      DBUS_ERROR_ACCESS_DENIED);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotUnicast2",
+      "CannotUnicast2", "", f->recipient_name);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_error_reply (m, DBUS_SERVICE_DBUS, f->sender_name,
+      DBUS_ERROR_ACCESS_DENIED);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotBroadcast",
+      "CannotBroadcast", "", f->recipient_name);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotBroadcast2",
+      "CannotBroadcast2", "", f->recipient_name);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->monitored);
+  g_assert (m == NULL);
+
+  /* the intended recipient only received the ones that were on the interface
+   * where unicasts are allowed */
+
+  while (g_queue_get_length (&f->received) < 2)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = g_queue_pop_head (&f->received);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotBroadcast",
+      "CannotBroadcast", "", f->recipient_name);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->received);
+  assert_signal (m, f->sender_name, "/foo", "com.example.CannotBroadcast2",
+      "CannotBroadcast2", "", f->recipient_name);
+  dbus_message_unref (m);
+
+  m = g_queue_pop_head (&f->received);
   g_assert (m == NULL);
 }
 
@@ -1744,7 +1972,10 @@ teardown (Fixture *f,
 
   if (f->recipient != NULL)
     {
-      dbus_connection_remove_filter (f->recipient, recipient_filter, f);
+      dbus_connection_remove_filter (f->recipient, recipient_check_filter, f);
+      if (f->recipient_enqueue_filter_added)
+        dbus_connection_remove_filter (f->recipient, recipient_enqueue_filter,
+            f);
       dbus_connection_close (f->recipient);
       dbus_connection_unref (f->recipient);
       f->recipient = NULL;
@@ -1766,13 +1997,20 @@ teardown (Fixture *f,
       f->activated = NULL;
     }
 
-  test_kill_pid (f->daemon_pid);
-  g_spawn_close_pid (f->daemon_pid);
+  if (f->daemon_pid != 0)
+    {
+      test_kill_pid (f->daemon_pid);
+      g_spawn_close_pid (f->daemon_pid);
+      f->daemon_pid = 0;
+    }
 
   test_main_context_unref (f->ctx);
 
   g_queue_foreach (&f->monitored, (GFunc) dbus_message_unref, NULL);
   g_queue_clear (&f->monitored);
+
+  g_queue_foreach (&f->received, (GFunc) dbus_message_unref, NULL);
+  g_queue_clear (&f->received);
 
   g_free (f->address);
 }

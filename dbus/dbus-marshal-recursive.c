@@ -224,7 +224,7 @@ array_reader_get_array_len (const DBusTypeReader *reader)
 
   _dbus_assert (_DBUS_ALIGN_VALUE (len_pos, 4) == (unsigned) len_pos);
   array_len = _dbus_unpack_uint32 (reader->byte_order,
-                                   _dbus_string_get_const_data_len (reader->value_str, len_pos, 4));
+                                   _dbus_string_get_const_udata_len (reader->value_str, len_pos, 4));
 
 #if RECURSIVE_MARSHAL_READ_TRACE
   _dbus_verbose ("   reader %p len_pos %d array len %u len_offset %d\n",
@@ -347,7 +347,7 @@ _dbus_type_signature_next (const char       *type_str,
   _dbus_assert (type_str != NULL);
   _dbus_assert (type_pos != NULL);
   
-  start = type_str;
+  start = (const unsigned char *)type_str;
   p = start + *type_pos;
 
   _dbus_assert (*p != DBUS_STRUCT_END_CHAR);
@@ -855,9 +855,9 @@ _dbus_type_reader_read_raw (const DBusTypeReader  *reader,
 {
   _dbus_assert (!reader->klass->types_only);
 
-  *value_location = _dbus_string_get_const_data_len (reader->value_str,
-                                                     reader->value_pos,
-                                                     0);
+  *value_location = _dbus_string_get_const_udata_len (reader->value_str,
+                                                      reader->value_pos,
+                                                      0);
 }
 
 /**
@@ -989,8 +989,8 @@ void
 _dbus_type_reader_recurse (DBusTypeReader *reader,
                            DBusTypeReader *sub)
 {
-  const DBusTypeReaderClass *klass;
   int t;
+  const DBusTypeReaderClass *klass = NULL;
 
   t = _dbus_first_type_in_signature (reader->type_str, reader->type_pos);
 
@@ -1024,12 +1024,13 @@ _dbus_type_reader_recurse (DBusTypeReader *reader,
       _dbus_verbose ("recursing into type %s\n", _dbus_type_to_string (t));
 #ifndef DBUS_DISABLE_CHECKS
       if (t == DBUS_TYPE_INVALID)
-        _dbus_warn_check_failed ("You can't recurse into an empty array or off the end of a message body\n");
+        _dbus_warn_check_failed ("You can't recurse into an empty array or off the end of a message body");
 #endif /* DBUS_DISABLE_CHECKS */
 
       _dbus_assert_not_reached ("don't yet handle recursing into this type");
     }
 
+  _dbus_assert (klass != NULL);
   _dbus_assert (klass == all_reader_classes[klass->id]);
 
   (* klass->recurse) (sub, reader);
@@ -1665,13 +1666,13 @@ writer_recurse_init_and_check (DBusTypeWriter *writer,
         {
           if (expected != DBUS_TYPE_INVALID)
             _dbus_warn_check_failed ("Writing an element of type %s, but the expected type here is %s\n"
-                                     "The overall signature expected here was '%s' and we are on byte %d of that signature.\n",
+                                     "The overall signature expected here was '%s' and we are on byte %d of that signature.",
                                      _dbus_type_to_string (sub->container_type),
                                      _dbus_type_to_string (expected),
                                      _dbus_string_get_const_data (writer->type_str), writer->type_pos);
           else
             _dbus_warn_check_failed ("Writing an element of type %s, but no value is expected here\n"
-                                     "The overall signature expected here was '%s' and we are on byte %d of that signature.\n",
+                                     "The overall signature expected here was '%s' and we are on byte %d of that signature.",
                                      _dbus_type_to_string (sub->container_type),
                                      _dbus_string_get_const_data (writer->type_str), writer->type_pos);
           
@@ -1731,12 +1732,12 @@ write_or_verify_typecode (DBusTypeWriter *writer,
           {
             if (expected != DBUS_TYPE_INVALID)
               _dbus_warn_check_failed ("Array or variant type requires that type %s be written, but %s was written.\n"
-                                       "The overall signature expected here was '%s' and we are on byte %d of that signature.\n",
+                                       "The overall signature expected here was '%s' and we are on byte %d of that signature.",
                                        _dbus_type_to_string (expected), _dbus_type_to_string (typecode),
                                        _dbus_string_get_const_data (writer->type_str), writer->type_pos);
             else
               _dbus_warn_check_failed ("Array or variant type wasn't expecting any more values to be written into it, but a value %s was written.\n"
-                                       "The overall signature expected here was '%s' and we are on byte %d of that signature.\n",
+                                       "The overall signature expected here was '%s' and we are on byte %d of that signature.",
                                        _dbus_type_to_string (typecode),
                                        _dbus_string_get_const_data (writer->type_str), writer->type_pos);
             _dbus_assert_not_reached ("bad type inserted somewhere inside an array or variant");
@@ -1829,7 +1830,7 @@ writer_recurse_array (DBusTypeWriter   *writer,
                                          writer->type_str,
                                          writer->u.array.element_type_pos + 1))
         {
-          _dbus_warn_check_failed ("Writing an array of '%s' but this is incompatible with the expected type of elements in the parent array\n",
+          _dbus_warn_check_failed ("Writing an array of '%s' but this is incompatible with the expected type of elements in the parent array",
                                    _dbus_string_get_const_data_len (contained_type,
                                                                     contained_type_start,
                                                                     contained_type_len));
@@ -1934,7 +1935,7 @@ writer_recurse_array (DBusTypeWriter   *writer,
           _dbus_assert (_DBUS_ALIGN_VALUE (sub->u.array.len_pos, 4) ==
                         (unsigned) sub->u.array.len_pos);
           len = _dbus_unpack_uint32 (sub->byte_order,
-                                     _dbus_string_get_const_data_len (sub->value_str,
+                                     _dbus_string_get_const_udata_len (sub->value_str,
                                                                       sub->u.array.len_pos,
                                                                       4));
 
@@ -2579,7 +2580,7 @@ writer_write_reader_helper (DBusTypeWriter       *writer,
                             (unsigned) fixup.len_pos_in_reader);
 
               old_len = _dbus_unpack_uint32 (reader->byte_order,
-                                             _dbus_string_get_const_data_len (reader->value_str,
+                                             _dbus_string_get_const_udata_len (reader->value_str,
                                                                               fixup.len_pos_in_reader, 4));
 
               if (old_len != fixup.new_len && !append_fixup (fixups, &fixup))

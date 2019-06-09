@@ -29,6 +29,8 @@
 #include <stdlib.h>
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
+static void die (const char *failure) _DBUS_GNUC_NORETURN;
+
 static void
 die (const char *failure)
 {
@@ -44,7 +46,7 @@ check_memleaks (void)
   printf ("%s: checking for memleaks\n", "test-dbus");
   if (_dbus_get_malloc_blocks_outstanding () != 0)
     {
-      _dbus_warn ("%d dbus_malloc blocks were not freed\n",
+      _dbus_warn ("%d dbus_malloc blocks were not freed",
                   _dbus_get_malloc_blocks_outstanding ());
       die ("memleaks");
     }

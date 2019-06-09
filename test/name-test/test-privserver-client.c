@@ -1,6 +1,9 @@
 #include <config.h>
 #include "../test-utils.h"
 
+static void die (const char *message,
+                 ...) _DBUS_GNUC_NORETURN _DBUS_GNUC_PRINTF (1, 2);
+
 static void
 die (const char *message, ...)
 {
@@ -100,9 +103,13 @@ open_shutdown_private_connection (dbus_bool_t use_guid)
   if (!(reply = dbus_connection_send_with_reply_and_block (session, msg, -1, &error)))
     die ("couldn't send message: %s\n", error.message);
   dbus_message_unref (msg);
+
+  if (dbus_set_error_from_message (&error, reply))
+    die ("%s: %s", error.name, error.message);
+
   if (!dbus_message_get_args (reply, &error, DBUS_TYPE_STRING, &addr, DBUS_TYPE_INVALID))
     die ("couldn't parse message replym\n");
-  printf ("got private temp address %s\n", addr);
+  printf ("# got private temp address %s\n", addr);
   addr = strdup (addr);
   if (!use_guid)
     {
@@ -145,24 +152,32 @@ open_shutdown_private_connection (dbus_bool_t use_guid)
   _dbus_loop_unref (loop);
 }
 
+/* This test outputs TAP syntax: http://testanything.org/ */
 int
 main (int argc, char *argv[])
 {
-  open_shutdown_private_connection (TRUE);
-
-  dbus_shutdown ();
+  int test_num = 0;
 
   open_shutdown_private_connection (TRUE);
 
   dbus_shutdown ();
+  printf ("ok %d\n", ++test_num);
+
+  open_shutdown_private_connection (TRUE);
+
+  dbus_shutdown ();
+  printf ("ok %d\n", ++test_num);
 
   open_shutdown_private_connection (FALSE);
 
   dbus_shutdown ();
+  printf ("ok %d\n", ++test_num);
 
   open_shutdown_private_connection (FALSE);
 
   dbus_shutdown ();
+  printf ("ok %d\n", ++test_num);
 
+  printf ("1..%d\n", test_num);
   return 0;
 }

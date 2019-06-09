@@ -460,7 +460,7 @@ _dbus_sha_final (DBusSHAContext   *context,
 
   sha_finish (context, digest);
 
-  if (!_dbus_string_append_len (results, digest, 20))
+  if (!_dbus_string_append_len (results, (const char *) digest, 20))
     return FALSE;
 
   /* some kind of security paranoia, though it seems pointless
@@ -524,7 +524,7 @@ check_sha_binary (const unsigned char *input,
   DBusString expected_str;
   DBusString results;
 
-  _dbus_string_init_const_len (&input_str, input, input_len);
+  _dbus_string_init_const_len (&input_str, (const char *) input, input_len);
   _dbus_string_init_const (&expected_str, expected);
 
   if (!_dbus_string_init (&results))
@@ -535,7 +535,7 @@ check_sha_binary (const unsigned char *input,
 
   if (!_dbus_string_equal (&expected_str, &results))
     {
-      _dbus_warn ("Expected hash %s got %s for SHA-1 sum\n",
+      _dbus_warn ("Expected hash %s got %s for SHA-1 sum",
                   expected,
                   _dbus_string_get_const_data (&results));
       _dbus_string_free (&results);
@@ -550,7 +550,7 @@ static dbus_bool_t
 check_sha_str (const char *input,
                const char *expected)
 {
-  return check_sha_binary (input, strlen (input), expected);
+  return check_sha_binary ((unsigned char *) input, strlen (input), expected);
 }
 
 static dbus_bool_t
@@ -693,7 +693,9 @@ get_next_expected_result (DBusString *results,
           i = 0;
           while (i < _dbus_string_get_length (result))
             {
-              switch (_dbus_string_get_byte (result, i))
+              unsigned char c = _dbus_string_get_byte (result, i);
+
+              switch (c)
                 {
                 case 'A':
                   _dbus_string_set_byte (result, i, 'a');
@@ -718,6 +720,9 @@ get_next_expected_result (DBusString *results,
                   _dbus_string_delete (result, i, 1);
                   --i; /* to offset ++i below */
                   break;
+                default:
+                  if ((c < '0' || c > '9') && (c < 'a' || c > 'f'))
+                    _dbus_assert_not_reached ("invalid SHA-1 test script");
                 }
 
               ++i;

@@ -71,7 +71,7 @@ static security_id_t bus_sid = SECSID_WILD;
 static pthread_t avc_notify_thread;
 
 /* Prototypes for AVC callback functions.  */
-static void log_callback (const char *fmt, ...);
+static void log_callback (const char *fmt, ...) _DBUS_GNUC_PRINTF (1, 2);
 static void log_audit_callback (void *data, security_class_t class, char *buf, size_t bufleft);
 static void *avc_create_thread (void (*run) (void));
 static void avc_stop_thread (void *thread);
@@ -205,7 +205,7 @@ avc_create_thread (void (*run) (void))
   rc = pthread_create (&avc_notify_thread, NULL, (void *(*) (void *)) run, NULL);
   if (rc != 0)
     {
-      _dbus_warn ("Failed to start AVC thread: %s\n", _dbus_strerror (rc));
+      _dbus_warn ("Failed to start AVC thread: %s", _dbus_strerror (rc));
       exit (1);
     }
   return &avc_notify_thread;
@@ -227,7 +227,7 @@ avc_alloc_lock (void)
   avc_mutex = dbus_new (pthread_mutex_t, 1);
   if (avc_mutex == NULL)
     {
-      _dbus_warn ("Could not create mutex: %s\n", _dbus_strerror (errno));
+      _dbus_warn ("Could not create mutex: %s", _dbus_strerror (errno));
       exit (1);
     }
   pthread_mutex_init (avc_mutex, NULL);
@@ -272,6 +272,19 @@ bus_selinux_enabled (void)
 #endif /* HAVE_SELINUX */
 }
 
+BusSELinuxID*
+bus_selinux_get_self (void)
+{
+#ifdef HAVE_SELINUX
+  if(bus_selinux_enabled ())
+    return BUS_SID_FROM_SELINUX (bus_sid);
+  else
+    return NULL;
+#else
+  return NULL;
+#endif /* HAVE_SELINUX */
+}
+
 /**
  * Do early initialization; determine whether SELinux is enabled.
  */
@@ -286,7 +299,7 @@ bus_selinux_pre_init (void)
   r = is_selinux_enabled ();
   if (r < 0)
     {
-      _dbus_warn ("Could not tell if SELinux is enabled: %s\n",
+      _dbus_warn ("Could not tell if SELinux is enabled: %s",
                   _dbus_strerror (errno));
       return FALSE;
     }
@@ -339,7 +352,7 @@ bus_selinux_full_init (void)
 
   if (selinux_set_mapping (dbus_map) < 0)
     {
-      _dbus_warn ("Failed to set up security class mapping (selinux_set_mapping():%s).\n",
+      _dbus_warn ("Failed to set up security class mapping (selinux_set_mapping():%s).",
                    strerror (errno));
       return FALSE; 
     }
@@ -347,7 +360,7 @@ bus_selinux_full_init (void)
   avc_entry_ref_init (&aeref);
   if (avc_init ("avc", &mem_cb, &log_cb, &thread_cb, &lock_cb) < 0)
     {
-      _dbus_warn ("Failed to start Access Vector Cache (AVC).\n");
+      _dbus_warn ("Failed to start Access Vector Cache (AVC).");
       return FALSE;
     }
   else
@@ -358,7 +371,7 @@ bus_selinux_full_init (void)
   if (avc_add_callback (policy_reload_callback, AVC_CALLBACK_RESET,
                        NULL, NULL, 0, 0) < 0)
     {
-      _dbus_warn ("Failed to add policy reload callback: %s\n",
+      _dbus_warn ("Failed to add policy reload callback: %s",
                   _dbus_strerror (errno));
       avc_destroy ();
       return FALSE;
@@ -386,37 +399,6 @@ bus_selinux_full_init (void)
   
 #endif /* HAVE_SELINUX */
   return TRUE;
-}
-
-/**
- * Decrement SID reference count.
- * 
- * @param sid the SID to decrement
- */
-void
-bus_selinux_id_unref (BusSELinuxID *sid)
-{
-#ifdef HAVE_SELINUX
-  if (!selinux_enabled)
-    return;
-
-  _dbus_assert (sid != NULL);
-  
-  sidput (SELINUX_SID_FROM_BUS (sid));
-#endif /* HAVE_SELINUX */
-}
-
-void
-bus_selinux_id_ref (BusSELinuxID *sid)
-{
-#ifdef HAVE_SELINUX
-  if (!selinux_enabled)
-    return;
-
-  _dbus_assert (sid != NULL);
-  
-  sidget (SELINUX_SID_FROM_BUS (sid));
-#endif /* HAVE_SELINUX */
 }
 
 /**
@@ -450,7 +432,7 @@ bus_selinux_check (BusSELinuxID        *sender_sid,
   if (avc_has_perm (SELINUX_SID_FROM_BUS (sender_sid),
                     override_sid ?
                     SELINUX_SID_FROM_BUS (override_sid) :
-                    SELINUX_SID_FROM_BUS (bus_sid), 
+                    bus_sid,
                     target_class, requested, &aeref, auxdata) < 0)
     {
     switch (errno)
@@ -553,6 +535,7 @@ bus_selinux_allows_send (DBusConnection     *sender,
 			 const char         *member,
 			 const char         *error_name,
 			 const char         *destination,
+			 BusActivationEntry *activation_entry,
 			 DBusError          *error)
 {
 #ifdef HAVE_SELINUX
@@ -564,6 +547,10 @@ bus_selinux_allows_send (DBusConnection     *sender,
   dbus_bool_t string_alloced;
 
   if (!selinux_enabled)
+    return TRUE;
+
+  /* We do not mediate activation attempts yet. */
+  if (activation_entry)
     return TRUE;
 
   if (!sender || !dbus_connection_get_unix_process_id (sender, &spid))
@@ -633,7 +620,8 @@ bus_selinux_allows_send (DBusConnection     *sender,
     }
 
   sender_sid = bus_connection_get_selinux_id (sender);
-  /* A NULL proposed_recipient means the bus itself. */
+
+  /* A NULL proposed_recipient with no activation entry means the bus itself. */
   if (proposed_recipient)
     recipient_sid = bus_connection_get_selinux_id (proposed_recipient);
   else
@@ -769,7 +757,7 @@ bus_selinux_init_connection_id (DBusConnection *connection,
                         "Error getting SID from context \"%s\": %s\n",
 			con, _dbus_strerror (errno));
       
-      _dbus_warn ("Error getting SID from context \"%s\": %s\n",
+      _dbus_warn ("Error getting SID from context \"%s\": %s",
 		  con, _dbus_strerror (errno));
       
       freecon (con);
@@ -780,21 +768,6 @@ bus_selinux_init_connection_id (DBusConnection *connection,
   return BUS_SID_FROM_SELINUX (sid);
 #else
   return NULL;
-#endif /* HAVE_SELINUX */
-}
-
-
-/**
- * Function for freeing hash table data.  These SIDs
- * should no longer be referenced.
- */
-static void
-bus_selinux_id_table_free_value (BusSELinuxID *sid)
-{
-#ifdef HAVE_SELINUX
-  /* NULL sometimes due to how DBusHashTable works */
-  if (sid)
-    bus_selinux_id_unref (sid);
 #endif /* HAVE_SELINUX */
 }
 
@@ -809,8 +782,7 @@ DBusHashTable*
 bus_selinux_id_table_new (void)
 {
   return _dbus_hash_table_new (DBUS_HASH_STRING,
-                               (DBusFreeFunction) dbus_free,
-                               (DBusFreeFunction) bus_selinux_id_table_free_value);
+                               (DBusFreeFunction) dbus_free, NULL);
 }
 
 /** 
@@ -850,7 +822,7 @@ bus_selinux_id_table_insert (DBusHashTable *service_table,
           return FALSE;
 	}
 
-      _dbus_warn ("Error getting SID from context \"%s\": %s\n",
+      _dbus_warn ("Error getting SID from context \"%s\": %s",
 		  (char *) service_context,
                   _dbus_strerror (errno));
       goto out;
@@ -872,9 +844,6 @@ bus_selinux_id_table_insert (DBusHashTable *service_table,
   retval = TRUE;
   
  out:
-  if (sid != SECSID_WILD)
-    sidput (sid);
-
   if (key)
     dbus_free (key);
 
@@ -1009,7 +978,6 @@ bus_selinux_shutdown (void)
 
   if (bus_sid != SECSID_WILD)
     {
-      sidput (bus_sid);
       bus_sid = SECSID_WILD;
 
       bus_avc_print_stats ();

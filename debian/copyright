@@ -1,6 +1,6 @@
-Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: D-Bus
-Source: http://dbus.freedesktop.org/releases/dbus/
+Source: https://dbus.freedesktop.org/releases/dbus/
 Comment:
  The effective license of the majority of the package, including the
  shared library, is "GPL-2+ or AFL-2.1". Certain utilities are
@@ -24,8 +24,11 @@ Copyright:
  © 2008 Colin Walters
  © 2009 Klaralvdalens Datakonsult AB, a KDAB Group company
  © 2011-2012 Nokia Corporation
- © 2012-2017 Collabora Ltd.
+ © 2012-2018 Collabora Ltd.
  © 2013 Intel Corporation
+ © 2017 Laurent Bigonville
+ © 2018 KPIT Technologies Ltd.
+ © 2018 Manish Narang
  "modified code from libassuan, (C) FSF"
 License: GPL-2+ or AFL-2.1
 
@@ -49,7 +52,9 @@ License: GPL-2+
 Files:
  dbus/dbus-server-launchd.?
  doc/dbus-update-activation-environment.1.xml.in
+ test/test-apparmor-activation.sh
  test/corrupt.c
+ test/data/dbus-installed-tests.aaprofile.in
  test/dbus-daemon-eavesdrop.c
  test/dbus-daemon.c
  test/fdpass.c
@@ -66,14 +71,13 @@ Files:
  test/uid-permissions.c
  test/test-utils-glib.?
  tools/dbus-update-activation-environment.c
- tools/lcov.am
 Copyright:
  © 2007 Tanner Lovelace
  © 2008-2009 Benjamin Reed
  © 2008 Colin Walters
  © 2009 Jonas Bähr
  © 2008-2012 Nokia Corporation
- © 2008-2017 Collabora Ltd
+ © 2008-2018 Collabora Ltd
  © 2013 Intel Corporation
  © 2017 Shin-ichi MORITA
 License: Expat

@@ -1,9 +1,13 @@
 dbusdatadir=$(datadir)/dbus-1
 legacydbusdatadir=$(sysconfdir)/dbus-1
 dbus_daemon_execdir = $(DBUS_DAEMONDIR)
+# Always lib, even if ${libdir} is lib64 or lib/x86_64-linux-gnu
+systemdtmpfilesdir = $(prefix)/lib/tmpfiles.d
+systemdsysusersdir = $(prefix)/lib/sysusers.d
 
 DBUS_BUS_LIBS = \
-	$(XML_LIBS) \
+	$(CODE_COVERAGE_LIBS) \
+	$(EXPAT_LIBS) \
 	$(SELINUX_LIBS) \
 	$(APPARMOR_LIBS) \
 	$(THREAD_LIBS) \
@@ -12,15 +16,17 @@ DBUS_BUS_LIBS = \
 	$(NULL)
 
 DBUS_LAUNCHER_LIBS = \
-	$(XML_LIBS) \
+	$(CODE_COVERAGE_LIBS) \
+	$(EXPAT_LIBS) \
 	$(THREAD_LIBS) \
 	$(NETWORK_libs) \
 	$(NULL)
 
 AM_CPPFLAGS = \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	-I$(top_srcdir) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
-	$(XML_CFLAGS) \
+	$(EXPAT_CFLAGS) \
 	$(APPARMOR_CFLAGS) \
 	-DDBUS_SYSTEM_CONFIG_FILE=\""$(dbusdatadir)/system.conf"\" \
 	-DDBUS_COMPILATION \
@@ -29,9 +35,13 @@ AM_CPPFLAGS = \
 # if assertions are enabled, improve backtraces
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
+
 EFENCE=
 
-CONFIG_IN_FILES=				\
+EXTRA_DIST =					\
 	session.conf.in				\
 	system.conf.in				\
 	legacy-config/session.conf.in		\
@@ -60,8 +70,6 @@ agentdir=$(LAUNCHD_AGENT_DIR)
 agent_DATA=org.freedesktop.dbus-session.plist
 endif
 
-XML_SOURCES=config-loader-expat.c
-
 if DBUS_BUS_ENABLE_KQUEUE
 DIR_WATCH_SOURCE=dir-watch-kqueue.c
 else
@@ -82,6 +90,7 @@ BUS_SOURCES=					\
 	audit.h					\
 	bus.c					\
 	bus.h					\
+	config-loader-expat.c			\
 	config-parser.c				\
 	config-parser.h				\
 	config-parser-common.c			\
@@ -112,7 +121,7 @@ BUS_SOURCES=					\
 	test.h					\
 	utils.c					\
 	utils.h					\
-	$(XML_SOURCES)
+	$(NULL)
 
 dbus_daemon_SOURCES=				\
 	$(BUS_SOURCES)				\
@@ -125,7 +134,7 @@ dbus_daemon_LDADD=					\
 	$(DBUS_BUS_LIBS)
 
 LAUNCH_HELPER_SOURCES=				\
-	$(XML_SOURCES)				\
+	config-loader-expat.c			\
 	config-parser-common.c			\
 	config-parser-common.h			\
 	config-parser-trivial.c			\
@@ -208,7 +217,7 @@ endif DBUS_UNIX
 endif DBUS_ENABLE_EMBEDDED_TESTS
 
 test_bus_system_SOURCES=			\
-	$(XML_SOURCES)				\
+	config-loader-expat.c			\
 	config-parser-common.c			\
 	config-parser-common.h			\
 	config-parser-trivial.c			\
@@ -233,10 +242,6 @@ test_bus_LDADD = \
 	$(DBUS_BUS_LIBS) \
 	$(NULL)
 
-## mop up the gcov files
-clean-local:
-	/bin/rm *.bb *.bbg *.da *.gcov || true
-
 install-data-hook:
 	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/session.d
 	$(mkinstalldirs) $(DESTDIR)$(dbusdatadir)/services
@@ -249,8 +254,6 @@ if HAVE_SYSTEMD
 # Install dbus.socket as default implementation of a D-Bus stack.
 # Deliberately not using $(LN_S) here: ln -fs is not universally portable,
 # but neither is systemd, so it's OK to assume here that ln complies with SUS.
-	$(mkinstalldirs) $(DESTDIR)$(systemdsystemunitdir)/dbus.target.wants
-	ln -fs ../dbus.socket $(DESTDIR)$(systemdsystemunitdir)/dbus.target.wants/dbus.socket
 # Unconditionally enable D-Bus on systemd installations
 	$(mkinstalldirs) $(DESTDIR)$(systemdsystemunitdir)/sockets.target.wants
 	ln -fs ../dbus.socket $(DESTDIR)$(systemdsystemunitdir)/sockets.target.wants/dbus.socket
@@ -273,53 +276,26 @@ install-exec-hook:
 	fi
 endif
 
-#### Init scripts fun
-SCRIPT_IN_FILES=messagebus.in \
-		messagebus-config.in \
-		rc.messagebus.in
-
-## Red Hat start
-if DBUS_INIT_SCRIPTS_RED_HAT
-
-initddir=$(sysconfdir)/rc.d/init.d
-
-initd_SCRIPTS= 	\
-	messagebus
-
-endif
- ## Red Hat end
-
-## Slackware start
-if DBUS_INIT_SCRIPTS_SLACKWARE
-
-initddir=$(sysconfdir)/rc.d/
-
-initd_SCRIPTS= 	\
-	rc.messagebus
-
-endif
-## Slackware end
-
-## Cygwin start
-if DBUS_INIT_SCRIPTS_CYGWIN
-
-bin_SCRIPTS= 	\
-	messagebus-config
-
-endif
-## Cygwin end
-
-if HAVE_SYSTEMD
-SCRIPT_IN_FILES += \
+EXTRA_DIST += \
 	dbus.service.in \
 	dbus.socket.in \
 	systemd-user/dbus.service.in \
 	systemd-user/dbus.socket.in \
+	sysusers.d/dbus.conf.in \
+	tmpfiles.d/dbus.conf.in \
 	$(NULL)
 
+if HAVE_SYSTEMD
 systemdsystemunit_DATA = \
 	dbus.service \
 	dbus.socket
+
+nodist_systemdsysusers_DATA = \
+	sysusers.d/dbus.conf
+
+nodist_systemdtmpfiles_DATA = \
+	tmpfiles.d/dbus.conf \
+	$(NULL)
 endif
 
 if DBUS_ENABLE_USER_SESSION
@@ -329,6 +305,5 @@ systemduserunit_DATA = \
 	$(NULL)
 endif
 
-#### Extra dist
-
-EXTRA_DIST=$(CONFIG_IN_FILES) $(SCRIPT_IN_FILES)
+# Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
+include $(top_srcdir)/aminclude_static.am

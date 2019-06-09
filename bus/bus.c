@@ -25,6 +25,7 @@
 #include "bus.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "activation.h"
 #include "connection.h"
@@ -37,6 +38,7 @@
 #include "apparmor.h"
 #include "audit.h"
 #include "dir-watch.h"
+#include <dbus/dbus-auth.h>
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-hash.h>
 #include <dbus/dbus-credentials.h>
@@ -90,19 +92,15 @@ server_get_context (DBusServer *server)
   BusContext *context;
   BusServerData *bd;
 
-  if (!dbus_server_allocate_data_slot (&server_data_slot))
-    return NULL;
+  /* this data slot was allocated by the BusContext */
+  _dbus_assert (server_data_slot >= 0);
 
   bd = BUS_SERVER_DATA (server);
-  if (bd == NULL)
-    {
-      dbus_server_free_data_slot (&server_data_slot);
-      return NULL;
-    }
+
+  /* every DBusServer in the dbus-daemon has gone through setup_server() */
+  _dbus_assert (bd != NULL);
 
   context = bd->context;
-
-  dbus_server_free_data_slot (&server_data_slot);
 
   return context;
 }
@@ -174,10 +172,9 @@ new_connection_callback (DBusServer     *server,
 {
   BusContext *context = data;
 
+  /* If this fails it logs a warning, so we don't need to do that */
   if (!bus_connections_setup_connection (context->connections, new_connection))
     {
-      _dbus_verbose ("No memory to setup new connection\n");
-
       /* if we don't do this, it will get unref'd without
        * being disconnected... kind of strange really
        * that we have to do this, people won't get it right
@@ -285,6 +282,7 @@ process_config_first_time_only (BusContext       *context,
   DBusList **auth_mechanisms_list;
   int len;
   dbus_bool_t retval;
+  DBusLogFlags log_flags = DBUS_LOG_FLAGS_STDERR;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -292,7 +290,27 @@ process_config_first_time_only (BusContext       *context,
   auth_mechanisms = NULL;
   pidfile = NULL;
 
-  _dbus_init_system_log (TRUE);
+  if (flags & BUS_CONTEXT_FLAG_SYSLOG_ALWAYS)
+    {
+      context->syslog = TRUE;
+      log_flags |= DBUS_LOG_FLAGS_SYSTEM_LOG;
+
+      if (flags & BUS_CONTEXT_FLAG_SYSLOG_ONLY)
+        log_flags &= ~DBUS_LOG_FLAGS_STDERR;
+    }
+  else if (flags & BUS_CONTEXT_FLAG_SYSLOG_NEVER)
+    {
+      context->syslog = FALSE;
+    }
+  else
+    {
+      context->syslog = bus_config_parser_get_syslog (parser);
+
+      if (context->syslog)
+        log_flags |= DBUS_LOG_FLAGS_SYSTEM_LOG;
+    }
+
+  _dbus_init_system_log ("dbus-daemon", log_flags);
 
   if (flags & BUS_CONTEXT_FLAG_SYSTEMD_ACTIVATION)
     context->systemd_activation = TRUE;
@@ -412,6 +430,26 @@ process_config_first_time_only (BusContext       *context,
       link = _dbus_list_get_first_link (auth_mechanisms_list);
       while (link != NULL)
         {
+          DBusString name;
+          _dbus_string_init_const (&name, link->data);
+          if (!_dbus_auth_is_supported_mechanism (&name))
+            {
+              DBusString list;
+              if (!_dbus_string_init (&list))
+                goto oom;
+
+              if (!_dbus_auth_dump_supported_mechanisms (&list))
+                {
+                  _dbus_string_free (&list);
+                  goto oom;
+                }
+              dbus_set_error (error, DBUS_ERROR_FAILED,
+                              "Unsupported auth mechanism \"%s\" in bus config file detected. Supported mechanisms are \"%s\".",
+                              (char*)link->data,
+                              _dbus_string_get_const_data (&list));
+              _dbus_string_free (&list);
+              goto failed;
+            }
           auth_mechanisms[i] = _dbus_strdup (link->data);
           if (auth_mechanisms[i] == NULL)
             goto oom;
@@ -474,7 +512,6 @@ process_config_first_time_only (BusContext       *context,
     }
 
   context->fork = bus_config_parser_get_fork (parser);
-  context->syslog = bus_config_parser_get_syslog (parser);
   context->keep_umask = bus_config_parser_get_keep_umask (parser);
   context->allow_anonymous = bus_config_parser_get_allow_anonymous (parser);
 
@@ -633,32 +670,6 @@ process_config_every_time (BusContext      *context,
   return retval;
 }
 
-static dbus_bool_t
-list_concat_new (DBusList **a,
-                 DBusList **b,
-                 DBusList **result)
-{
-  DBusList *link;
-
-  *result = NULL;
-
-  for (link = _dbus_list_get_first_link (a); link; link = _dbus_list_get_next_link (a, link))
-    {
-      if (!_dbus_list_append (result, link->data))
-        goto oom;
-    }
-  for (link = _dbus_list_get_first_link (b); link; link = _dbus_list_get_next_link (b, link))
-    {
-      if (!_dbus_list_append (result, link->data))
-        goto oom;
-    }
-
-  return TRUE;
-oom:
-  _dbus_list_clear (result);
-  return FALSE;
-}
-
 static void
 raise_file_descriptor_limit (BusContext      *context)
 {
@@ -682,11 +693,11 @@ raise_file_descriptor_limit (BusContext      *context)
   /* We used to compute a suitable rlimit based on the configured number
    * of connections, but that breaks down as soon as we allow fd-passing,
    * because each connection is allowed to pass 64 fds to us, and if
-   * they all did, we'd hit kernel limits. We now hard-code 64k as a
-   * good limit, like systemd does: that's enough to avoid DoS from
-   * anything short of multiple uids conspiring against us.
+   * they all did, we'd hit kernel limits. We now hard-code a good
+   * limit that is enough to avoid DoS from anything short of multiple
+   * uids conspiring against us, much like systemd does.
    */
-  if (!_dbus_rlimit_raise_fd_limit_if_privileged (65536, &error))
+  if (!_dbus_rlimit_raise_fd_limit (&error))
     {
       bus_context_log (context, DBUS_SYSTEM_LOG_WARNING,
                        "%s: %s", error.name, error.message);
@@ -717,9 +728,7 @@ process_config_postinit (BusContext      *context,
   /* We need to monitor both the configuration directories and directories
    * containing .service files.
    */
-  if (!list_concat_new (bus_config_parser_get_conf_dirs (parser),
-                        bus_config_parser_get_service_dirs (parser),
-                        &watched_dirs))
+  if (!bus_config_parser_get_watched_dirs (parser, &watched_dirs))
     {
       BUS_SET_OOM (error);
       return FALSE;
@@ -957,7 +966,10 @@ bus_context_new (const DBusString *config_file,
 
   if (!bus_selinux_full_init ())
     {
-      bus_context_log (context, DBUS_SYSTEM_LOG_FATAL, "SELinux enabled but D-Bus initialization failed; check system log\n");
+      bus_context_log (context, DBUS_SYSTEM_LOG_ERROR,
+                       "SELinux enabled but D-Bus initialization failed; "
+                       "check system log");
+      exit (1);
     }
 
   if (!bus_apparmor_full_init (error))
@@ -1353,24 +1365,16 @@ bus_context_get_initial_fd_limit (BusContext *context)
   return context->initial_fd_limit;
 }
 
+dbus_bool_t
+bus_context_get_using_syslog (BusContext *context)
+{
+  return context->syslog;
+}
+
 void
 bus_context_log (BusContext *context, DBusSystemLogSeverity severity, const char *msg, ...)
 {
   va_list args;
-
-  if (!context->syslog)
-    {
-      /* we're not syslogging; just output to stderr */
-      va_start (args, msg);
-      vfprintf (stderr, msg, args);
-      fprintf (stderr, "\n");
-      va_end (args);
-
-      if (severity == DBUS_SYSTEM_LOG_FATAL)
-        _dbus_exit (1);
-
-      return;
-    }
 
   va_start (args, msg);
 
@@ -1385,12 +1389,12 @@ bus_context_log (BusContext *context, DBusSystemLogSeverity severity, const char
       if (!_dbus_string_append_printf_valist (&full_msg, msg, args))
         goto oom_out;
 
-      _dbus_system_log (severity, "%s", _dbus_string_get_const_data (&full_msg));
+      _dbus_log (severity, "%s", _dbus_string_get_const_data (&full_msg));
     oom_out:
       _dbus_string_free (&full_msg);
     }
   else
-    _dbus_system_logv (severity, msg, args);
+    _dbus_logv (severity, msg, args);
 
 out:
   va_end (args);
@@ -1408,19 +1412,7 @@ bus_context_log_literal (BusContext            *context,
                          DBusSystemLogSeverity  severity,
                          const char            *msg)
 {
-  if (!context->syslog)
-    {
-      fputs (msg, stderr);
-      fputc ('\n', stderr);
-
-      if (severity == DBUS_SYSTEM_LOG_FATAL)
-        _dbus_exit (1);
-    }
-  else
-    {
-      _dbus_system_log (severity, "%s%s", nonnull (context->log_prefix, ""),
-                        msg);
-    }
+  _dbus_log (severity, "%s%s", nonnull (context->log_prefix, ""), msg);
 }
 
 void
@@ -1518,7 +1510,11 @@ complain_about_message (BusContext     *context,
  *
  * sender is the sender of the message.
  *
- * NULL for proposed_recipient or sender definitely means the bus driver.
+ * NULL for sender definitely means the bus driver.
+ *
+ * NULL for proposed_recipient may mean the bus driver, or may mean
+ * we are checking whether service-activation is allowed as a first
+ * pass before all details of the activated service are known.
  *
  * NULL for addressed_recipient may mean the bus driver, or may mean
  * no destination was specified in the message (e.g. a signal).
@@ -1530,6 +1526,7 @@ bus_context_check_security_policy (BusContext     *context,
                                    DBusConnection *addressed_recipient,
                                    DBusConnection *proposed_recipient,
                                    DBusMessage    *message,
+                                   BusActivationEntry *activation_entry,
                                    DBusError      *error)
 {
   const char *src, *dest;
@@ -1550,6 +1547,7 @@ bus_context_check_security_policy (BusContext     *context,
                 (sender == NULL && !bus_connection_is_active (proposed_recipient)));
   _dbus_assert (type == DBUS_MESSAGE_TYPE_SIGNAL ||
                 addressed_recipient != NULL ||
+                activation_entry != NULL ||
                 strcmp (dest, DBUS_SERVICE_DBUS) == 0);
 
   switch (type)
@@ -1615,7 +1613,9 @@ bus_context_check_security_policy (BusContext     *context,
 				    dbus_message_get_interface (message),
 				    dbus_message_get_member (message),
 				    dbus_message_get_error_name (message),
-				    dest ? dest : DBUS_SERVICE_DBUS, error))
+				    dest ? dest : DBUS_SERVICE_DBUS,
+				    activation_entry,
+				    error))
         {
           if (error != NULL && !dbus_error_is_set (error))
             {
@@ -1644,6 +1644,7 @@ bus_context_check_security_policy (BusContext     *context,
                                      dbus_message_get_error_name (message),
                                      dest ? dest : DBUS_SERVICE_DBUS,
                                      src ? src : DBUS_SERVICE_DBUS,
+                                     activation_entry,
                                      error))
         return FALSE;
 
@@ -1707,7 +1708,7 @@ bus_context_check_security_policy (BusContext     *context,
         }
       else
         {
-          _dbus_assert_not_reached ("a message was somehow sent to an inactive recipient from a source other than the message bus\n");
+          _dbus_assert_not_reached ("a message was somehow sent to an inactive recipient from a source other than the message bus");
           recipient_policy = NULL;
         }
     }
@@ -1776,6 +1777,10 @@ bus_context_check_security_policy (BusContext     *context,
   /* Record that we will allow a reply here in the future (don't
    * bother if the recipient is the bus or this is an eavesdropping
    * connection). Only the addressed recipient may reply.
+   *
+   * This isn't done for activation attempts because they have no addressed
+   * or proposed recipient; when we check whether to actually deliver the
+   * message, later, we'll record the reply expectation at that point.
    */
   if (type == DBUS_MESSAGE_TYPE_METHOD_CALL &&
       sender &&

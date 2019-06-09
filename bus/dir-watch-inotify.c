@@ -59,7 +59,9 @@ _handle_inotify_watch (DBusWatch *passed_watch, unsigned int flags, void *data)
 {
   char buffer[INOTIFY_BUF_LEN];
   ssize_t ret = 0;
+#ifdef DBUS_ENABLE_VERBOSE_MODE
   int i = 0;
+#endif
 
   ret = read (inotify_fd, buffer, INOTIFY_BUF_LEN);
   if (ret < 0)
@@ -155,7 +157,7 @@ _set_watched_dirs_internal (DBusList **directories)
               /* Not all service directories need to exist. */
               if (errno != ENOENT)
                 {
-                  _dbus_warn ("Cannot setup inotify for '%s'; error '%s'\n", new_dirs[i], _dbus_strerror (errno));
+                  _dbus_warn ("Cannot setup inotify for '%s'; error '%s'", new_dirs[i], _dbus_strerror (errno));
                   goto out;
                 }
               else
@@ -234,7 +236,7 @@ _init_inotify (BusContext *context)
 #endif
       if (inotify_fd <= 0)
         {
-          _dbus_warn ("Cannot initialize inotify\n");
+          _dbus_warn ("Cannot initialize inotify");
           goto out;
         }
 
@@ -250,7 +252,7 @@ _init_inotify (BusContext *context)
 
       if (watch == NULL)
         {
-          _dbus_warn ("Unable to create inotify watch\n");
+          _dbus_warn ("Unable to create inotify watch");
           goto out;
         }
 

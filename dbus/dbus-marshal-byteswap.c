@@ -161,7 +161,7 @@ byteswap_body_helper (DBusTypeReader       *reader,
             sig_len = *p;
             ++p;
 
-            _dbus_string_init_const_len (&sig, p, sig_len);
+            _dbus_string_init_const_len (&sig, (const char *) p, sig_len);
 
             p += (sig_len + 1); /* 1 for nul */
 
@@ -239,7 +239,7 @@ _dbus_marshal_byteswap (const DBusString *signature,
 
   byteswap_body_helper (&reader, TRUE,
                         old_byte_order, new_byte_order,
-                        _dbus_string_get_data_len (value_str, value_pos, 0),
+                        _dbus_string_get_udata_len (value_str, value_pos, 0),
                         NULL);
 }
 

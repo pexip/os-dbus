@@ -29,7 +29,12 @@
 #include <dbus/dbus-sysdeps.h>
 #include <dbus/dbus-internals.h>
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+#if !defined(DBUS_ENABLE_EMBEDDED_TESTS) || !defined(DBUS_UNIX)
+#error This file is only relevant for the embedded tests on Unix
+#endif
+
+static void die (const char *failure) _DBUS_GNUC_NORETURN;
+
 static void
 die (const char *failure)
 {
@@ -45,19 +50,18 @@ check_memleaks (const char *name)
   printf ("%s: checking for memleaks\n", name);
   if (_dbus_get_malloc_blocks_outstanding () != 0)
     {
-      _dbus_warn ("%d dbus_malloc blocks were not freed\n",
+      _dbus_warn ("%d dbus_malloc blocks were not freed",
                   _dbus_get_malloc_blocks_outstanding ());
       die ("memleaks");
     }
 }
-#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
 static void
 test_pre_hook (void)
 {
 }
 
-static char *progname = "";
+static const char *progname = "";
 static void
 test_post_hook (void)
 {
@@ -67,7 +71,6 @@ test_post_hook (void)
 int
 main (int argc, char **argv)
 {
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   const char *dir;
   DBusString test_data_dir;
 
@@ -98,10 +101,4 @@ main (int argc, char **argv)
   printf ("%s: Success\n", argv[0]);
 
   return 0;
-#else /* DBUS_ENABLE_EMBEDDED_TESTS */
-
-  printf ("Not compiled with test support\n");
-
-  return 0;
-#endif
 }

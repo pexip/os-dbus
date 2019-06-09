@@ -25,10 +25,10 @@
 set -e
 
 export DBUS_DEBUG_OUTPUT=1
-export DBUS_USE_TEST_BINARY=1
 echo "# dbus-daemon binary: ${DBUS_TEST_DAEMON:=dbus-daemon}"
 echo "# dbus-launch binary: ${DBUS_TEST_DBUS_LAUNCH:=dbus-launch}"
 echo "# dbus-send binary: ${DBUS_TEST_DBUS_SEND:=dbus-send}"
+echo "# dbus-uuidgen binary: ${DBUS_TEST_DBUS_UUIDGEN:=dbus-uuidgen}"
 
 if test -n "$DBUS_TEST_DATA"; then
     echo "# test data: $DBUS_TEST_DATA"
@@ -42,7 +42,17 @@ else
     config="--sh-syntax"
 fi
 
-echo "1..3"
+if ! "${DBUS_TEST_DBUS_UUIDGEN}" --get >/dev/null; then
+    if test -n "$DBUS_TEST_UNINSTALLED"; then
+        echo "1..0 # SKIP - Unable to test dbus-launch without a machine ID"
+        exit 0
+    else
+        echo "Bail out! dbus not correctly installed: no machine ID"
+        exit 1
+    fi
+fi
+
+echo "1..1"
 
 unset DBUS_SESSION_BUS_ADDRESS
 unset DBUS_SESSION_BUS_PID
@@ -62,42 +72,3 @@ ${DBUS_TEST_DBUS_SEND} --session --dest=org.freedesktop.DBus \
 kill "$DBUS_SESSION_BUS_PID"
 
 echo "ok 1 - normal dbus-launch"
-
-unset DBUS_SESSION_BUS_ADDRESS
-unset DBUS_SESSION_BUS_PID
-
-eval "$(${DBUS_TEST_DBUS_LAUNCH} --sh-syntax "$config" <&-)"
-
-test -n "$DBUS_SESSION_BUS_ADDRESS"
-env | grep '^DBUS_SESSION_BUS_ADDRESS='
-
-test -n "$DBUS_SESSION_BUS_PID"
-test "x$(env | grep '^DBUS_SESSION_BUS_PID=')" = "x"
-kill -0 "$DBUS_SESSION_BUS_PID"
-
-${DBUS_TEST_DBUS_SEND} --session --dest=org.freedesktop.DBus \
-    --type=method_call --print-reply / org.freedesktop.DBus.ListNames >&2
-
-kill "$DBUS_SESSION_BUS_PID"
-
-echo "ok 2 - dbus-launch with stdin closed"
-
-unset DBUS_SESSION_BUS_ADDRESS
-unset DBUS_SESSION_BUS_PID
-
-# we can't close stdout because that breaks --sh-syntax
-eval "$(${DBUS_TEST_DBUS_LAUNCH} --sh-syntax "$config" <&- 2>&-)"
-
-test -n "$DBUS_SESSION_BUS_ADDRESS"
-env | grep '^DBUS_SESSION_BUS_ADDRESS='
-
-test -n "$DBUS_SESSION_BUS_PID"
-test "x$(env | grep '^DBUS_SESSION_BUS_PID=')" = "x"
-kill -0 "$DBUS_SESSION_BUS_PID"
-
-${DBUS_TEST_DBUS_SEND} --session --dest=org.freedesktop.DBus \
-    --type=method_call --print-reply / org.freedesktop.DBus.ListNames >&2
-
-kill "$DBUS_SESSION_BUS_PID"
-
-echo "ok 3 - dbus-launch with stdin and stderr closed"

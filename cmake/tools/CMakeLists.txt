@@ -56,26 +56,35 @@ set (dbus_cleanup_sockets_SOURCES
 
 add_executable(dbus-send ${dbus_send_SOURCES})
 target_link_libraries(dbus-send ${DBUS_LIBRARIES})
-install_targets(/bin dbus-send )
+install(TARGETS dbus-send ${INSTALL_TARGETS_DEFAULT_ARGS})
 
 add_executable(dbus-test-tool ${dbus_test_tool_SOURCES})
 target_link_libraries(dbus-test-tool ${DBUS_LIBRARIES})
-install_targets(/bin dbus-test-tool )
+install(TARGETS dbus-test-tool ${INSTALL_TARGETS_DEFAULT_ARGS})
 
+if(WIN32 AND NOT MSVC)
+    # avoid dbus-update-activation-environment triggering UAC
+    # 1 is the resource ID, ID_MANIFEST
+    # 24 is the resource type, RT_MANIFEST
+    # constants are used because of a bug in windres
+    # see https://stackoverflow.com/questions/33000158/embed-manifest-file-to-require-administrator-execution-level-with-mingw32
+    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/disable-uac.rc "1 24 \"${CMAKE_SOURCE_DIR}/../tools/Win32.Manifest\"\n")
+    list(APPEND dbus_update_activation_environment_SOURCES ${CMAKE_CURRENT_BINARY_DIR}/disable-uac.rc)
+endif()
 add_executable(dbus-update-activation-environment ${dbus_update_activation_environment_SOURCES})
 target_link_libraries(dbus-update-activation-environment ${DBUS_LIBRARIES})
-install_targets(/bin dbus-update-activation-environment )
+install(TARGETS dbus-update-activation-environment ${INSTALL_TARGETS_DEFAULT_ARGS})
 
 add_executable(dbus-launch ${dbus_launch_SOURCES})
 target_link_libraries(dbus-launch ${DBUS_LIBRARIES})
 if (DBUS_BUILD_X11)
   target_link_libraries(dbus-launch ${X11_LIBRARIES} )
 endif (DBUS_BUILD_X11)
-install_targets(/bin dbus-launch )
+install(TARGETS dbus-launch ${INSTALL_TARGETS_DEFAULT_ARGS})
 
 add_executable(dbus-monitor ${dbus_monitor_SOURCES})
 target_link_libraries(dbus-monitor ${DBUS_LIBRARIES})
-install_targets(/bin dbus-monitor )
+install(TARGETS dbus-monitor ${INSTALL_TARGETS_DEFAULT_ARGS})
 
 # create the /var/lib/dbus directory for dbus-uuidgen
 install(DIRECTORY DESTINATION var/lib/dbus)

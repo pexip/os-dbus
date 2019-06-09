@@ -55,6 +55,7 @@ void _dbus_message_get_unix_fds      (DBusMessage *message,
                                       const int **fds,
                                       unsigned *n_fds);
 
+unsigned int _dbus_message_get_n_unix_fds       (DBusMessage  *message);
 void        _dbus_message_lock                  (DBusMessage  *message);
 void        _dbus_message_unlock                (DBusMessage  *message);
 dbus_bool_t _dbus_message_add_counter           (DBusMessage  *message,
@@ -73,19 +74,25 @@ void               _dbus_message_loader_unref                 (DBusMessageLoader
 
 DBUS_PRIVATE_EXPORT
 void               _dbus_message_loader_get_buffer            (DBusMessageLoader  *loader,
-                                                               DBusString        **buffer);
+                                                               DBusString        **buffer,
+                                                               int                *max_to_read,
+                                                               dbus_bool_t        *may_read_unix_fds);
 DBUS_PRIVATE_EXPORT
 void               _dbus_message_loader_return_buffer         (DBusMessageLoader  *loader,
                                                                DBusString         *buffer);
 
+
+#ifdef HAVE_UNIX_FD_PASSING
 DBUS_PRIVATE_EXPORT
 dbus_bool_t        _dbus_message_loader_get_unix_fds          (DBusMessageLoader  *loader,
                                                                int               **fds,
                                                                unsigned           *max_n_fds);
+
 DBUS_PRIVATE_EXPORT
 void               _dbus_message_loader_return_unix_fds       (DBusMessageLoader  *loader,
                                                                int                *fds,
                                                                unsigned            n_fds);
+#endif
 
 DBUS_PRIVATE_EXPORT
 dbus_bool_t        _dbus_message_loader_queue_messages        (DBusMessageLoader  *loader);
@@ -112,6 +119,27 @@ int                _dbus_message_loader_get_pending_fds_count (DBusMessageLoader
 void               _dbus_message_loader_set_pending_fds_function (DBusMessageLoader *loader,
                                                                   void (* callback) (void *),
                                                                   void *data);
+
+typedef struct DBusVariant DBusVariant;
+DBUS_PRIVATE_EXPORT
+DBusVariant       *_dbus_variant_read                            (DBusMessageIter *reader);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t        _dbus_variant_write                           (DBusVariant *self,
+                                                                  DBusMessageIter *writer);
+DBUS_PRIVATE_EXPORT
+void               _dbus_variant_free                            (DBusVariant *self);
+DBUS_PRIVATE_EXPORT
+int                _dbus_variant_get_length                      (DBusVariant *self);
+DBUS_PRIVATE_EXPORT
+const DBusString  *_dbus_variant_peek                            (DBusVariant *self);
+DBUS_PRIVATE_EXPORT
+const char        *_dbus_variant_get_signature                   (DBusVariant *self);
+
+static inline void
+_dbus_clear_variant (DBusVariant **variant_p)
+{
+  _dbus_clear_pointer_impl (DBusVariant, variant_p, _dbus_variant_free);
+}
 
 typedef struct DBusInitialFDs DBusInitialFDs;
 DBusInitialFDs *_dbus_check_fdleaks_enter (void);

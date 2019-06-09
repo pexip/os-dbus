@@ -29,6 +29,7 @@
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-hash.h>
 #include <dbus/dbus-internals.h>
+#include <dbus/dbus-message-internal.h>
 
 BusPolicyRule*
 bus_policy_rule_new (BusPolicyRuleType type,
@@ -69,6 +70,8 @@ bus_policy_rule_new (BusPolicyRuleType type,
       break;
     case BUS_POLICY_RULE_OWN:
       break;
+    default:
+      _dbus_assert_not_reached ("invalid rule");
     }
   
   return rule;
@@ -116,6 +119,8 @@ bus_policy_rule_unref (BusPolicyRule *rule)
           break;
         case BUS_POLICY_RULE_GROUP:
           break;
+        default:
+          _dbus_assert_not_reached ("invalid rule");
         }
       
       dbus_free (rule);
@@ -261,6 +266,9 @@ add_list_to_client (DBusList        **list,
           if (!bus_client_policy_append_rule (client, rule))
             return FALSE;
           break;
+
+        default:
+          _dbus_assert_not_reached ("invalid rule");
         }
     }
   
@@ -830,8 +838,11 @@ bus_client_policy_optimize (BusClientPolicy *policy)
           remove_preceding =
             rule->d.own.service_name == NULL;
           break;
+
+        /* The other rule types don't appear in this list */
         case BUS_POLICY_RULE_USER:
         case BUS_POLICY_RULE_GROUP:
+        default:
           _dbus_assert_not_reached ("invalid rule");
           break;
         }
@@ -986,13 +997,38 @@ bus_client_policy_check_can_send (BusClientPolicy *policy,
               continue;
             }
         }
-      
+
+      if (rule->d.send.broadcast != BUS_POLICY_TRISTATE_ANY)
+        {
+          if (dbus_message_get_destination (message) == NULL &&
+              dbus_message_get_type (message) == DBUS_MESSAGE_TYPE_SIGNAL)
+            {
+              /* it's a broadcast */
+              if (rule->d.send.broadcast == BUS_POLICY_TRISTATE_FALSE)
+                {
+                  _dbus_verbose ("  (policy) skipping rule because message is a broadcast\n");
+                  continue;
+                }
+            }
+          /* else it isn't a broadcast: there is some destination */
+          else if (rule->d.send.broadcast == BUS_POLICY_TRISTATE_TRUE)
+            {
+              _dbus_verbose ("  (policy) skipping rule because message is not a broadcast\n");
+              continue;
+            }
+        }
+
       if (rule->d.send.destination != NULL)
         {
           /* receiver can be NULL for messages that are sent to the
            * message bus itself, we check the strings in that case as
            * built-in services don't have a DBusConnection but messages
            * to them have a destination service name.
+           *
+           * Similarly, receiver can be NULL when we're deciding whether
+           * activation should be allowed; we make the authorization decision
+           * on the assumption that the activated service will have the
+           * requested name and no others.
            */
           if (receiver == NULL)
             {
@@ -1025,6 +1061,20 @@ bus_client_policy_check_can_send (BusClientPolicy *policy,
                                  rule->d.send.destination);
                   continue;
                 }
+            }
+        }
+
+      if (rule->d.send.min_fds > 0 ||
+          rule->d.send.max_fds < DBUS_MAXIMUM_MESSAGE_UNIX_FDS)
+        {
+          unsigned int n_fds = _dbus_message_get_n_unix_fds (message);
+
+          if (n_fds < rule->d.send.min_fds || n_fds > rule->d.send.max_fds)
+            {
+              _dbus_verbose ("  (policy) skipping rule because message has %u fds "
+                             "and that is outside range [%u,%u]",
+                             n_fds, rule->d.send.min_fds, rule->d.send.max_fds);
+              continue;
             }
         }
 
@@ -1228,7 +1278,22 @@ bus_client_policy_check_can_receive (BusClientPolicy *policy,
                 }
             }
         }
-      
+
+      if (rule->d.receive.min_fds > 0 ||
+          rule->d.receive.max_fds < DBUS_MAXIMUM_MESSAGE_UNIX_FDS)
+        {
+          unsigned int n_fds = _dbus_message_get_n_unix_fds (message);
+
+          if (n_fds < rule->d.receive.min_fds || n_fds > rule->d.receive.max_fds)
+            {
+              _dbus_verbose ("  (policy) skipping rule because message has %u fds "
+                             "and that is outside range [%u,%u]",
+                             n_fds, rule->d.receive.min_fds,
+                             rule->d.receive.max_fds);
+              continue;
+            }
+        }
+
       /* Use this rule */
       allowed = rule->allow;
       (*toggles)++;

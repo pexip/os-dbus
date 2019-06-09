@@ -62,6 +62,9 @@
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
+#ifdef HAVE_SYSLOG_H
+#include <syslog.h>
+#endif
 #ifdef HAVE_WRITEV
 #include <sys/uio.h>
 #endif
@@ -356,7 +359,7 @@ _dbus_read_socket_with_unix_fds (DBusSocket        fd,
                                  DBusString       *buffer,
                                  int               count,
                                  int              *fds,
-                                 int              *n_fds) {
+                                 unsigned int     *n_fds) {
 #ifndef HAVE_UNIX_FD_PASSING
   int r;
 
@@ -373,7 +376,7 @@ _dbus_read_socket_with_unix_fds (DBusSocket        fd,
   struct iovec iov;
 
   _dbus_assert (count >= 0);
-  _dbus_assert (*n_fds >= 0);
+  _dbus_assert (*n_fds <= DBUS_MAXIMUM_MESSAGE_UNIX_FDS);
 
   start = _dbus_string_get_length (buffer);
 
@@ -453,10 +456,9 @@ _dbus_read_socket_with_unix_fds (DBusSocket        fd,
             size_t payload_len_fds = payload_len_bytes / sizeof (int);
             size_t fds_to_use;
 
-            /* Every non-negative int fits in a size_t without truncation,
-             * and we already know that *n_fds is non-negative, so
+            /* Every unsigned int fits in a size_t without truncation, so
              * casting (size_t) *n_fds is OK */
-            _DBUS_STATIC_ASSERT (sizeof (size_t) >= sizeof (int));
+            _DBUS_STATIC_ASSERT (sizeof (size_t) >= sizeof (unsigned int));
 
             if (_DBUS_LIKELY (payload_len_fds <= (size_t) *n_fds))
               {
@@ -482,9 +484,10 @@ _dbus_read_socket_with_unix_fds (DBusSocket        fd,
 
             memcpy (fds, payload, fds_to_use * sizeof (int));
             found = TRUE;
-            /* This cannot overflow because we have chosen fds_to_use
+            /* This narrowing cast from size_t to unsigned int cannot
+             * overflow because we have chosen fds_to_use
              * to be <= *n_fds */
-            *n_fds = (int) fds_to_use;
+            *n_fds = (unsigned int) fds_to_use;
 
             /* Linux doesn't tell us whether MSG_CMSG_CLOEXEC actually
                worked, hence we need to go through this list and set
@@ -931,7 +934,7 @@ _dbus_connect_unix_socket (const char     *path,
 
   if (abstract)
     {
-#ifdef HAVE_ABSTRACT_SOCKETS
+#ifdef __linux__
       addr.sun_path[0] = '\0'; /* this is what says "use abstract" */
       path_len++; /* Account for the extra nul byte added to the start of sun_path */
 
@@ -945,12 +948,12 @@ _dbus_connect_unix_socket (const char     *path,
 
       strncpy (&addr.sun_path[1], path, sizeof (addr.sun_path) - 2);
       /* _dbus_verbose_bytes (addr.sun_path, sizeof (addr.sun_path)); */
-#else /* HAVE_ABSTRACT_SOCKETS */
+#else /* !__linux__ */
       dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
                       "Operating system does not support abstract socket namespace\n");
       _dbus_close (fd, NULL);
       return -1;
-#endif /* ! HAVE_ABSTRACT_SOCKETS */
+#endif /* !__linux__ */
     }
   else
     {
@@ -1067,7 +1070,7 @@ _dbus_connect_exec (const char     *path,
 
       _dbus_close_all ();
 
-      execvp (path, argv);
+      execvp (path, (char * const *) argv);
 
       fprintf (stderr, "Failed to execute process %s: %s\n", path, _dbus_strerror (errno));
 
@@ -1133,7 +1136,7 @@ _dbus_listen_unix_socket (const char     *path,
 
   if (abstract)
     {
-#ifdef HAVE_ABSTRACT_SOCKETS
+#ifdef __linux__
       /* remember that abstract names aren't nul-terminated so we rely
        * on sun_path being filled in with zeroes above.
        */
@@ -1150,12 +1153,12 @@ _dbus_listen_unix_socket (const char     *path,
 
       strncpy (&addr.sun_path[1], path, sizeof (addr.sun_path) - 2);
       /* _dbus_verbose_bytes (addr.sun_path, sizeof (addr.sun_path)); */
-#else /* HAVE_ABSTRACT_SOCKETS */
+#else /* !__linux__ */
       dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
                       "Operating system does not support abstract socket namespace\n");
       _dbus_close (listen_fd, NULL);
       return -1;
-#endif /* ! HAVE_ABSTRACT_SOCKETS */
+#endif /* !__linux__ */
     }
   else
     {
@@ -1217,8 +1220,7 @@ _dbus_listen_unix_socket (const char     *path,
    * and continue, maybe it will be good enough.
    */
   if (!abstract && chmod (path, 0777) < 0)
-    _dbus_warn ("Could not set mode 0777 on socket %s\n",
-                path);
+    _dbus_warn ("Could not set mode 0777 on socket %s", path);
 
   return listen_fd;
 }
@@ -1320,6 +1322,56 @@ _dbus_listen_systemd_sockets (DBusSocket **fds,
 #endif
 }
 
+/* Convert an error code from getaddrinfo() or getnameinfo() into
+ * a D-Bus error name. */
+static const char *
+_dbus_error_from_gai (int gai_res,
+                      int saved_errno)
+{
+  switch (gai_res)
+    {
+#ifdef EAI_FAMILY
+      case EAI_FAMILY:
+        /* ai_family not supported (at all) */
+        return DBUS_ERROR_NOT_SUPPORTED;
+#endif
+
+#ifdef EAI_SOCKTYPE
+      case EAI_SOCKTYPE:
+        /* ai_socktype not supported (at all) */
+        return DBUS_ERROR_NOT_SUPPORTED;
+#endif
+
+#ifdef EAI_MEMORY
+      case EAI_MEMORY:
+        /* Out of memory */
+        return DBUS_ERROR_NO_MEMORY;
+#endif
+
+#ifdef EAI_SYSTEM
+      case EAI_SYSTEM:
+        /* Unspecified system error, details in errno */
+        return _dbus_error_from_errno (saved_errno);
+#endif
+
+      case 0:
+        /* It succeeded, but we didn't get any addresses? */
+        return DBUS_ERROR_FAILED;
+
+      /* EAI_AGAIN: Transient failure */
+      /* EAI_BADFLAGS: invalid ai_flags (programming error) */
+      /* EAI_FAIL: Non-recoverable failure */
+      /* EAI_NODATA: host exists but has no addresses */
+      /* EAI_NONAME: host does not exist */
+      /* EAI_OVERFLOW: argument buffer overflow */
+      /* EAI_SERVICE: service not available for specified socket
+       * type (we should never see this because we use numeric
+       * ports) */
+      default:
+        return DBUS_ERROR_FAILED;
+    }
+}
+
 /**
  * Creates a socket and connects to a socket at the given host
  * and port. The connection fd is returned, and is set up as
@@ -1379,7 +1431,7 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
   if ((res = getaddrinfo(host, port, &hints, &ai)) != 0)
     {
       dbus_set_error (error,
-                      _dbus_error_from_errno (errno),
+                      _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host, port, gai_strerror(res), res);
       return _dbus_socket_get_invalid ();
@@ -1501,7 +1553,7 @@ _dbus_listen_tcp_socket (const char     *host,
   if ((res = getaddrinfo(host, port, &hints, &ai)) != 0 || !ai)
     {
       dbus_set_error (error,
-                      _dbus_error_from_errno (errno),
+                      _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host ? host : "*", port, gai_strerror(res), res);
       goto failed;
@@ -1576,11 +1628,9 @@ _dbus_listen_tcp_socket (const char     *host,
       newlisten_fd = dbus_realloc(listen_fd, sizeof(DBusSocket)*(nlisten_fd+1));
       if (!newlisten_fd)
         {
-          saved_errno = errno;
           _dbus_close (fd, NULL);
-          dbus_set_error (error, _dbus_error_from_errno (saved_errno),
-                          "Failed to allocate file handle array: %s",
-                          _dbus_strerror (saved_errno));
+          dbus_set_error (error, DBUS_ERROR_NO_MEMORY,
+                          "Failed to allocate file handle array");
           goto failed;
         }
       listen_fd = newlisten_fd;
@@ -1603,16 +1653,26 @@ _dbus_listen_tcp_socket (const char     *host,
               addrlen = sizeof(addr);
               result = getsockname(fd, (struct sockaddr*) &addr, &addrlen);
 
-              if (result == -1 ||
-                  (res = getnameinfo ((struct sockaddr*)&addr, addrlen, NULL, 0,
+              if (result == -1)
+                {
+                  saved_errno = errno;
+                  dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                                  "Failed to retrieve socket name for \"%s:%s\": %s",
+                                  host ? host : "*", port, _dbus_strerror (saved_errno));
+                  goto failed;
+                }
+
+              if ((res = getnameinfo ((struct sockaddr*)&addr, addrlen, NULL, 0,
                                       portbuf, sizeof(portbuf),
                                       NI_NUMERICHOST | NI_NUMERICSERV)) != 0)
                 {
-                  dbus_set_error (error, _dbus_error_from_errno (errno),
-                                  "Failed to resolve port \"%s:%s\": %s (%s)",
+                  saved_errno = errno;
+                  dbus_set_error (error, _dbus_error_from_gai (res, saved_errno),
+                                  "Failed to resolve port \"%s:%s\": %s (%d)",
                                   host ? host : "*", port, gai_strerror(res), res);
                   goto failed;
                 }
+
               if (!_dbus_string_append(retport, portbuf))
                 {
                   dbus_set_error (error, DBUS_ERROR_NO_MEMORY, NULL);
@@ -1982,7 +2042,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
 #else
     struct ucred cr;
 #endif
-    int cr_len = sizeof (cr);
+    socklen_t cr_len = sizeof (cr);
 
     if (getsockopt (client_fd.fd, SOL_SOCKET, SO_PEERCRED, &cr, &cr_len) != 0)
       {
@@ -3429,7 +3489,7 @@ _dbus_socketpair (DBusSocket *fd1,
 
   return TRUE;
 #else
-  _dbus_warn ("_dbus_socketpair() not implemented on this OS\n");
+  _dbus_warn ("_dbus_socketpair() not implemented on this OS");
   dbus_set_error (error, DBUS_ERROR_FAILED,
                   "_dbus_socketpair() not implemented on this OS");
   return FALSE;
@@ -3575,7 +3635,7 @@ _dbus_get_tmpdir(void)
 static dbus_bool_t
 _read_subprocess_line_argv (const char *progpath,
                             dbus_bool_t path_fallback,
-                            char       * const *argv,
+                            const char * const *argv,
                             DBusString *result,
                             DBusError  *error)
 {
@@ -3637,21 +3697,35 @@ _read_subprocess_line_argv (const char *progpath,
   if (pid == 0)
     {
       /* child process */
-      int fd;
+      const char *error_str;
 
-      fd = open ("/dev/null", O_RDWR);
-      if (fd == -1)
-        /* huh?! can't open /dev/null? */
-        _exit (1);
+      if (!_dbus_ensure_standard_fds (DBUS_FORCE_STDIN_NULL, &error_str))
+        {
+          int saved_errno = errno;
 
-      _dbus_verbose ("/dev/null fd %d opened\n", fd);
+          /* Try to write details into the pipe, but don't bother
+           * trying too hard (no retry loop). */
+
+          if (write (errors_pipe[WRITE_END], error_str, strlen (error_str)) < 0 ||
+              write (errors_pipe[WRITE_END], ": ", 2) < 0)
+            {
+              /* ignore, not much we can do */
+            }
+
+          error_str = _dbus_strerror (saved_errno);
+
+          if (write (errors_pipe[WRITE_END], error_str, strlen (error_str)) < 0)
+            {
+              /* ignore, not much we can do */
+            }
+
+          _exit (1);
+        }
 
       /* set-up stdXXX */
       close (result_pipe[READ_END]);
       close (errors_pipe[READ_END]);
 
-      if (dup2 (fd, 0) == -1) /* setup stdin */
-        _exit (1);
       if (dup2 (result_pipe[WRITE_END], 1) == -1) /* setup stdout */
         _exit (1);
       if (dup2 (errors_pipe[WRITE_END], 2) == -1) /* setup stderr */
@@ -3664,7 +3738,7 @@ _read_subprocess_line_argv (const char *progpath,
       /* If it looks fully-qualified, try execv first */
       if (progpath[0] == '/')
         {
-          execv (progpath, argv);
+          execv (progpath, (char * const *) argv);
           /* Ok, that failed.  Now if path_fallback is given, let's
            * try unqualified.  This is mostly a hack to work
            * around systems which ship dbus-launch in /usr/bin
@@ -3673,10 +3747,10 @@ _read_subprocess_line_argv (const char *progpath,
            */
           if (path_fallback)
             /* We must have a slash, because we checked above */
-            execvp (strrchr (progpath, '/')+1, argv);
+            execvp (strrchr (progpath, '/')+1, (char * const *) argv);
         }
       else
-        execvp (progpath, argv);
+        execvp (progpath, (char * const *) argv);
 
       /* still nothing, we failed */
       _exit (1);
@@ -3774,12 +3848,17 @@ _dbus_get_autolaunch_address (const char *scope,
                               DBusError  *error)
 {
 #ifdef DBUS_ENABLE_X11_AUTOLAUNCH
+  static const char arg_dbus_launch[] = "dbus-launch";
+  static const char arg_autolaunch[] = "--autolaunch";
+  static const char arg_binary_syntax[] = "--binary-syntax";
+  static const char arg_close_stderr[] = "--close-stderr";
+
   /* Perform X11-based autolaunch. (We also support launchd-based autolaunch,
    * but that's done elsewhere, and if it worked, this function wouldn't
    * be called.) */
   const char *display;
-  char *progpath;
-  char *argv[6];
+  const char *progpath;
+  const char *argv[6];
   int i;
   DBusString uuid;
   dbus_bool_t retval;
@@ -3823,9 +3902,9 @@ _dbus_get_autolaunch_address (const char *scope,
     }
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
-  if (_dbus_getenv ("DBUS_USE_TEST_BINARY") != NULL)
-    progpath = TEST_BUS_LAUNCH_BINARY;
-  else
+  progpath = _dbus_getenv ("DBUS_TEST_DBUS_LAUNCH");
+
+  if (progpath == NULL)
 #endif
     progpath = DBUS_BINDIR "/dbus-launch";
   /*
@@ -3834,15 +3913,15 @@ _dbus_get_autolaunch_address (const char *scope,
    * see fd.o#69716
    */
   i = 0;
-  argv[i] = "dbus-launch";
+  argv[i] = arg_dbus_launch;
   ++i;
-  argv[i] = "--autolaunch";
+  argv[i] = arg_autolaunch;
   ++i;
   argv[i] = _dbus_string_get_data (&uuid);
   ++i;
-  argv[i] = "--binary-syntax";
+  argv[i] = arg_binary_syntax;
   ++i;
-  argv[i] = "--close-stderr";
+  argv[i] = arg_close_stderr;
   ++i;
   argv[i] = NULL;
   ++i;
@@ -3887,36 +3966,51 @@ _dbus_read_local_machine_uuid (DBusGUID   *machine_id,
                                dbus_bool_t create_if_not_found,
                                DBusError  *error)
 {
+  DBusError our_error = DBUS_ERROR_INIT;
+  DBusError etc_error = DBUS_ERROR_INIT;
   DBusString filename;
   dbus_bool_t b;
 
   _dbus_string_init_const (&filename, DBUS_MACHINE_UUID_FILE);
 
-  b = _dbus_read_uuid_file (&filename, machine_id, FALSE, error);
+  b = _dbus_read_uuid_file (&filename, machine_id, FALSE, &our_error);
   if (b)
     return TRUE;
 
-  dbus_error_free (error);
-
   /* Fallback to the system machine ID */
   _dbus_string_init_const (&filename, "/etc/machine-id");
-  b = _dbus_read_uuid_file (&filename, machine_id, FALSE, error);
+  b = _dbus_read_uuid_file (&filename, machine_id, FALSE, &etc_error);
 
   if (b)
     {
-      /* try to copy it to the DBUS_MACHINE_UUID_FILE, but do not
-       * complain if that isn't possible for whatever reason */
-      _dbus_string_init_const (&filename, DBUS_MACHINE_UUID_FILE);
-      _dbus_write_uuid_file (&filename, machine_id, NULL);
+      if (create_if_not_found)
+        {
+          /* try to copy it to the DBUS_MACHINE_UUID_FILE, but do not
+           * complain if that isn't possible for whatever reason */
+          _dbus_string_init_const (&filename, DBUS_MACHINE_UUID_FILE);
+          _dbus_write_uuid_file (&filename, machine_id, NULL);
+        }
 
+      dbus_error_free (&our_error);
       return TRUE;
     }
 
   if (!create_if_not_found)
-    return FALSE;
+    {
+      dbus_set_error (error, etc_error.name,
+                      "D-Bus library appears to be incorrectly set up: "
+                      "see the manual page for dbus-uuidgen to correct "
+                      "this issue. (%s; %s)",
+                      our_error.message, etc_error.message);
+      dbus_error_free (&our_error);
+      dbus_error_free (&etc_error);
+      return FALSE;
+    }
+
+  dbus_error_free (&our_error);
+  dbus_error_free (&etc_error);
 
   /* if none found, try to make a new one */
-  dbus_error_free (error);
   _dbus_string_init_const (&filename, DBUS_MACHINE_UUID_FILE);
 
   if (!_dbus_generate_uuid (machine_id, error))
@@ -4220,7 +4314,8 @@ _dbus_append_keyring_directory_for_credentials (DBusString      *directory,
         static dbus_bool_t already_warned = FALSE;
         if (!already_warned)
           {
-            _dbus_warn ("Using your real home directory for testing, set DBUS_TEST_HOMEDIR to avoid\n");
+            _dbus_warn ("Using %s for testing, set DBUS_TEST_HOMEDIR to avoid",
+                _dbus_string_get_const_data (&homedir));
             already_warned = TRUE;
           }
       }
@@ -4269,7 +4364,15 @@ _dbus_daemon_unpublish_session_bus_address (void)
 dbus_bool_t
 _dbus_get_is_errno_eagain_or_ewouldblock (int e)
 {
+  /* Avoid the -Wlogical-op GCC warning, which can be triggered when EAGAIN and
+   * EWOULDBLOCK are numerically equal, which is permitted as described by
+   * errno(3).
+   */
+#if EAGAIN == EWOULDBLOCK
+  return e == EAGAIN;
+#else
   return e == EAGAIN || e == EWOULDBLOCK;
+#endif
 }
 
 /**
@@ -4352,13 +4455,13 @@ _dbus_close_all (void)
     {
       for (;;)
         {
-          struct dirent buf, *de;
-          int k, fd;
+          struct dirent *de;
+          int fd;
           long l;
           char *e = NULL;
 
-          k = readdir_r (d, &buf, &de);
-          if (k != 0 || !de)
+          de = readdir (d);
+          if (!de)
             break;
 
           if (de->d_name[0] == '.')
@@ -4472,7 +4575,7 @@ _dbus_append_address_from_socket (DBusSocket  fd,
       struct sockaddr_in6 ipv6;
   } socket;
   char hostip[INET6_ADDRSTRLEN];
-  int size = sizeof (socket);
+  socklen_t size = sizeof (socket);
   DBusString path_str;
 
   if (getsockname (fd.fd, &socket.sa, &size))
@@ -4536,6 +4639,96 @@ void
 _dbus_restore_socket_errno (int saved_errno)
 {
   errno = saved_errno;
+}
+
+static const char *syslog_tag = "dbus";
+#ifdef HAVE_SYSLOG_H
+static DBusLogFlags log_flags = DBUS_LOG_FLAGS_STDERR;
+#endif
+
+/**
+ * Initialize the system log.
+ *
+ * The "tag" is not copied, and must remain valid for the entire lifetime of
+ * the process or until _dbus_init_system_log() is called again. In practice
+ * it will normally be a constant.
+ *
+ * On platforms that do not support a system log, the
+ * #DBUS_LOG_FLAGS_SYSTEM_LOG flag is treated as equivalent to
+ * #DBUS_LOG_FLAGS_STDERR.
+ *
+ * @param tag the name of the executable (syslog tag)
+ * @param mode whether to log to stderr, the system log or both
+ */
+void
+_dbus_init_system_log (const char   *tag,
+                       DBusLogFlags  flags)
+{
+  /* We never want to turn off logging completely */
+  _dbus_assert (
+      (flags & (DBUS_LOG_FLAGS_STDERR | DBUS_LOG_FLAGS_SYSTEM_LOG)) != 0);
+
+  syslog_tag = tag;
+
+#ifdef HAVE_SYSLOG_H
+  log_flags = flags;
+
+  if (log_flags & DBUS_LOG_FLAGS_SYSTEM_LOG)
+    openlog (tag, LOG_PID, LOG_DAEMON);
+#endif
+}
+
+/**
+ * Log a message to the system log file (e.g. syslog on Unix) and/or stderr.
+ *
+ * @param severity a severity value
+ * @param msg a printf-style format string
+ * @param args arguments for the format string
+ */
+void
+_dbus_logv (DBusSystemLogSeverity  severity,
+            const char            *msg,
+            va_list                args)
+{
+  va_list tmp;
+#ifdef HAVE_SYSLOG_H
+  if (log_flags & DBUS_LOG_FLAGS_SYSTEM_LOG)
+    {
+      int flags;
+      switch (severity)
+        {
+          case DBUS_SYSTEM_LOG_INFO:
+            flags =  LOG_DAEMON | LOG_INFO;
+            break;
+          case DBUS_SYSTEM_LOG_WARNING:
+            flags =  LOG_DAEMON | LOG_WARNING;
+            break;
+          case DBUS_SYSTEM_LOG_SECURITY:
+            flags = LOG_AUTH | LOG_NOTICE;
+            break;
+          case DBUS_SYSTEM_LOG_ERROR:
+            flags = LOG_DAEMON|LOG_CRIT;
+            break;
+          default:
+            _dbus_assert_not_reached ("invalid log severity");
+        }
+
+      DBUS_VA_COPY (tmp, args);
+      vsyslog (flags, msg, tmp);
+      va_end (tmp);
+    }
+
+  /* If we don't have syslog.h, we always behave as though stderr was in
+   * the flags */
+  if (log_flags & DBUS_LOG_FLAGS_STDERR)
+#endif
+    {
+      DBUS_VA_COPY (tmp, args);
+      fprintf (stderr, "%s[" DBUS_PID_FORMAT "]: ", syslog_tag, _dbus_getpid ());
+      vfprintf (stderr, msg, tmp);
+      fputc ('\n', stderr);
+      va_end (tmp);
+    }
 }
 
 /* tests in dbus-sysdeps-util.c */

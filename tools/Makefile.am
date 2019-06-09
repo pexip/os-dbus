@@ -6,6 +6,10 @@ AM_CPPFLAGS = \
 	-DDBUS_MACHINE_UUID_FILE=\""$(localstatedir)/lib/dbus/machine-id"\" \
 	$(NULL)
 
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
+
 # if assertions are enabled, improve backtraces
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 
@@ -110,9 +114,22 @@ dbus_update_activation_environment_SOURCES = \
 	$(NULL)
 dbus_update_activation_environment_LDADD = $(top_builddir)/dbus/libdbus-1.la
 
-EXTRA_DIST = run-with-tmp-session-bus.sh strtoll.c strtoull.c
+if DBUS_WIN
+SUFFIXES = .rc
+
+.rc.o:
+	$(RC) $< -o $@
+
+nodist_dbus_update_activation_environment_SOURCES = disable-uac.rc
+
+disable-uac.rc: Win32.Manifest
+	echo '1 24 "$<"' > $@
+endif
+
+EXTRA_DIST = run-with-tmp-session-bus.sh strtoll.c strtoull.c Win32.Manifest
 CLEANFILES = 				\
-	run-with-tmp-session-bus.conf
+	run-with-tmp-session-bus.conf \
+	$(nodist_dbus_update_activation_environment_SOURCES)
 
 # create the /var/lib/dbus directory for dbus-uuidgen
 install-data-local:

@@ -26,6 +26,7 @@
 #include "dbus-sysdeps.h"
 #include "dbus-sysdeps-unix.h"
 #include "dbus-internals.h"
+#include "dbus-list.h"
 #include "dbus-pipe.h"
 #include "dbus-protocol.h"
 #include "dbus-string.h"
@@ -49,10 +50,6 @@
 #include <sys/socket.h>
 #include <dirent.h>
 #include <sys/un.h>
-
-#ifdef HAVE_SYSLOG_H
-#include <syslog.h>
-#endif
 
 #ifdef HAVE_SYS_SYSLIMITS_H
 #include <sys/syslimits.h>
@@ -89,7 +86,7 @@ _dbus_become_daemon (const DBusString *pidfile,
 {
   const char *s;
   pid_t child_pid;
-  int dev_null_fd;
+  DBusEnsureStandardFdsFlags flags;
 
   _dbus_verbose ("Becoming a daemon...\n");
 
@@ -114,23 +111,18 @@ _dbus_become_daemon (const DBusString *pidfile,
     case 0:
       _dbus_verbose ("in child, closing std file descriptors\n");
 
-      /* silently ignore failures here, if someone
-       * doesn't have /dev/null we may as well try
-       * to continue anyhow
-       */
-      
-      dev_null_fd = open ("/dev/null", O_RDWR);
-      if (dev_null_fd >= 0)
+      flags = DBUS_FORCE_STDIN_NULL | DBUS_FORCE_STDOUT_NULL;
+      s = _dbus_getenv ("DBUS_DEBUG_OUTPUT");
+
+      if (s == NULL || *s == '\0')
+        flags |= DBUS_FORCE_STDERR_NULL;
+      else
+        _dbus_verbose ("keeping stderr open due to DBUS_DEBUG_OUTPUT\n");
+
+      if (!_dbus_ensure_standard_fds (flags, &s))
         {
-          dup2 (dev_null_fd, 0);
-          dup2 (dev_null_fd, 1);
-          
-          s = _dbus_getenv ("DBUS_DEBUG_OUTPUT");
-          if (s == NULL || *s == '\0')
-            dup2 (dev_null_fd, 2);
-          else
-            _dbus_verbose ("keeping stderr open due to DBUS_DEBUG_OUTPUT\n");
-          close (dev_null_fd);
+          _dbus_warn ("%s: %s", s, _dbus_strerror (errno));
+          _exit (1);
         }
 
       if (!keep_umask)
@@ -354,7 +346,7 @@ _dbus_change_to_daemon_user  (const char    *user,
    * is going to work then setgroups() should also work.
    */
   if (setgroups (0, NULL) < 0)
-    _dbus_warn ("Failed to drop supplementary groups: %s\n",
+    _dbus_warn ("Failed to drop supplementary groups: %s",
                 _dbus_strerror (errno));
 
   /* Set GID first, or the setuid may remove our permission
@@ -414,23 +406,15 @@ _dbus_rlimit_save_fd_limit (DBusError *error)
   return self;
 }
 
-dbus_bool_t
-_dbus_rlimit_raise_fd_limit_if_privileged (unsigned int  desired,
-                                           DBusError    *error)
-{
-  struct rlimit lim;
+/* Enough fds that we shouldn't run out, even if several uids work
+ * together to carry out a denial-of-service attack. This happens to be
+ * the same number that systemd < 234 would normally use. */
+#define ENOUGH_FDS 65536
 
-  /* No point to doing this practically speaking
-   * if we're not uid 0.  We expect the system
-   * bus to use this before we change UID, and
-   * the session bus takes the Linux default,
-   * currently 1024 for cur and 4096 for max.
-   */
-  if (getuid () != 0)
-    {
-      /* not an error, we're probably the session bus */
-      return TRUE;
-    }
+dbus_bool_t
+_dbus_rlimit_raise_fd_limit (DBusError *error)
+{
+  struct rlimit old, lim;
 
   if (getrlimit (RLIMIT_NOFILE, &lim) < 0)
     {
@@ -439,22 +423,43 @@ _dbus_rlimit_raise_fd_limit_if_privileged (unsigned int  desired,
       return FALSE;
     }
 
-  if (lim.rlim_cur == RLIM_INFINITY || lim.rlim_cur >= desired)
+  old = lim;
+
+  if (getuid () == 0)
     {
-      /* not an error, everything is fine */
-      return TRUE;
+      /* We are privileged, so raise the soft limit to at least
+       * ENOUGH_FDS, and the hard limit to at least the desired soft
+       * limit. This assumes we can exercise CAP_SYS_RESOURCE on Linux,
+       * or other OSs' equivalents. */
+      if (lim.rlim_cur != RLIM_INFINITY &&
+          lim.rlim_cur < ENOUGH_FDS)
+        lim.rlim_cur = ENOUGH_FDS;
+
+      if (lim.rlim_max != RLIM_INFINITY &&
+          lim.rlim_max < lim.rlim_cur)
+        lim.rlim_max = lim.rlim_cur;
     }
 
-  /* Ignore "maximum limit", assume we have the "superuser"
-   * privileges.  On Linux this is CAP_SYS_RESOURCE.
-   */
-  lim.rlim_cur = lim.rlim_max = desired;
+  /* Raise the soft limit to match the hard limit, which we can do even
+   * if we are unprivileged. In particular, systemd >= 240 will normally
+   * set rlim_cur to 1024 and rlim_max to 512*1024, recent Debian
+   * versions end up setting rlim_cur to 1024 and rlim_max to 1024*1024,
+   * and older and non-systemd Linux systems would typically set rlim_cur
+   * to 1024 and rlim_max to 4096. */
+  if (lim.rlim_max == RLIM_INFINITY || lim.rlim_cur < lim.rlim_max)
+    lim.rlim_cur = lim.rlim_max;
+
+  /* Early-return if there is nothing to do. */
+  if (lim.rlim_max == old.rlim_max &&
+      lim.rlim_cur == old.rlim_cur)
+    return TRUE;
 
   if (setrlimit (RLIMIT_NOFILE, &lim) < 0)
     {
       dbus_set_error (error, _dbus_error_from_errno (errno),
-                      "Failed to set fd limit to %u: %s",
-                      desired, _dbus_strerror (errno));
+                      "Failed to set fd limit to %lu: %s",
+                      (unsigned long) lim.rlim_cur,
+                      _dbus_strerror (errno));
       return FALSE;
     }
 
@@ -493,8 +498,7 @@ _dbus_rlimit_save_fd_limit (DBusError *error)
 }
 
 dbus_bool_t
-_dbus_rlimit_raise_fd_limit_if_privileged (unsigned int  desired,
-                                           DBusError    *error)
+_dbus_rlimit_raise_fd_limit (DBusError *error)
 {
   fd_limit_not_supported (error);
   return FALSE;
@@ -514,95 +518,6 @@ void
 _dbus_rlimit_free (DBusRLimit *lim)
 {
   dbus_free (lim);
-}
-
-void
-_dbus_init_system_log (dbus_bool_t is_daemon)
-{
-#ifdef HAVE_SYSLOG_H
-  int logopts = LOG_PID;
-
-#if HAVE_DECL_LOG_PERROR
-#ifdef HAVE_SYSTEMD
-  if (!is_daemon || sd_booted () <= 0)
-#endif
-    logopts |= LOG_PERROR;
-#endif
-
-  openlog ("dbus", logopts, LOG_DAEMON);
-#endif
-}
-
-/**
- * Log a message to the system log file (e.g. syslog on Unix).
- *
- * @param severity a severity value
- * @param msg a printf-style format string
- */
-void
-_dbus_system_log (DBusSystemLogSeverity severity, const char *msg, ...)
-{
-  va_list args;
-
-  va_start (args, msg);
-
-  _dbus_system_logv (severity, msg, args);
-
-  va_end (args);
-}
-
-/**
- * Log a message to the system log file (e.g. syslog on Unix).
- *
- * @param severity a severity value
- * @param msg a printf-style format string
- * @param args arguments for the format string
- *
- * If the FATAL severity is given, this function will terminate the program
- * with an error code.
- */
-void
-_dbus_system_logv (DBusSystemLogSeverity severity, const char *msg, va_list args)
-{
-  va_list tmp;
-#ifdef HAVE_SYSLOG_H
-  int flags;
-  switch (severity)
-    {
-      case DBUS_SYSTEM_LOG_INFO:
-        flags =  LOG_DAEMON | LOG_NOTICE;
-        break;
-      case DBUS_SYSTEM_LOG_WARNING:
-        flags =  LOG_DAEMON | LOG_WARNING;
-        break;
-      case DBUS_SYSTEM_LOG_SECURITY:
-        flags = LOG_AUTH | LOG_NOTICE;
-        break;
-      case DBUS_SYSTEM_LOG_FATAL:
-        flags = LOG_DAEMON|LOG_CRIT;
-        break;
-      default:
-        return;
-    }
-
-  DBUS_VA_COPY (tmp, args);
-  vsyslog (flags, msg, tmp);
-  va_end (tmp);
-#endif
-
-#if !defined(HAVE_SYSLOG_H) || !HAVE_DECL_LOG_PERROR
-    {
-      /* vsyslog() won't write to stderr, so we'd better do it */
-      DBUS_VA_COPY (tmp, args);
-      fprintf (stderr, "dbus[" DBUS_PID_FORMAT "]: ", _dbus_getpid ());
-      vfprintf (stderr, msg, tmp);
-      fputc ('\n', stderr);
-      va_end (tmp);
-    }
-#endif
-
-  if (severity == DBUS_SYSTEM_LOG_FATAL)
-    exit (1);
 }
 
 /** Installs a UNIX signal handler
@@ -645,7 +560,7 @@ dbus_bool_t
 _dbus_user_at_console (const char *username,
                        DBusError  *error)
 {
-
+#ifdef DBUS_CONSOLE_AUTH_DIR
   DBusString u, f;
   dbus_bool_t result;
 
@@ -676,6 +591,9 @@ _dbus_user_at_console (const char *username,
   _dbus_string_free (&f);
 
   return result;
+#else
+  return FALSE;
+#endif
 }
 
 
@@ -1177,7 +1095,7 @@ string_squash_nonprintable (DBusString *str)
   unsigned char *buf;
   int i, len; 
   
-  buf = _dbus_string_get_data (str);
+  buf = _dbus_string_get_udata (str);
   len = _dbus_string_get_length (str);
   
   for (i = 0; i < len; i++)
@@ -1272,21 +1190,175 @@ fail:
   return FALSE;
 }
 
-/*
- * replaces the term DBUS_PREFIX in configure_time_path by the
- * current dbus installation directory. On unix this function is a noop
+/**
+ * Replace the DBUS_PREFIX in the given path, in-place, by the
+ * current D-Bus installation directory. On Unix this function
+ * does nothing, successfully.
  *
- * @param configure_time_path
- * @return real path
+ * @param path path to edit
+ * @return #FALSE on OOM
  */
-const char *
-_dbus_replace_install_prefix (const char *configure_time_path)
+dbus_bool_t
+_dbus_replace_install_prefix (DBusString *path)
 {
-  return configure_time_path;
+  return TRUE;
+}
+
+static dbus_bool_t
+ensure_owned_directory (const char *label,
+                        const DBusString *string,
+                        dbus_bool_t create,
+                        DBusError *error)
+{
+  const char *dir = _dbus_string_get_const_data (string);
+  struct stat buf;
+
+  if (create && !_dbus_ensure_directory (string, error))
+    return FALSE;
+
+  /*
+   * The stat()-based checks in this function are to protect against
+   * mistakes, not malice. We are working in a directory that is meant
+   * to be trusted; but if a user has used `su` or similar to escalate
+   * their privileges without correctly clearing the environment, the
+   * XDG_RUNTIME_DIR in the environment might still be the user's
+   * and not root's. We don't want to write root-owned files into that
+   * directory, so just warn and don't provide support for transient
+   * services in that case.
+   *
+   * In particular, we use stat() and not lstat() so that if we later
+   * decide to use a different directory name for transient services,
+   * we can drop in a compatibility symlink without breaking older
+   * libdbus.
+   */
+
+  if (stat (dir, &buf) != 0)
+    {
+      int saved_errno = errno;
+
+      dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                      "%s \"%s\" not available: %s", label, dir,
+                      _dbus_strerror (saved_errno));
+      return FALSE;
+    }
+
+  if (!S_ISDIR (buf.st_mode))
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED, "%s \"%s\" is not a directory",
+                      label, dir);
+      return FALSE;
+    }
+
+  if (buf.st_uid != geteuid ())
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "%s \"%s\" is owned by uid %ld, not our uid %ld",
+                      label, dir, (long) buf.st_uid, (long) geteuid ());
+      return FALSE;
+    }
+
+  /* This is just because we have the stat() results already, so we might
+   * as well check opportunistically. */
+  if ((S_IWOTH | S_IWGRP) & buf.st_mode)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "%s \"%s\" can be written by others (mode 0%o)",
+                      label, dir, buf.st_mode);
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
 #define DBUS_UNIX_STANDARD_SESSION_SERVICEDIR "/dbus-1/services"
 #define DBUS_UNIX_STANDARD_SYSTEM_SERVICEDIR "/dbus-1/system-services"
+
+/**
+ * Returns the standard directories for a session bus to look for
+ * transient service activation files.
+ *
+ * @param dirs the directory list we are returning
+ * @returns #FALSE on error
+ */
+dbus_bool_t
+_dbus_set_up_transient_session_servicedirs (DBusList  **dirs,
+                                            DBusError  *error)
+{
+  const char *xdg_runtime_dir;
+  DBusString services;
+  DBusString dbus1;
+  DBusString xrd;
+  dbus_bool_t ret = FALSE;
+  char *data = NULL;
+
+  if (!_dbus_string_init (&dbus1))
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  if (!_dbus_string_init (&services))
+    {
+      _dbus_string_free (&dbus1);
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  if (!_dbus_string_init (&xrd))
+    {
+      _dbus_string_free (&dbus1);
+      _dbus_string_free (&services);
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  xdg_runtime_dir = _dbus_getenv ("XDG_RUNTIME_DIR");
+
+  /* Not an error, we just can't have transient session services */
+  if (xdg_runtime_dir == NULL)
+    {
+      _dbus_verbose ("XDG_RUNTIME_DIR is unset: transient session services "
+                     "not available here\n");
+      ret = TRUE;
+      goto out;
+    }
+
+  if (!_dbus_string_append (&xrd, xdg_runtime_dir) ||
+      !_dbus_string_append_printf (&dbus1, "%s/dbus-1",
+                                   xdg_runtime_dir) ||
+      !_dbus_string_append_printf (&services, "%s/dbus-1/services",
+                                   xdg_runtime_dir))
+    {
+      _DBUS_SET_OOM (error);
+      goto out;
+    }
+
+  if (!ensure_owned_directory ("XDG_RUNTIME_DIR", &xrd, FALSE, error) ||
+      !ensure_owned_directory ("XDG_RUNTIME_DIR subdirectory", &dbus1, TRUE,
+                               error) ||
+      !ensure_owned_directory ("XDG_RUNTIME_DIR subdirectory", &services,
+                               TRUE, error))
+    goto out;
+
+  if (!_dbus_string_steal_data (&services, &data) ||
+      !_dbus_list_append (dirs, data))
+    {
+      _DBUS_SET_OOM (error);
+      goto out;
+    }
+
+  _dbus_verbose ("Transient service directory is %s\n", data);
+  /* Ownership was transferred to @dirs */
+  data = NULL;
+  ret = TRUE;
+
+out:
+  _dbus_string_free (&dbus1);
+  _dbus_string_free (&services);
+  _dbus_string_free (&xrd);
+  dbus_free (data);
+  return ret;
+}
 
 /**
  * Returns the standard directories for a session bus to look for service
@@ -1424,28 +1496,32 @@ _dbus_get_standard_system_servicedirs (DBusList **dirs)
 }
 
 /**
- * Append the absolute path of the system.conf file
+ * Get the absolute path of the system.conf file
  * (there is no system bus on Windows so this can just
  * return FALSE and print a warning or something)
  *
- * @param str the string to append to
+ * @param str the string to append to, which must be empty on entry
  * @returns #FALSE if no memory
  */
 dbus_bool_t
-_dbus_append_system_config_file (DBusString *str)
+_dbus_get_system_config_file (DBusString *str)
 {
+  _dbus_assert (_dbus_string_get_length (str) == 0);
+
   return _dbus_string_append (str, DBUS_SYSTEM_CONFIG_FILE);
 }
 
 /**
- * Append the absolute path of the session.conf file.
+ * Get the absolute path of the session.conf file.
  *
- * @param str the string to append to
+ * @param str the string to append to, which must be empty on entry
  * @returns #FALSE if no memory
  */
 dbus_bool_t
-_dbus_append_session_config_file (DBusString *str)
+_dbus_get_session_config_file (DBusString *str)
 {
+  _dbus_assert (_dbus_string_get_length (str) == 0);
+
   return _dbus_string_append (str, DBUS_SESSION_CONFIG_FILE);
 }
 
