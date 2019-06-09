@@ -30,8 +30,8 @@ Build-Depends:
  xmlto,
  xsltproc,
 Standards-Version: 3.9.8
-Vcs-Git: https://anonscm.debian.org/git/pkg-utopia/dbus.git
-Vcs-Browser: https://anonscm.debian.org/cgit/pkg-utopia/dbus.git
+Vcs-Git: https://salsa.debian.org/utopia-team/dbus.git -b debian/stretch
+Vcs-Browser: https://salsa.debian.org/utopia-team/dbus
 Homepage: http://dbus.freedesktop.org/
 
 Package: dbus

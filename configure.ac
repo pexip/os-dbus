@@ -3,7 +3,7 @@ AC_PREREQ([2.63])
 
 m4_define([dbus_major_version], [1])
 m4_define([dbus_minor_version], [10])
-m4_define([dbus_micro_version], [26])
+m4_define([dbus_micro_version], [28])
 m4_define([dbus_version],
           [dbus_major_version.dbus_minor_version.dbus_micro_version])
 AC_INIT([dbus],[dbus_version],[https://bugs.freedesktop.org/enter_bug.cgi?product=dbus],[dbus])
@@ -38,7 +38,7 @@ LT_CURRENT=17
 
 ## increment any time the source changes; set to
 ##  0 if you increment CURRENT
-LT_REVISION=15
+LT_REVISION=16
 
 ## increment if any interfaces have been added; set to 0
 ## if any interfaces have been changed or removed. removal has
@@ -1396,10 +1396,12 @@ TP_COMPILER_WARNINGS([WARNING_CFLAGS],
   dnl   gcc can't cope with inconsistent tab/space indentation
   dnl
   dnl To be fixed one day:
+  dnl - cast-function-type is fd.o #107349
   dnl - pointer-sign is a workaround for fd.o #15522
   dnl - type-limits is probably a bug too, but having the rest of -Wextra
   dnl   is better than nothing
   [$DISABLE_UNUSED_WARNINGS \
+   cast-function-type \
    deprecated-declarations \
    missing-field-initializers \
    misleading-indentation \
