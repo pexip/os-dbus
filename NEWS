@@ -1,3 +1,63 @@
+dbus 1.10.28 (2019-06-11)
+==
+
+The “kitchen slug” release.
+
+dbus version control is now hosted on freedesktop.org's Gitlab
+installation, and bug reports and feature requests have switched from
+Bugzilla bugs (indicated by "fd.o #nnn") to Gitlab issues ("dbus#nnn")
+and merge requests ("dbus!nnn").
+
+Security fixes:
+
+• CVE-2019-12749: Do not attempt to carry out DBUS_COOKIE_SHA1
+  authentication for identities that differ from the user running the
+  DBusServer. Previously, a local attacker could manipulate symbolic
+  links in their own home directory to bypass authentication and connect
+  to a DBusServer with elevated privileges. The standard system and
+  session dbus-daemons in their default configuration were immune to this
+  attack because they did not allow DBUS_COOKIE_SHA1, but third-party
+  users of DBusServer such as Upstart could be vulnerable.
+  Thanks to Joe Vennix of Apple Information Security.
+  (dbus#269, Simon McVittie)
+
+Other fixes:
+
+• Prevent reading up to 3 bytes beyond the end of a truncated message.
+  This could in principle be an information leak or denial of service
+  on the system bus, but is not believed to be exploitable to crash
+  the system bus or leak interesting information in practice.
+  (fd.o #107332, Simon McVittie)
+
+• Stop the dbus-daemon leaking memory (an error message) if delivering
+  the message that triggered auto-activation is forbidden. This is
+  technically a denial of service because the dbus-daemon will
+  run out of memory eventually, but it's a very slow and noisy one,
+  because all the rejected messages are also very likely to have
+  been logged to the system log, and its scope is typically limited by
+  the finite number of activatable services available.
+  (dbus#234, Simon McVittie)
+
+• Remove __attribute__((__malloc__)) attribute on dbus_realloc(),
+  which does not meet the criteria for that attribute in gcc 4.7+,
+  potentially leading to miscompilation (fd.o #107741, Simon McVittie)
+
+• Fix build with gcc 8 -Werror=cast-function-type
+  (fd.o #107349, Simon McVittie)
+
+• Fix warning from gcc 8 about suspicious use of strncpy() when
+  populating struct sockaddr_un (fd.o #107350, Simon McVittie)
+
+• Fix installation of Ducktype documentation with newer yelp-build
+  versions (fd.o #106171, Simon McVittie)
+
+Tests and CI:
+
+• Add Travis-CI builds for 64-bit Windows using mingw-w64
+  (fd.o #105662, Ralf Habacker)
+
+• Add Gitlab-CI integration (fd.o #108177, Simon McVittie)
+
 D-Bus 1.10.26 (2018-03-01)
 ==
 
