@@ -34,7 +34,7 @@ Standards-Version: 3.9.8
 Vcs-Git: https://salsa.debian.org/utopia-team/dbus.git -b debian/stretch
 Vcs-Browser: https://salsa.debian.org/utopia-team/dbus
 Homepage: http://dbus.freedesktop.org/
-XS-Pexip-Upstream: http://ftp.debian.org/debian/ stretch
+XS-Pexip-Upstream: http://ftp.debian.org/debian/ buster
 
 Package: dbus
 Architecture: any
