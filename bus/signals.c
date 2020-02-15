@@ -871,7 +871,7 @@ bus_match_rule_parse_arg_match (BusMatchRule     *rule,
       else
         {
           dbus_set_error (error, DBUS_ERROR_MATCH_RULE_INVALID,
-              "Key '%s' in match rule contains junk after argument number (%u). Only 'arg%upath' (for example) or 'arg0namespace' are valid", key, arg, arg);
+              "Key '%s' in match rule contains junk after argument number (%lu). Only 'arg%lupath' (for example) or 'arg0namespace' are valid", key, arg, arg);
           goto failed;
         }
     }
@@ -889,7 +889,7 @@ bus_match_rule_parse_arg_match (BusMatchRule     *rule,
       rule->args[arg] != NULL)
     {
       dbus_set_error (error, DBUS_ERROR_MATCH_RULE_INVALID,
-                      "Argument %d matched more than once in match rule\n", key);
+                      "Argument %s matched more than once in match rule\n", key);
       goto failed;
     }
   
@@ -2201,7 +2201,7 @@ check_parse (dbus_bool_t should_succeed,
 
   if (should_succeed && rule == NULL)
     {
-      _dbus_warn ("Failed to parse: %s: %s: \"%s\"\n",
+      _dbus_warn ("Failed to parse: %s: %s: \"%s\"",
                   error.name, error.message,
                   _dbus_string_get_const_data (&str));
       exit (1);
@@ -2209,7 +2209,7 @@ check_parse (dbus_bool_t should_succeed,
 
   if (!should_succeed && rule != NULL)
     {
-      _dbus_warn ("Failed to fail to parse: \"%s\"\n",
+      _dbus_warn ("Failed to fail to parse: \"%s\"",
                   _dbus_string_get_const_data (&str));
       exit (1);
     }
@@ -2549,7 +2549,7 @@ test_equality (void)
 
       if (!match_rule_equal (first, second))
         {
-          _dbus_warn ("rule %s and %s should have been equal\n",
+          _dbus_warn ("rule %s and %s should have been equal",
                       equality_tests[i].first,
                       equality_tests[i].second);
           exit (1);
@@ -2562,7 +2562,9 @@ test_equality (void)
       _dbus_assert (second_str != NULL);
       _dbus_assert (strcmp (first_str, second_str) == 0);
       first_reparsed = check_parse (TRUE, first_str);
+      _dbus_assert (first_reparsed != NULL);
       second_reparsed = check_parse (TRUE, second_str);
+      _dbus_assert (second_reparsed != NULL);
       _dbus_assert (match_rule_equal (first, first_reparsed));
       _dbus_assert (match_rule_equal (second, second_reparsed));
       bus_match_rule_unref (first_reparsed);
@@ -2581,10 +2583,11 @@ test_equality (void)
           if (i != j)
             {
               second = check_parse (TRUE, equality_tests[j].second);
+              _dbus_assert (second != NULL);
 
               if (match_rule_equal (first, second))
                 {
-                  _dbus_warn ("rule %s and %s should not have been equal\n",
+                  _dbus_warn ("rule %s and %s should not have been equal",
                               equality_tests[i].first,
                               equality_tests[j].second);
                   exit (1);
@@ -2694,7 +2697,7 @@ check_matches (dbus_bool_t  expected_to_match,
 
   if (matched != expected_to_match)
     {
-      _dbus_warn ("Expected rule %s to %s message %d, failed\n",
+      _dbus_warn ("Expected rule %s to %s message %d, failed",
                   rule_text, expected_to_match ?
                   "match" : "not match", number);
       exit (1);
@@ -2823,7 +2826,7 @@ test_path_match (int type,
   if (matched != should_match)
     {
       _dbus_warn ("Expected rule %s to %s message "
-                  "with first arg %s of type '%c', failed\n",
+                  "with first arg %s of type '%c', failed",
                   rule_text,
                   should_match ? "match" : "not match",
                   path,

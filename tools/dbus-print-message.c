@@ -39,6 +39,23 @@
 
 #include "tool-common.h"
 
+#ifdef HAVE_INTTYPES_H
+#include <inttypes.h>
+#endif
+
+#if defined(DBUS_WIN)
+#if !defined(PRId64)
+#define PRId64 "I64d"
+#endif
+#if !defined(PRIu64)
+#define PRIu64 "I64u"
+#endif
+#endif
+
+#ifndef HAVE_SOCKLEN_T
+#define socklen_t int
+#endif
+
 static const char*
 type_to_name (int message_type)
 {
@@ -169,8 +186,8 @@ print_fd (int fd, int depth)
       struct sockaddr_in6 ipv6;
   } addr, peer;
   char hostip[INET6_ADDRSTRLEN];
-  int addrlen = sizeof (addr);
-  int peerlen = sizeof (peer);
+  socklen_t addrlen = sizeof (addr);
+  socklen_t peerlen = sizeof (peer);
   int has_peer;
 
   /* Don't print the fd number: it is different in every process and since
@@ -384,11 +401,7 @@ print_iter (DBusMessageIter *iter, dbus_bool_t literal, int depth)
           {
             dbus_int64_t val;
             dbus_message_iter_get_basic (iter, &val);
-#ifdef DBUS_INT64_PRINTF_MODIFIER
-        printf ("int64 %" DBUS_INT64_PRINTF_MODIFIER "d\n", val);
-#else
-        printf ("int64 (omitted)\n");
-#endif
+            printf ("int64 %" PRId64 "\n", val);
             break;
           }
 
@@ -396,11 +409,7 @@ print_iter (DBusMessageIter *iter, dbus_bool_t literal, int depth)
           {
             dbus_uint64_t val;
             dbus_message_iter_get_basic (iter, &val);
-#ifdef DBUS_INT64_PRINTF_MODIFIER
-        printf ("uint64 %" DBUS_INT64_PRINTF_MODIFIER "u\n", val);
-#else
-        printf ("uint64 (omitted)\n");
-#endif
+            printf ("uint64 %" PRIu64 "\n", val);
             break;
           }
 

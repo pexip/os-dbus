@@ -99,7 +99,7 @@ _dbus_win_set_errno (int err)
 #endif
 }
 
-static BOOL is_winxp_sp3_or_lower();
+static BOOL is_winxp_sp3_or_lower (void);
 
 /*
  * _MIB_TCPROW_EX and friends are not available in system headers
@@ -323,9 +323,10 @@ _dbus_win_error_from_last_error (void)
     case ERROR_FILE_NOT_FOUND:
     case ERROR_PATH_NOT_FOUND:
       return DBUS_ERROR_FILE_NOT_FOUND;
+
+    default:
+      return DBUS_ERROR_FAILED;
     }
-  
-  return DBUS_ERROR_FAILED;
 }
 
 
@@ -507,7 +508,7 @@ _dbus_close_socket (DBusSocket fd,
                       fd.sock, _dbus_strerror_from_errno ());
       return FALSE;
     }
-  _dbus_verbose ("_dbus_close_socket: socket=%Iu, \n", fd.sock);
+  _dbus_verbose ("socket=%Iu, \n", fd.sock);
 
   return TRUE;
 }
@@ -631,12 +632,12 @@ _dbus_write_socket_two (DBusSocket        fd,
     {
       DBUS_SOCKET_SET_ERRNO ();
       _dbus_verbose ("WSASend: failed: %s\n", _dbus_strerror_from_errno ());
-      bytes_written = -1;
+      bytes_written = (DWORD) -1;
     }
   else
     _dbus_verbose ("WSASend: = %ld\n", bytes_written);
     
-  if (bytes_written < 0 && errno == EINTR)
+  if (bytes_written == (DWORD) -1 && errno == EINTR)
     goto again;
       
   return bytes_written;
@@ -941,7 +942,8 @@ _dbus_pid_for_log (void)
 
 #ifndef DBUS_WINCE
 
-static BOOL is_winxp_sp3_or_lower()
+static BOOL
+is_winxp_sp3_or_lower (void)
 {
    OSVERSIONINFOEX osvi;
    DWORDLONG dwlConditionMask = 0;
@@ -1315,9 +1317,11 @@ _dbus_poll (DBusPollFD *fds,
 
 #else   /* USE_CHRIS_IMPL */
 
+#ifdef DBUS_ENABLE_VERBOSE_MODE
 #define DBUS_POLL_CHAR_BUFFER_SIZE 2000
   char msg[DBUS_POLL_CHAR_BUFFER_SIZE];
   char *msgp;
+#endif
 
   fd_set read_set, write_set, err_set;
   SOCKET max_fd = 0;
@@ -2300,7 +2304,7 @@ _dbus_generate_random_bytes (DBusString *str,
                              DBusError  *error)
 {
   int old_len;
-  char *p;
+  unsigned char *p;
   HCRYPTPROV hprov;
 
   old_len = _dbus_string_get_length (str);
@@ -2311,7 +2315,7 @@ _dbus_generate_random_bytes (DBusString *str,
       return FALSE;
     }
 
-  p = _dbus_string_get_data_len (str, old_len, n_bytes);
+  p = _dbus_string_get_udata_len (str, old_len, n_bytes);
 
   if (!CryptAcquireContext (&hprov, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))
     {
@@ -2349,20 +2353,21 @@ _dbus_get_tmpdir(void)
 
   if (tmpdir == NULL)
     {
-      char *last_slash;
+      unsigned char *last_slash;
+      unsigned char *p = (unsigned char *)buf;
 
       if (!GetTempPathA (sizeof (buf), buf))
         {
-          _dbus_warn ("GetTempPath failed\n");
+          _dbus_warn ("GetTempPath failed");
           _dbus_abort ();
         }
 
       /* Drop terminating backslash or slash */
-      last_slash = _mbsrchr (buf, '\\');
-      if (last_slash > buf && last_slash[1] == '\0')
+      last_slash = _mbsrchr (p, '\\');
+      if (last_slash > p && last_slash[1] == '\0')
         last_slash[0] = '\0';
-      last_slash = _mbsrchr (buf, '/');
-      if (last_slash > buf && last_slash[1] == '\0')
+      last_slash = _mbsrchr (p, '/');
+      if (last_slash > p && last_slash[1] == '\0')
         last_slash[0] = '\0';
 
       tmpdir = buf;
@@ -2449,192 +2454,56 @@ _dbus_delete_file (const DBusString *filename,
 #define __i386__
 #endif
 
-//#define MAKE_FUNCPTR(f) static typeof(f) * p##f
-
-//MAKE_FUNCPTR(StackWalk);
-//MAKE_FUNCPTR(SymGetModuleBase);
-//MAKE_FUNCPTR(SymFunctionTableAccess);
-//MAKE_FUNCPTR(SymInitialize);
-//MAKE_FUNCPTR(SymGetSymFromAddr);
-//MAKE_FUNCPTR(SymGetModuleInfo);
-static BOOL (WINAPI *pStackWalk)(
-  DWORD MachineType,
-  HANDLE hProcess,
-  HANDLE hThread,
-  LPSTACKFRAME StackFrame,
-  PVOID ContextRecord,
-  PREAD_PROCESS_MEMORY_ROUTINE ReadMemoryRoutine,
-  PFUNCTION_TABLE_ACCESS_ROUTINE FunctionTableAccessRoutine,
-  PGET_MODULE_BASE_ROUTINE GetModuleBaseRoutine,
-  PTRANSLATE_ADDRESS_ROUTINE TranslateAddress
-);
-#ifdef _WIN64
-static DWORD64 (WINAPI *pSymGetModuleBase)(
-  HANDLE hProcess,
-  DWORD64 dwAddr
-);
-static PVOID  (WINAPI *pSymFunctionTableAccess)(
-  HANDLE hProcess,
-  DWORD64 AddrBase
-);
-#else
-static DWORD (WINAPI *pSymGetModuleBase)(
-  HANDLE hProcess,
-  DWORD dwAddr
-);
-static PVOID  (WINAPI *pSymFunctionTableAccess)(
-  HANDLE hProcess,
-  DWORD AddrBase
-);
-#endif
-static BOOL  (WINAPI *pSymInitialize)(
-  HANDLE hProcess,
-  PSTR UserSearchPath,
-  BOOL fInvadeProcess
-);
-static BOOL  (WINAPI *pSymGetSymFromAddr)(
-  HANDLE hProcess,
-  DWORD Address,
-  PDWORD Displacement,
-  PIMAGEHLP_SYMBOL Symbol
-);
-static BOOL  (WINAPI *pSymGetModuleInfo)(
-  HANDLE hProcess,
-  DWORD dwAddr,
-  PIMAGEHLP_MODULE ModuleInfo
-);
-static DWORD  (WINAPI *pSymSetOptions)(
-  DWORD SymOptions
-);
-
-
-static BOOL init_backtrace()
+static void dump_backtrace_for_thread (HANDLE hThread)
 {
-    HMODULE hmodDbgHelp = LoadLibraryA("dbghelp");
-/*
-    #define GETFUNC(x) \
-    p##x = (typeof(x)*)GetProcAddress(hmodDbgHelp, #x); \
-    if (!p##x) \
-    { \
-        return FALSE; \
-    }
-    */
+  ADDRESS old_address;
+  STACKFRAME sf;
+  CONTEXT context;
+  DWORD dwImageType;
+  int i = 0;
+
+  SymSetOptions (SYMOPT_UNDNAME | SYMOPT_LOAD_LINES);
+  SymInitialize (GetCurrentProcess (), NULL, TRUE);
 
 
-//    GETFUNC(StackWalk);
-//    GETFUNC(SymGetModuleBase);
-//    GETFUNC(SymFunctionTableAccess);
-//    GETFUNC(SymInitialize);
-//    GETFUNC(SymGetSymFromAddr);
-//    GETFUNC(SymGetModuleInfo);
+  /* can't use this function for current thread as GetThreadContext
+   * doesn't support getting context from current thread */
+  if (hThread == GetCurrentThread())
+    return;
 
-#define FUNC(x) #x
+  DPRINTF ("Backtrace:\n");
 
-      pStackWalk = (BOOL  (WINAPI *)(
-DWORD MachineType,
-HANDLE hProcess,
-HANDLE hThread,
-LPSTACKFRAME StackFrame,
-PVOID ContextRecord,
-PREAD_PROCESS_MEMORY_ROUTINE ReadMemoryRoutine,
-PFUNCTION_TABLE_ACCESS_ROUTINE FunctionTableAccessRoutine,
-PGET_MODULE_BASE_ROUTINE GetModuleBaseRoutine,
-PTRANSLATE_ADDRESS_ROUTINE TranslateAddress
-))GetProcAddress (hmodDbgHelp, FUNC(StackWalk));
-#ifdef _WIN64
-    pSymGetModuleBase=(DWORD64  (WINAPI *)(
-  HANDLE hProcess,
-  DWORD64 dwAddr
-))GetProcAddress (hmodDbgHelp, FUNC(SymGetModuleBase));
-    pSymFunctionTableAccess=(PVOID  (WINAPI *)(
-  HANDLE hProcess,
-  DWORD64 AddrBase
-))GetProcAddress (hmodDbgHelp, FUNC(SymFunctionTableAccess));
-#else
-    pSymGetModuleBase=(DWORD  (WINAPI *)(
-  HANDLE hProcess,
-  DWORD dwAddr
-))GetProcAddress (hmodDbgHelp, FUNC(SymGetModuleBase));
-    pSymFunctionTableAccess=(PVOID  (WINAPI *)(
-  HANDLE hProcess,
-  DWORD AddrBase
-))GetProcAddress (hmodDbgHelp, FUNC(SymFunctionTableAccess));
-#endif
-    pSymInitialize = (BOOL  (WINAPI *)(
-  HANDLE hProcess,
-  PSTR UserSearchPath,
-  BOOL fInvadeProcess
-))GetProcAddress (hmodDbgHelp, FUNC(SymInitialize));
-    pSymGetSymFromAddr = (BOOL  (WINAPI *)(
-  HANDLE hProcess,
-  DWORD Address,
-  PDWORD Displacement,
-  PIMAGEHLP_SYMBOL Symbol
-))GetProcAddress (hmodDbgHelp, FUNC(SymGetSymFromAddr));
-    pSymGetModuleInfo = (BOOL  (WINAPI *)(
-  HANDLE hProcess,
-  DWORD dwAddr,
-  PIMAGEHLP_MODULE ModuleInfo
-))GetProcAddress (hmodDbgHelp, FUNC(SymGetModuleInfo));
-pSymSetOptions = (DWORD  (WINAPI *)(
-DWORD SymOptions
-))GetProcAddress (hmodDbgHelp, FUNC(SymSetOptions));
+  _DBUS_ZERO (old_address);
+  _DBUS_ZERO (context);
+  context.ContextFlags = CONTEXT_FULL;
 
+  SuspendThread (hThread);
 
-    pSymSetOptions(SYMOPT_UNDNAME);
-
-    pSymInitialize(GetCurrentProcess(), NULL, TRUE);
-
-    return TRUE;
-}
-
-static void dump_backtrace_for_thread(HANDLE hThread)
-{
-    STACKFRAME sf;
-    CONTEXT context;
-    DWORD dwImageType;
-
-    if (!pStackWalk)
-        if (!init_backtrace())
-            return;
-
-    /* can't use this function for current thread as GetThreadContext
-     * doesn't support getting context from current thread */
-    if (hThread == GetCurrentThread())
-        return;
-
-    DPRINTF("Backtrace:\n");
-
-    _DBUS_ZERO(context);
-    context.ContextFlags = CONTEXT_FULL;
-
-    SuspendThread(hThread);
-
-    if (!GetThreadContext(hThread, &context))
+  if (!GetThreadContext (hThread, &context))
     {
-        DPRINTF("Couldn't get thread context (error %ld)\n", GetLastError());
-        ResumeThread(hThread);
-        return;
+      DPRINTF ("Couldn't get thread context (error %ld)\n", GetLastError ());
+      ResumeThread (hThread);
+      return;
     }
 
-    _DBUS_ZERO(sf);
+  _DBUS_ZERO (sf);
 
 #ifdef __i386__
-    sf.AddrFrame.Offset = context.Ebp;
-    sf.AddrFrame.Mode = AddrModeFlat;
-    sf.AddrPC.Offset = context.Eip;
-    sf.AddrPC.Mode = AddrModeFlat;
-    dwImageType = IMAGE_FILE_MACHINE_I386;
-#elif _M_X64
-  dwImageType                = IMAGE_FILE_MACHINE_AMD64;
+  dwImageType         = IMAGE_FILE_MACHINE_I386;
+  sf.AddrFrame.Offset = context.Ebp;
+  sf.AddrFrame.Mode   = AddrModeFlat;
+  sf.AddrPC.Offset    = context.Eip;
+  sf.AddrPC.Mode      = AddrModeFlat;
+#elif defined(_M_X64)
+  dwImageType         = IMAGE_FILE_MACHINE_AMD64;
   sf.AddrPC.Offset    = context.Rip;
   sf.AddrPC.Mode      = AddrModeFlat;
   sf.AddrFrame.Offset = context.Rsp;
   sf.AddrFrame.Mode   = AddrModeFlat;
   sf.AddrStack.Offset = context.Rsp;
   sf.AddrStack.Mode   = AddrModeFlat;
-#elif _M_IA64
-  dwImageType                 = IMAGE_FILE_MACHINE_IA64;
+#elif defined(_M_IA64)
+  dwImageType         = IMAGE_FILE_MACHINE_IA64;
   sf.AddrPC.Offset    = context.StIIP;
   sf.AddrPC.Mode      = AddrModeFlat;
   sf.AddrFrame.Offset = context.IntSp;
@@ -2647,71 +2516,98 @@ static void dump_backtrace_for_thread(HANDLE hThread)
 # error You need to fill in the STACKFRAME structure for your architecture
 #endif
 
-    while (pStackWalk(dwImageType, GetCurrentProcess(),
-                     hThread, &sf, &context, NULL, pSymFunctionTableAccess,
-                     pSymGetModuleBase, NULL))
+  /*
+    backtrace format
+    <level> <address> <symbol>[+offset] [ '[' <file> ':' <line> ']' ] [ 'in' <module> ]
+    example:
+      6 0xf75ade6b wine_switch_to_stack+0x2a [/usr/src/debug/wine-snapshot/libs/wine/port.c:59] in libwine.so.1
+  */
+  while (StackWalk (dwImageType, GetCurrentProcess (),
+                    hThread, &sf, &context, NULL, SymFunctionTableAccess,
+                    SymGetModuleBase, NULL))
     {
-        BYTE buffer[256];
-        IMAGEHLP_SYMBOL * pSymbol = (IMAGEHLP_SYMBOL *)buffer;
-        DWORD dwDisplacement;
+      char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME * sizeof(char)];
+      PSYMBOL_INFO pSymbol = (PSYMBOL_INFO)buffer;
+      DWORD64 displacement;
+      IMAGEHLP_LINE line;
+      DWORD dwDisplacement;
+      IMAGEHLP_MODULE moduleInfo;
 
-        pSymbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL);
-        pSymbol->MaxNameLength = sizeof(buffer) - sizeof(IMAGEHLP_SYMBOL) + 1;
-
-        if (!pSymGetSymFromAddr(GetCurrentProcess(), sf.AddrPC.Offset,
-                                &dwDisplacement, pSymbol))
+      /*
+         on Wine64 version 1.7.54, we get an infinite number of stack entries
+         pointing to the same stack frame  (_start+0x29 in <wine-loader>)
+         see bug https://bugs.winehq.org/show_bug.cgi?id=39606
+      */
+#ifndef __i386__
+      if (old_address.Offset == sf.AddrPC.Offset)
         {
-            IMAGEHLP_MODULE ModuleInfo;
-            ModuleInfo.SizeOfStruct = sizeof(ModuleInfo);
-
-            if (!pSymGetModuleInfo(GetCurrentProcess(), sf.AddrPC.Offset,
-                                   &ModuleInfo))
-                DPRINTF("1\t%p\n", (void*)sf.AddrPC.Offset);
-            else
-                DPRINTF("2\t%s+0x%lx\n", ModuleInfo.ImageName,
-                    sf.AddrPC.Offset - ModuleInfo.BaseOfImage);
+          break;
         }
-        else if (dwDisplacement)
-            DPRINTF("3\t%s+0x%lx\n", pSymbol->Name, dwDisplacement);
-        else
-            DPRINTF("4\t%s\n", pSymbol->Name);
-    }
+#endif
 
-    ResumeThread(hThread);
+      pSymbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+      pSymbol->MaxNameLen = MAX_SYM_NAME;
+
+      if (SymFromAddr (GetCurrentProcess (), sf.AddrPC.Offset, &displacement, pSymbol))
+        {
+          if (displacement)
+            DPRINTF ("%3d %s+0x%I64x", i++, pSymbol->Name, displacement);
+          else
+            DPRINTF ("%3d %s", i++, pSymbol->Name);
+        }
+      else
+        DPRINTF ("%3d 0x%Ix", i++, sf.AddrPC.Offset);
+
+      line.SizeOfStruct = sizeof(IMAGEHLP_LINE);
+      if (SymGetLineFromAddr (GetCurrentProcess (), sf.AddrPC.Offset, &dwDisplacement, &line))
+        {
+          DPRINTF (" [%s:%ld]", line.FileName, line.LineNumber);
+        }
+
+      moduleInfo.SizeOfStruct = sizeof(moduleInfo);
+      if (SymGetModuleInfo (GetCurrentProcess (), sf.AddrPC.Offset, &moduleInfo))
+        {
+          DPRINTF (" in %s", moduleInfo.ModuleName);
+        }
+      DPRINTF ("\n");
+      old_address = sf.AddrPC;
+    }
+  ResumeThread (hThread);
 }
 
-static DWORD WINAPI dump_thread_proc(LPVOID lpParameter)
+static DWORD WINAPI dump_thread_proc (LPVOID lpParameter)
 {
-    dump_backtrace_for_thread((HANDLE)lpParameter);
-    return 0;
+  dump_backtrace_for_thread ((HANDLE) lpParameter);
+  return 0;
 }
 
 /* cannot get valid context from current thread, so we have to execute
  * backtrace from another thread */
-static void dump_backtrace()
+static void
+dump_backtrace (void)
 {
-    HANDLE hCurrentThread;
-    HANDLE hThread;
-    DWORD dwThreadId;
-    DuplicateHandle(GetCurrentProcess(), GetCurrentThread(),
-        GetCurrentProcess(), &hCurrentThread, 0, FALSE, DUPLICATE_SAME_ACCESS);
-    hThread = CreateThread(NULL, 0, dump_thread_proc, (LPVOID)hCurrentThread,
-        0, &dwThreadId);
-    WaitForSingleObject(hThread, INFINITE);
-    CloseHandle(hThread);
-    CloseHandle(hCurrentThread);
+  HANDLE hCurrentThread;
+  HANDLE hThread;
+  DWORD dwThreadId;
+  DuplicateHandle (GetCurrentProcess (), GetCurrentThread (),
+                   GetCurrentProcess (), &hCurrentThread,
+                   0, FALSE, DUPLICATE_SAME_ACCESS);
+  hThread = CreateThread (NULL, 0, dump_thread_proc, (LPVOID)hCurrentThread,
+                          0, &dwThreadId);
+  WaitForSingleObject (hThread, INFINITE);
+  CloseHandle (hThread);
+  CloseHandle (hCurrentThread);
 }
 #endif
 #endif /* asserts or tests enabled */
 
 #ifdef BACKTRACES
-void _dbus_print_backtrace(void)
+void _dbus_print_backtrace (void)
 {
-  init_backtrace();
-  dump_backtrace();
+  dump_backtrace ();
 }
 #else
-void _dbus_print_backtrace(void)
+void _dbus_print_backtrace (void)
 {
   _dbus_verbose ("  D-Bus not compiled with backtrace support\n");
 }
@@ -2821,9 +2717,9 @@ HANDLE _dbus_global_lock (const char *mutexname)
        case WAIT_FAILED:
        case WAIT_TIMEOUT:
                return 0;
+       default:
+               return mutex;
      }
-
-   return mutex;
 }
 
 static
@@ -2850,14 +2746,11 @@ _dbus_get_install_root_as_hash(DBusString *out)
 {
     DBusString install_path;
 
-    char path[MAX_PATH*2];
-    int path_size = sizeof(path);
-
-    if (!_dbus_get_install_root(path,path_size))
-        return FALSE;
-
     _dbus_string_init(&install_path);
-    _dbus_string_append(&install_path,path);
+
+    if (!_dbus_get_install_root (&install_path) ||
+        _dbus_string_get_length (&install_path) == 0)
+        return FALSE;
 
     _dbus_string_init(out);
     _dbus_string_tolower_ascii(&install_path,0,_dbus_string_get_length(&install_path));
@@ -3328,44 +3221,86 @@ _dbus_get_is_errno_eagain_or_ewouldblock (int e)
 }
 
 /**
- * return the absolute path of the dbus installation 
+ * Fill str with the absolute path of the D-Bus installation, or truncate str
+ * to zero length if we cannot determine it.
  *
- * @param prefix buffer for installation path
- * @param len length of buffer
- * @returns #FALSE on failure
+ * @param str buffer for installation path
+ * @returns #FALSE on OOM, #TRUE if not OOM
  */
 dbus_bool_t
-_dbus_get_install_root(char *prefix, int len)
+_dbus_get_install_root (DBusString *str)
 {
-    //To find the prefix, we cut the filename and also \bin\ if present
-    DWORD pathLength;
-    char *lastSlash;
-    SetLastError( 0 );
-    pathLength = GetModuleFileNameA(_dbus_win_get_dll_hmodule(), prefix, len);
-    if ( pathLength == 0 || GetLastError() != 0 ) {
-        *prefix = '\0';
-        return FALSE;
-    }
-    lastSlash = _mbsrchr(prefix, '\\');
+    /* this is just an initial guess */
+    DWORD pathLength = MAX_PATH;
+    unsigned char *lastSlash;
+    unsigned char *prefix;
+
+    do
+      {
+        /* allocate enough space for our best guess at the length */
+        if (!_dbus_string_set_length (str, pathLength))
+          {
+            _dbus_string_set_length (str, 0);
+            return FALSE;
+          }
+
+        SetLastError (0);
+        pathLength = GetModuleFileNameA (_dbus_win_get_dll_hmodule (),
+            _dbus_string_get_data (str), _dbus_string_get_length (str));
+
+        if (pathLength == 0 || GetLastError () != 0)
+          {
+            /* failed, but not OOM */
+            _dbus_string_set_length (str, 0);
+            return TRUE;
+          }
+
+        /* if the return is strictly less than the buffer size, it has
+         * not been truncated, so we can continue */
+        if (pathLength < (DWORD) _dbus_string_get_length (str))
+          {
+            /* reduce the length to match what Windows filled in */
+            if (!_dbus_string_set_length (str, pathLength))
+              {
+                _dbus_string_set_length (str, 0);
+                return FALSE;
+              }
+
+            break;
+          }
+
+        /* else it may have been truncated; try with a larger buffer */
+        pathLength *= 2;
+      }
+    while (TRUE);
+
+    /* the rest of this function works by direct byte manipulation of the
+     * underlying buffer */
+    prefix = _dbus_string_get_udata (str);
+
+    lastSlash = _mbsrchr (prefix, '\\');
     if (lastSlash == NULL) {
-        *prefix = '\0';
-        return FALSE;
+        /* failed, but not OOM */
+        _dbus_string_set_length (str, 0);
+        return TRUE;
     }
     //cut off binary name
     lastSlash[1] = 0;
 
     //cut possible "\\bin"
-
     //this fails if we are in a double-byte system codepage and the
     //folder's name happens to end with the *bytes*
     //"\\bin"... (I.e. the second byte of some Han character and then
     //the Latin "bin", but that is not likely I think...
-    if (lastSlash - prefix >= 4 && strnicmp(lastSlash - 4, "\\bin", 4) == 0)
+    if (lastSlash - prefix >= 4 && _mbsnicmp (lastSlash - 4, (const unsigned char *)"\\bin", 4) == 0)
         lastSlash[-3] = 0;
-    else if (lastSlash - prefix >= 10 && strnicmp(lastSlash - 10, "\\bin\\debug", 10) == 0)
+    else if (lastSlash - prefix >= 10 && _mbsnicmp (lastSlash - 10, (const unsigned char *)"\\bin\\debug", 10) == 0)
         lastSlash[-9] = 0;
-    else if (lastSlash - prefix >= 12 && strnicmp(lastSlash - 12, "\\bin\\release", 12) == 0)
+    else if (lastSlash - prefix >= 12 && _mbsnicmp (lastSlash - 12, (const unsigned char *)"\\bin\\release", 12) == 0)
         lastSlash[-11] = 0;
+
+    /* fix up the length to match the byte-manipulation */
+    _dbus_string_set_length (str, strlen ((char *) prefix));
 
     return TRUE;
 }
@@ -3442,7 +3377,7 @@ _dbus_append_keyring_directory_for_credentials (DBusString      *directory,
         static dbus_bool_t already_warned = FALSE;
         if (!already_warned)
           {
-            _dbus_warn ("Using your real home directory for testing, set DBUS_TEST_HOMEDIR to avoid\n");
+            _dbus_warn ("Using your real home directory for testing, set DBUS_TEST_HOMEDIR to avoid");
             already_warned = TRUE;
           }
       }
@@ -3619,12 +3554,15 @@ _dbus_strerror (int error_number)
 
     case WSASYSCALLFAILURE:
       return "System call failure";
-    }
-  msg = strerror (error_number);
-  if (msg == NULL)
-    msg = "unknown";
 
-  return msg;
+    default:
+      msg = strerror (error_number);
+
+      if (msg == NULL)
+        msg = "unknown";
+
+      return msg;
+    }
 #endif //DBUS_WINCE
 }
 
@@ -3664,7 +3602,7 @@ _dbus_win_warn_win_error (const char *message,
 
   dbus_error_init (&error);
   _dbus_win_set_error_from_win_error (&error, code);
-  _dbus_warn ("%s: %s\n", message, error.message);
+  _dbus_warn ("%s: %s", message, error.message);
   dbus_error_free (&error);
 }
 
@@ -3733,6 +3671,76 @@ _dbus_restore_socket_errno (int saved_errno)
   _dbus_win_set_errno (saved_errno);
 }
 
+static const char *log_tag = "dbus";
+static DBusLogFlags log_flags = DBUS_LOG_FLAGS_STDERR;
+
+/**
+ * Initialize the system log.
+ *
+ * The "tag" is not copied, and must remain valid for the entire lifetime of
+ * the process or until _dbus_init_system_log() is called again. In practice
+ * it will normally be a constant.
+ *
+ * @param tag the name of the executable (syslog tag)
+ * @param mode whether to log to stderr, the system log or both
+ */
+void
+_dbus_init_system_log (const char   *tag,
+                       DBusLogFlags  flags)
+{
+  /* We never want to turn off logging completely */
+  _dbus_assert (
+      (flags & (DBUS_LOG_FLAGS_STDERR | DBUS_LOG_FLAGS_SYSTEM_LOG)) != 0);
+
+  log_tag = tag;
+  log_flags = flags;
+}
+
+/**
+ * Log a message to the system log file (e.g. syslog on Unix).
+ *
+ * @param severity a severity value
+ * @param msg a printf-style format string
+ * @param args arguments for the format string
+ */
+void
+_dbus_logv (DBusSystemLogSeverity  severity,
+            const char            *msg,
+            va_list                args)
+{
+  const char *s = "";
+  va_list tmp;
+
+  switch(severity)
+   {
+     case DBUS_SYSTEM_LOG_INFO: s = "info"; break;
+     case DBUS_SYSTEM_LOG_WARNING: s = "warning"; break;
+     case DBUS_SYSTEM_LOG_SECURITY: s = "security"; break;
+     case DBUS_SYSTEM_LOG_ERROR: s = "error"; break;
+     default: _dbus_assert_not_reached ("invalid log severity");
+   }
+
+  if (log_flags & DBUS_LOG_FLAGS_SYSTEM_LOG)
+    {
+      char buf[1024];
+      char format[1024];
+
+      DBUS_VA_COPY (tmp, args);
+      snprintf (format, sizeof (format), "%s: %s", s, msg);
+      vsnprintf(buf, sizeof(buf), format, tmp);
+      OutputDebugStringA(buf);
+      va_end (tmp);
+    }
+
+  if (log_flags & DBUS_LOG_FLAGS_STDERR)
+    {
+      DBUS_VA_COPY (tmp, args);
+      fprintf (stderr, "%s[%lu]: %s: ", log_tag, _dbus_pid_for_log (), s);
+      vfprintf (stderr, msg, tmp);
+      fprintf (stderr, "\n");
+      va_end (tmp);
+    }
+}
+
 /** @} end of sysdeps-win */
 /* tests in dbus-sysdeps-util.c */
-

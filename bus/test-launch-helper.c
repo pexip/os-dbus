@@ -30,7 +30,12 @@
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-misc.h>
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+#if !defined(DBUS_ENABLE_EMBEDDED_TESTS) || !defined(DBUS_UNIX)
+#error This file is only relevant for the embedded tests on Unix
+#endif
+
+static void die (const char *failure) _DBUS_GNUC_NORETURN;
+
 static void
 die (const char *failure)
 {
@@ -46,7 +51,7 @@ check_memleaks (const char *name)
   printf ("%s: checking for memleaks\n", name);
   if (_dbus_get_malloc_blocks_outstanding () != 0)
     {
-      _dbus_warn ("%d dbus_malloc blocks were not freed\n",
+      _dbus_warn ("%d dbus_malloc blocks were not freed",
                   _dbus_get_malloc_blocks_outstanding ());
       die ("memleaks");
     }
@@ -57,8 +62,6 @@ test_post_hook (const char *name)
 {
   check_memleaks (name);
 }
-#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
-
 
 #ifdef ACTIVATION_LAUNCHER_DO_OOM
 
@@ -80,7 +83,7 @@ bus_activation_helper_oom_test (void *data)
       /* we failed, but a OOM is good */
       if (!dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
         {
-          _dbus_warn ("FAILED SELF TEST: Error: %s\n", error.message);
+          _dbus_warn ("FAILED SELF TEST: Error: %s", error.message);
           retval = FALSE;
         }
       dbus_error_free (&error);
@@ -98,7 +101,6 @@ bus_activation_helper_oom_test (void *data)
 int
 main (int argc, char **argv)
 {
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
   const char *dir;
   DBusString config_file;
 
@@ -130,7 +132,7 @@ main (int argc, char **argv)
 
   if (!_dbus_test_oom_handling ("dbus-daemon-launch-helper",
                                 bus_activation_helper_oom_test,
-                                "org.freedesktop.DBus.TestSuiteEchoService"))
+                                (char *) "org.freedesktop.DBus.TestSuiteEchoService"))
     die ("OOM failed");
 
   test_post_hook (argv[0]);
@@ -138,11 +140,4 @@ main (int argc, char **argv)
   printf ("%s: Success\n", argv[0]);
 
   return 0;
-#else /* DBUS_ENABLE_EMBEDDED_TESTS */
-
-  printf ("Not compiled with test support\n");
-  
-  return 0;
-#endif
 }
-

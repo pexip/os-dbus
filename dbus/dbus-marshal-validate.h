@@ -155,10 +155,6 @@ DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_validate_bus_namespace (const DBusString  *str,
                                           int                start,
                                           int                len);
-DBUS_PRIVATE_EXPORT
-dbus_bool_t _dbus_validate_signature  (const DBusString *str,
-                                       int               start,
-                                       int               len);
 /* just to have a name consistent with the above: */
 #define _dbus_validate_utf8(s,b,e) _dbus_string_validate_utf8 (s, b, e)
 
@@ -205,8 +201,6 @@ DECLARE_DBUS_NAME_CHECK(member);
 DECLARE_DBUS_NAME_CHECK(error_name);
 /** defines _dbus_check_is_valid_bus_name() */
 DECLARE_DBUS_NAME_CHECK(bus_name);
-/** defines _dbus_check_is_valid_signature() */
-DECLARE_DBUS_NAME_CHECK(signature);
 /** defines _dbus_check_is_valid_utf8() */
 DECLARE_DBUS_NAME_CHECK(utf8);
 

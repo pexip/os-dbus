@@ -1,3 +1,26 @@
+/*
+ * Copyright © 2006 Red Hat Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software and associated documentation files
+ * (the "Software"), to deal in the Software without restriction,
+ * including without limitation the rights to use, copy, modify, merge,
+ * publish, distribute, sublicense, and/or sell copies of the Software,
+ * and to permit persons to whom the Software is furnished to do so,
+ * subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be
+ * included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 /**
 * Test to make sure we don't get stuck polling a dbus connection
 * which has no data on the socket.  This was an issue where
@@ -20,7 +43,7 @@ _run_iteration (DBusConnection *conn)
   DBusPendingCall *dbus_pending;
   DBusMessage *method;
   DBusMessage *reply;
-  char *echo = "echo";
+  const char *echo = "echo";
 
   /* send the first message */
   method = dbus_message_new_method_call ("org.freedesktop.DBus.TestSuiteEchoService",
@@ -28,7 +51,12 @@ _run_iteration (DBusConnection *conn)
                                          "org.freedesktop.TestSuite",
                                          "Echo");
 
-  dbus_message_append_args (method, DBUS_TYPE_STRING, &echo, NULL);
+  if (!dbus_message_append_args (method, DBUS_TYPE_STRING, &echo, NULL))
+    {
+      fprintf (stderr, "Bail out! Failed to append arguments: OOM\n");
+      exit (1);
+    }
+
   dbus_connection_send_with_reply (conn, method, &echo_pending, -1);
   dbus_message_unref (method);
   
@@ -56,13 +84,13 @@ _run_iteration (DBusConnection *conn)
 
   if (reply == NULL)
     {
-      printf ("Failed: Reply is NULL ***\n");
+      printf ("Bail out! Reply is NULL ***\n");
       exit (1);
     }
 
   if (dbus_message_get_type (reply) == DBUS_MESSAGE_TYPE_ERROR)
     {
-      printf ("Failed: Reply is error: %s ***\n", dbus_message_get_error_name (reply));
+      printf ("Bail out! Reply is error: %s ***\n", dbus_message_get_error_name (reply));
       exit (1);
     } 
 
@@ -72,6 +100,7 @@ _run_iteration (DBusConnection *conn)
   
 }
 
+/* This test outputs TAP syntax: http://testanything.org/ */
 int
 main (int argc, char *argv[])
 {
@@ -87,7 +116,7 @@ main (int argc, char *argv[])
      but if it does and we are stuck in a poll call then we know the 
      stuck in poll bug has come back to haunt us */
 
-  printf ("*** Testing stuck in poll\n");
+  printf ("# Testing stuck in poll\n");
 
   dbus_error_init (&error);
 
@@ -104,10 +133,10 @@ main (int argc, char *argv[])
 
       /* we just care about seconds */
       delta = end_tv_sec - start_tv_sec;
-      printf ("Iter %i: %lis\n", i, delta);
+      printf ("ok %d - %lis\n", i + 1, delta);
       if (delta >= 5)
         {
-	  printf ("Failed: looks like we might have been be stuck in poll ***\n");
+	  printf ("Bail out! Looks like we might have been be stuck in poll ***\n");
 	  exit (1);
 	}
     }
@@ -119,6 +148,6 @@ main (int argc, char *argv[])
   dbus_connection_send (conn, method, NULL);
   dbus_message_unref (method);
 
-  printf ("Success ***\n");
+  printf ("# Testing completed\n1..%d\n", i);
   exit (0);
 }

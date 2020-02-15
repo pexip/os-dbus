@@ -67,6 +67,10 @@ typedef enum
 static void
 signal_handler (int sig)
 {
+  /* Signal handlers that might set errno must save and restore the errno
+   * that the interrupted function might have been relying on. */
+  int saved_errno = errno;
+
   switch (sig)
     {
     case SIGHUP:
@@ -128,9 +132,18 @@ signal_handler (int sig)
           }
       }
       break;
+
+    default:
+      /* can't happen unless this signal handler gets used for a wrong
+       * signal, but keep -Wswitch-default happy */
+      break;
     }
+
+  errno = saved_errno;
 }
 #endif /* DBUS_UNIX */
+
+static void usage (void) _DBUS_GNUC_NORETURN;
 
 static void
 usage (void)
@@ -146,6 +159,9 @@ usage (void)
       " [--introspect]"
       " [--address=ADDRESS]"
       " [--nopidfile]"
+      " [--nosyslog]"
+      " [--syslog]"
+      " [--syslog-only]"
       " [--nofork]"
 #ifdef DBUS_UNIX
       " [--fork]"
@@ -154,6 +170,8 @@ usage (void)
       "\n");
   exit (1);
 }
+
+static void version (void) _DBUS_GNUC_NORETURN;
 
 static void
 version (void)
@@ -166,6 +184,8 @@ version (void)
   exit (0);
 }
 
+static void introspect (void) _DBUS_GNUC_NORETURN;
+
 static void
 introspect (void)
 {
@@ -175,7 +195,7 @@ introspect (void)
   if (!_dbus_string_init (&xml))
     goto oom;
 
-  if (!bus_driver_generate_introspect_string (&xml))
+  if (!bus_driver_generate_introspect_string (&xml, TRUE, NULL))
     {
       _dbus_string_free (&xml);
       goto oom;
@@ -187,7 +207,7 @@ introspect (void)
   exit (0);
 
  oom:
-  _dbus_warn ("Can not introspect - Out of memory\n");
+  _dbus_warn ("Can not introspect - Out of memory");
   exit (1);
 }
 
@@ -256,7 +276,7 @@ handle_reload_watch (DBusWatch    *watch,
   if ((reload_pipe[RELOAD_READ_END].fd > 0) &&
       _dbus_read_socket (reload_pipe[RELOAD_READ_END], &str, 1) != 1)
     {
-      _dbus_warn ("Couldn't read from reload pipe.\n");
+      _dbus_warn ("Couldn't read from reload pipe.");
       close_reload_pipe (&watch);
       return TRUE;
     }
@@ -282,7 +302,7 @@ handle_reload_watch (DBusWatch    *watch,
           _DBUS_ASSERT_ERROR_IS_SET (&error);
           _dbus_assert (dbus_error_has_name (&error, DBUS_ERROR_FAILED) ||
                         dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY));
-          _dbus_warn ("Unable to reload configuration: %s\n",
+          _dbus_warn ("Unable to reload configuration: %s",
                       error.message);
           dbus_error_free (&error);
         }
@@ -323,7 +343,7 @@ setup_reload_pipe (DBusLoop *loop)
   if (!_dbus_socketpair (&reload_pipe[0], &reload_pipe[1],
                          TRUE, &error))
     {
-      _dbus_warn ("Unable to create reload pipe: %s\n",
+      _dbus_warn ("Unable to create reload pipe: %s",
 		  error.message);
       dbus_error_free (&error);
       exit (1);
@@ -335,7 +355,7 @@ setup_reload_pipe (DBusLoop *loop)
 
   if (watch == NULL)
     {
-      _dbus_warn ("Unable to create reload watch: %s\n",
+      _dbus_warn ("Unable to create reload watch: %s",
 		  error.message);
       dbus_error_free (&error);
       exit (1);
@@ -343,7 +363,7 @@ setup_reload_pipe (DBusLoop *loop)
 
   if (!_dbus_loop_add_watch (loop, watch))
     {
-      _dbus_warn ("Unable to add reload watch to main loop: %s\n",
+      _dbus_warn ("Unable to add reload watch to main loop: %s",
 		  error.message);
       dbus_error_free (&error);
       exit (1);
@@ -441,6 +461,21 @@ main (int argc, char **argv)
         {
           introspect ();
         }
+      else if (strcmp (arg, "--nosyslog") == 0)
+        {
+          flags &= ~BUS_CONTEXT_FLAG_SYSLOG_ALWAYS;
+          flags |= BUS_CONTEXT_FLAG_SYSLOG_NEVER;
+        }
+      else if (strcmp (arg, "--syslog") == 0)
+        {
+          flags &= ~BUS_CONTEXT_FLAG_SYSLOG_NEVER;
+          flags |= BUS_CONTEXT_FLAG_SYSLOG_ALWAYS;
+        }
+      else if (strcmp (arg, "--syslog-only") == 0)
+        {
+          flags &= ~BUS_CONTEXT_FLAG_SYSLOG_NEVER;
+          flags |= (BUS_CONTEXT_FLAG_SYSLOG_ALWAYS|BUS_CONTEXT_FLAG_SYSLOG_ONLY);
+        }
       else if (strcmp (arg, "--nofork") == 0)
         {
           flags &= ~BUS_CONTEXT_FLAG_FORK_ALWAYS;
@@ -465,14 +500,14 @@ main (int argc, char **argv)
         {
           check_two_config_files (&config_file, "system");
 
-          if (!_dbus_append_system_config_file (&config_file))
+          if (!_dbus_get_system_config_file (&config_file))
             exit (1);
         }
       else if (strcmp (arg, "--session") == 0)
         {
           check_two_config_files (&config_file, "session");
 
-          if (!_dbus_append_session_config_file (&config_file))
+          if (!_dbus_get_session_config_file (&config_file))
             exit (1);
         }
       else if (strstr (arg, "--config-file=") == arg)
@@ -641,13 +676,13 @@ main (int argc, char **argv)
 
   if (!bus_selinux_pre_init ())
     {
-      _dbus_warn ("SELinux pre-initialization failed\n");
+      _dbus_warn ("SELinux pre-initialization failed");
       exit (1);
     }
 
   if (!bus_apparmor_pre_init ())
     {
-      _dbus_warn ("AppArmor pre-initialization failed: out of memory\n");
+      _dbus_warn ("AppArmor pre-initialization failed: out of memory");
       exit (1);
     }
 
@@ -657,9 +692,10 @@ main (int argc, char **argv)
                              _dbus_string_get_length(&address) > 0 ? &address : NULL,
                              &error);
   _dbus_string_free (&config_file);
+  _dbus_string_free (&address);
   if (context == NULL)
     {
-      _dbus_warn ("Failed to start message bus: %s\n",
+      _dbus_warn ("Failed to start message bus: %s",
                   error.message);
       dbus_error_free (&error);
       exit (1);

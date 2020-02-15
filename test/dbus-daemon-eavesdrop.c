@@ -88,9 +88,10 @@ sender_send_unicast_to_sender (Fixture *f)
 
   signal = dbus_message_new_signal (SENDER_PATH, SENDER_IFACE,
       SENDER_SIGNAL_NAME);
-  dbus_message_set_destination (signal, dbus_bus_get_unique_name (f->sender));
-
   if (signal == NULL)
+    g_error ("OOM");
+
+  if (!dbus_message_set_destination (signal, dbus_bus_get_unique_name (f->sender)))
     g_error ("OOM");
 
   if (!dbus_connection_send (f->sender, signal, NULL))
@@ -109,9 +110,10 @@ sender_send_unicast_to_receiver (Fixture *f)
   DBusMessage *signal;
 
   signal = dbus_message_new_signal (SENDER_PATH, SENDER_IFACE, SENDER_SIGNAL_NAME);
-  dbus_message_set_destination (signal, dbus_bus_get_unique_name (f->receiver));
-
   if (signal == NULL)
+    g_error ("OOM");
+
+  if (!dbus_message_set_destination (signal, dbus_bus_get_unique_name (f->receiver)))
     g_error ("OOM");
 
   if (!dbus_connection_send (f->sender, signal, NULL))
@@ -128,9 +130,10 @@ sender_send_broadcast (Fixture *f)
   DBusMessage *signal;
 
   signal = dbus_message_new_signal (SENDER_PATH, SENDER_IFACE, SENDER_SIGNAL_NAME);
-  dbus_message_set_destination (signal, NULL);
-
   if (signal == NULL)
+    g_error ("OOM");
+
+  if (!dbus_message_set_destination (signal, NULL))
     g_error ("OOM");
 
   if (!dbus_connection_send (f->sender, signal, NULL))
@@ -152,9 +155,10 @@ sender_send_stopper (Fixture *f)
   DBusMessage *signal;
 
   signal = dbus_message_new_signal (SENDER_PATH, SENDER_IFACE, SENDER_STOPPER_NAME);
-  dbus_message_set_destination (signal, NULL);
-
   if (signal == NULL)
+    g_error ("OOM");
+
+  if (!dbus_message_set_destination (signal, NULL))
     g_error ("OOM");
 
   if (!dbus_connection_send (f->sender, signal, NULL))
@@ -283,7 +287,7 @@ setup (Fixture *f,
   f->ge = NULL;
   dbus_error_init (&f->e);
 
-  address = test_get_dbus_daemon (NULL, TEST_USER_ME, &f->daemon_pid);
+  address = test_get_dbus_daemon (NULL, TEST_USER_ME, NULL, &f->daemon_pid);
 
   f->sender = test_connect_to_bus (f->ctx, address);
   dbus_bus_request_name (f->sender, SENDER_NAME, DBUS_NAME_FLAG_DO_NOT_QUEUE,
@@ -403,8 +407,12 @@ teardown (Fixture *f,
       f->eavesdropper = NULL;
     }
 
-  test_kill_pid (f->daemon_pid);
-  g_spawn_close_pid (f->daemon_pid);
+  if (f->daemon_pid != 0)
+    {
+      test_kill_pid (f->daemon_pid);
+      g_spawn_close_pid (f->daemon_pid);
+      f->daemon_pid = 0;
+    }
 
   test_main_context_unref (f->ctx);
 }

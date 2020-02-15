@@ -37,6 +37,7 @@
 #include <signal.h>
 
 #include "dbus/dbus.h"
+#include "dbus/dbus-internals.h"
 
 #define MAX_ADDR_LEN 512
 #define PIPE_READ_END  0
@@ -65,6 +66,8 @@
 
 static const char me[] = "dbus-run-session";
 
+static void usage (int ecode) _DBUS_GNUC_NORETURN;
+
 static void
 usage (int ecode)
 {
@@ -81,6 +84,8 @@ usage (int ecode)
   exit (ecode);
 }
 
+static void version (void) _DBUS_GNUC_NORETURN;
+
 static void
 version (void)
 {
@@ -94,6 +99,8 @@ version (void)
           me, VERSION);
   exit (0);
 }
+
+static void oom (void) _DBUS_GNUC_NORETURN;
 
 static void
 oom (void)
@@ -190,6 +197,8 @@ exec_dbus_daemon (const char *dbus_daemon,
   fprintf (stderr, "%s: failed to execute message bus daemon '%s': %s\n",
            me, dbus_daemon, strerror (errno));
 }
+
+static void exec_app (int prog_arg, char **argv) _DBUS_GNUC_NORETURN;
 
 static void
 exec_app (int prog_arg, char **argv)
@@ -378,6 +387,9 @@ main (int argc, char **argv)
                me, strerror (errno));
       return 127;
       break;
+
+    default:
+      _dbus_assert_not_reached ("invalid read result");
     }
 
   close (bus_address_pipe[PIPE_READ_END]);

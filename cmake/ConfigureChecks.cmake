@@ -69,7 +69,6 @@ check_symbol_exists(setrlimit    "sys/resource.h;sys/time.h" HAVE_SETRLIMIT)
 check_struct_member(cmsgcred cmcred_pid "sys/types.h sys/socket.h" HAVE_CMSGCRED)   #  dbus-sysdeps.c
 
 # missing:
-# HAVE_ABSTRACT_SOCKETS
 # DBUS_HAVE_GCC33_GCOV
 
 check_type_size("short"     SIZEOF_SHORT)
@@ -171,19 +170,3 @@ else(DBUS_HAVE_VA_COPY)
   endif(DBUS_HAVE___VA_COPY)
 endif(DBUS_HAVE_VA_COPY)
 endif(MSVC) # _not_ MSVC
-#### Abstract sockets
-
-if (DBUS_ENABLE_ABSTRACT_SOCKETS)
-
-  try_compile(HAVE_ABSTRACT_SOCKETS
-              ${CMAKE_BINARY_DIR}
-              ${CMAKE_SOURCE_DIR}/modules/CheckForAbstractSockets.c)
-
-endif(DBUS_ENABLE_ABSTRACT_SOCKETS)
-
-if(HAVE_ABSTRACT_SOCKETS)
-  set(DBUS_PATH_OR_ABSTRACT_VALUE abstract)
-else(HAVE_ABSTRACT_SOCKETS)
-  set(DBUS_PATH_OR_ABSTRACT_VALUE path)
-endif(HAVE_ABSTRACT_SOCKETS)
-

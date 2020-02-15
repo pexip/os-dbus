@@ -26,6 +26,7 @@
 #include <config.h>
 #include "activation.h"
 #include "activation-exit-codes.h"
+#include "config-parser.h"
 #include "desktop-file.h"
 #include "dispatch.h"
 #include "services.h"
@@ -53,7 +54,7 @@ struct BusActivation
                               * i.e. number of pending activation requests, not pending
                               * activations per se
                               */
-  DBusHashTable *directories;
+  DBusList *directories;
   DBusHashTable *environment;
 };
 
@@ -61,20 +62,22 @@ typedef struct
 {
   int refcount;
   char *dir_c;
+  BusServiceDirFlags flags;
   DBusHashTable *entries;
 } BusServiceDirectory;
 
-typedef struct
+struct BusActivationEntry
 {
   int refcount;
   char *name;
   char *exec;
   char *user;
   char *systemd_service;
+  char *assumed_apparmor_label;
   unsigned long mtime;
   BusServiceDirectory *s_dir;
   char *filename;
-} BusActivationEntry;
+};
 
 typedef struct BusPendingActivationEntry BusPendingActivationEntry;
 
@@ -244,6 +247,7 @@ bus_activation_entry_unref (BusActivationEntry *entry)
   dbus_free (entry->user);
   dbus_free (entry->filename);
   dbus_free (entry->systemd_service);
+  dbus_free (entry->assumed_apparmor_label);
 
   dbus_free (entry);
 }
@@ -256,11 +260,13 @@ update_desktop_file_entry (BusActivation       *activation,
                            DBusError           *error)
 {
   char *name, *exec, *user, *exec_tmp, *systemd_service;
+  char *assumed_apparmor_label;
   BusActivationEntry *entry;
   DBusStat stat_buf;
   DBusString file_path;
   DBusError tmp_error;
   dbus_bool_t retval;
+  DBusString str;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -271,6 +277,7 @@ update_desktop_file_entry (BusActivation       *activation,
   exec_tmp = NULL;
   entry = NULL;
   systemd_service = NULL;
+  assumed_apparmor_label = NULL;
 
   dbus_error_init (&tmp_error);
 
@@ -308,9 +315,18 @@ update_desktop_file_entry (BusActivation       *activation,
                                     error))
     goto out;
 
-  exec = _dbus_strdup (_dbus_replace_install_prefix (exec_tmp));
-  dbus_free (exec_tmp);
-  exec_tmp = NULL;
+  if (!_dbus_string_init (&str))
+    goto out;
+
+  if (!_dbus_string_append (&str, exec_tmp) ||
+      !_dbus_replace_install_prefix (&str) ||
+      !_dbus_string_steal_data (&str, &exec))
+    {
+      _dbus_string_free (&str);
+      goto out;
+    }
+
+  _dbus_string_free (&str);
 
   /* user is not _required_ unless we are using system activation */
   if (!bus_desktop_file_get_string (desktop_file,
@@ -357,6 +373,28 @@ update_desktop_file_entry (BusActivation       *activation,
         }
     }
 
+  /* assumed AppArmor label is never required */
+  if (!bus_desktop_file_get_string (desktop_file,
+                                    DBUS_SERVICE_SECTION,
+                                    DBUS_SERVICE_ASSUMED_APPARMOR_LABEL,
+                                    &assumed_apparmor_label, &tmp_error))
+    {
+      _DBUS_ASSERT_ERROR_IS_SET (&tmp_error);
+      /* if we got OOM, then exit */
+      if (dbus_error_has_name (&tmp_error, DBUS_ERROR_NO_MEMORY))
+        {
+          dbus_move_error (&tmp_error, error);
+          goto out;
+        }
+      else
+        {
+          /* if we have error because we didn't find anything then continue */
+          dbus_error_free (&tmp_error);
+          dbus_free (assumed_apparmor_label);
+          assumed_apparmor_label = NULL;
+        }
+    }
+
   _DBUS_ASSERT_ERROR_IS_CLEAR (&tmp_error);
 
   entry = _dbus_hash_table_lookup_string (s_dir->entries,
@@ -364,8 +402,69 @@ update_desktop_file_entry (BusActivation       *activation,
 
   if (entry == NULL) /* New file */
     {
+      DBusString expected_name;
+
+      if (!_dbus_string_init (&expected_name))
+        {
+          BUS_SET_OOM (error);
+          goto out;
+        }
+
+      if (!_dbus_string_append (&expected_name, name) ||
+          !_dbus_string_append (&expected_name, ".service"))
+        {
+          _dbus_string_free (&expected_name);
+          BUS_SET_OOM (error);
+          goto out;
+        }
+
+      if (_dbus_string_equal (&expected_name, filename))
+        {
+          _dbus_verbose ("Name of \"%s\" is as expected\n",
+                         _dbus_string_get_const_data (&file_path));
+        }
+      else if (s_dir->flags & BUS_SERVICE_DIR_FLAGS_STRICT_NAMING)
+        {
+          bus_context_log_and_set_error (activation->context,
+                                         DBUS_SYSTEM_LOG_WARNING, error,
+                                         DBUS_ERROR_FAILED,
+                                         "Service file \"%s\" should have "
+                                         "been named \"%s\": not loading it",
+                                         _dbus_string_get_const_data (&file_path),
+                                         _dbus_string_get_const_data (&expected_name));
+          _dbus_string_free (&expected_name);
+          goto out;
+        }
+      else if (bus_context_get_servicehelper (activation->context) != NULL)
+        {
+          bus_context_log (activation->context, DBUS_SYSTEM_LOG_WARNING,
+                           "Service file \"%s\" should have been named \"%s\" "
+                           "and will not work with system bus activation",
+                           _dbus_string_get_const_data (&file_path),
+                           _dbus_string_get_const_data (&expected_name));
+          /* We don't actually error out here, because *technically* it could
+           * still work on systemd systems, where we tell systemd to start the
+           * SystemdService instead of launching dbus-daemon-launch-helper
+           * ourselves. But maybe we should:
+           * https://bugs.freedesktop.org/show_bug.cgi?id=99874 */
+        }
+      else
+        {
+          /* We could maybe log mismatched names for session services in
+           * a user-visible way too, but not until
+           * https://lintian.debian.org/tags/dbus-session-service-wrong-name.html
+           * is a bit shorter.
+           * https://bugs.freedesktop.org/show_bug.cgi?id=99873 */
+          _dbus_verbose ("Name of \"%s\" should canonically be \"%s\"\n",
+                         _dbus_string_get_const_data (&file_path),
+                         _dbus_string_get_const_data (&expected_name));
+        }
+
+      _dbus_string_free (&expected_name);
+
       /* FIXME we need a better-defined algorithm for which service file to
        * pick than "whichever one is first in the directory listing"
+       * See also https://bugs.freedesktop.org/show_bug.cgi?id=99874
        */
       if (_dbus_hash_table_lookup_string (activation->entries, name))
         {
@@ -385,6 +484,7 @@ update_desktop_file_entry (BusActivation       *activation,
       entry->exec = exec;
       entry->user = user;
       entry->systemd_service = systemd_service;
+      entry->assumed_apparmor_label = assumed_apparmor_label;
       entry->refcount = 1;
 
       /* ownership has been transferred to entry, do not free separately */
@@ -392,6 +492,7 @@ update_desktop_file_entry (BusActivation       *activation,
       exec = NULL;
       user = NULL;
       systemd_service = NULL;
+      assumed_apparmor_label = NULL;
 
       entry->s_dir = s_dir;
       entry->filename = _dbus_strdup (_dbus_string_get_const_data (filename));
@@ -449,6 +550,10 @@ update_desktop_file_entry (BusActivation       *activation,
       entry->systemd_service = systemd_service;
       systemd_service = NULL;
 
+      dbus_free (entry->assumed_apparmor_label);
+      entry->assumed_apparmor_label = assumed_apparmor_label;
+      assumed_apparmor_label = NULL;
+
       if (!_dbus_hash_table_insert_string (activation->entries,
                                            entry->name, bus_activation_entry_ref(entry)))
         {
@@ -466,10 +571,12 @@ update_desktop_file_entry (BusActivation       *activation,
 
 out:
   /* if these have been transferred into entry, the variables will be NULL */
+  dbus_free (exec_tmp);
   dbus_free (name);
   dbus_free (exec);
   dbus_free (user);
   dbus_free (systemd_service);
+  dbus_free (assumed_apparmor_label);
   _dbus_string_free (&file_path);
 
   if (entry)
@@ -729,9 +836,6 @@ update_directory (BusActivation       *activation,
 static dbus_bool_t
 populate_environment (BusActivation *activation)
 {
-  DBusString   key;
-  DBusString   value;
-  int          i;
   char       **environment;
   dbus_bool_t  retval = FALSE;
 
@@ -740,50 +844,7 @@ populate_environment (BusActivation *activation)
   if (environment == NULL)
     return FALSE;
 
-  if (!_dbus_string_init (&key))
-    {
-        dbus_free_string_array (environment);
-        return FALSE;
-    }
-
-  if (!_dbus_string_init (&value))
-    {
-      _dbus_string_free (&key);
-      dbus_free_string_array (environment);
-      return FALSE;
-    }
-
-  for (i = 0; environment[i] != NULL; i++)
-    {
-      if (!_dbus_string_append (&key, environment[i]))
-        break;
-
-      if (_dbus_string_split_on_byte (&key, '=', &value))
-        {
-          char *hash_key, *hash_value;
-
-          if (!_dbus_string_steal_data (&key, &hash_key))
-            break;
-
-          if (!_dbus_string_steal_data (&value, &hash_value))
-            break;
-
-          if (!_dbus_hash_table_insert_string (activation->environment,
-                                               hash_key, hash_value))
-            break;
-        }
-      _dbus_string_set_length (&key, 0);
-      _dbus_string_set_length (&value, 0);
-    }
-
-  if (environment[i] != NULL)
-    goto out;
-
-  retval = TRUE;
-out:
-
-  _dbus_string_free (&key);
-  _dbus_string_free (&value);
+  retval = _dbus_hash_table_from_array (activation->environment, environment, '=');
   dbus_free_string_array (environment);
 
   return retval;
@@ -816,23 +877,19 @@ bus_activation_reload (BusActivation     *activation,
       goto failed;
     }
 
-  if (activation->directories != NULL)
-    _dbus_hash_table_unref (activation->directories);
-  activation->directories = _dbus_hash_table_new (DBUS_HASH_STRING, NULL,
-                                                  (DBusFreeFunction)bus_service_directory_unref);
-
-  if (activation->directories == NULL)
-    {
-      BUS_SET_OOM (error);
-      goto failed;
-    }
+  _dbus_list_foreach (&activation->directories,
+                      (DBusForeachFunction) bus_service_directory_unref, NULL);
+  _dbus_list_clear (&activation->directories);
 
   link = _dbus_list_get_first_link (directories);
   while (link != NULL)
     {
+      BusConfigServiceDir *config = link->data;
       BusServiceDirectory *s_dir;
 
-      dir = _dbus_strdup ((const char *) link->data);
+      _dbus_assert (config->path != NULL);
+
+      dir = _dbus_strdup (config->path);
       if (!dir)
         {
           BUS_SET_OOM (error);
@@ -849,6 +906,7 @@ bus_activation_reload (BusActivation     *activation,
 
       s_dir->refcount = 1;
       s_dir->dir_c = dir;
+      s_dir->flags = config->flags;
 
       s_dir->entries = _dbus_hash_table_new (DBUS_HASH_STRING, NULL,
                                              (DBusFreeFunction)bus_activation_entry_unref);
@@ -860,7 +918,7 @@ bus_activation_reload (BusActivation     *activation,
           goto failed;
         }
 
-      if (!_dbus_hash_table_insert_string (activation->directories, s_dir->dir_c, s_dir))
+      if (!_dbus_list_append (&activation->directories, s_dir))
         {
           bus_service_directory_unref (s_dir);
           BUS_SET_OOM (error);
@@ -967,8 +1025,11 @@ bus_activation_unref (BusActivation *activation)
     _dbus_hash_table_unref (activation->entries);
   if (activation->pending_activations)
     _dbus_hash_table_unref (activation->pending_activations);
-  if (activation->directories)
-    _dbus_hash_table_unref (activation->directories);
+
+  _dbus_list_foreach (&activation->directories,
+                      (DBusForeachFunction) bus_service_directory_unref, NULL);
+  _dbus_list_clear (&activation->directories);
+
   if (activation->environment)
     _dbus_hash_table_unref (activation->environment);
 
@@ -1469,7 +1530,12 @@ static dbus_bool_t
 pending_activation_timed_out (void *data)
 {
   BusPendingActivation *pending_activation = data;
+  BusContext *context;
   DBusError error;
+  int timeout;
+
+  context = pending_activation->activation->context;
+  timeout = bus_context_get_activation_timeout (context);
 
   /* Kill the spawned process, since it sucks
    * (not sure this is what we want to do, but
@@ -1480,10 +1546,11 @@ pending_activation_timed_out (void *data)
 
   dbus_error_init (&error);
 
-  bus_context_log_and_set_error (pending_activation->activation->context,
-                   DBUS_SYSTEM_LOG_INFO, &error, DBUS_ERROR_TIMED_OUT,
-                   "Failed to activate service '%s': timed out",
-                   pending_activation->service_name);
+  bus_context_log_and_set_error (context, DBUS_SYSTEM_LOG_WARNING, &error,
+                   DBUS_ERROR_TIMED_OUT,
+                   "Failed to activate service '%s': timed out "
+                   "(service_start_timeout=%dms)",
+                   pending_activation->service_name, timeout);
 
   pending_activation_failed (pending_activation, &error);
 
@@ -1534,15 +1601,14 @@ add_cancel_pending_to_transaction (BusTransaction       *transaction,
 static dbus_bool_t
 update_service_cache (BusActivation *activation, DBusError *error)
 {
-  DBusHashIter iter;
+  DBusList *iter;
 
-  _dbus_hash_iter_init (activation->directories, &iter);
-  while (_dbus_hash_iter_next (&iter))
+  for (iter = _dbus_list_get_first_link (&activation->directories);
+       iter != NULL;
+       iter = _dbus_list_get_next_link (&activation->directories, iter))
     {
       DBusError tmp_error;
-      BusServiceDirectory *s_dir;
-
-      s_dir = _dbus_hash_iter_get_value (&iter);
+      BusServiceDirectory *s_dir = iter->data;
 
       dbus_error_init (&tmp_error);
       if (!update_directory (activation, s_dir, &tmp_error))
@@ -1601,51 +1667,7 @@ activation_find_entry (BusActivation *activation,
 static char **
 bus_activation_get_environment (BusActivation *activation)
 {
-  char **environment;
-  int i, length;
-  DBusString entry;
-  DBusHashIter iter;
-
-  length = _dbus_hash_table_get_n_entries (activation->environment);
-
-  environment = dbus_new0 (char *, length + 1);
-
-  if (environment == NULL)
-    return NULL;
-
-  i = 0;
-  _dbus_hash_iter_init (activation->environment, &iter);
-
-  if (!_dbus_string_init (&entry))
-    {
-      dbus_free_string_array (environment);
-      return NULL;
-    }
-
-  while (_dbus_hash_iter_next (&iter))
-    {
-      const char *key, *value;
-
-      key = (const char *) _dbus_hash_iter_get_string_key (&iter);
-      value = (const char *) _dbus_hash_iter_get_value (&iter);
-
-      if (!_dbus_string_append_printf (&entry, "%s=%s", key, value))
-        break;
-
-      if (!_dbus_string_steal_data (&entry, environment + i))
-        break;
-      i++;
-    }
-
-  _dbus_string_free (&entry);
-
-  if (i != length)
-    {
-      dbus_free_string_array (environment);
-      environment = NULL;
-    }
-
-  return environment;
+  return _dbus_hash_table_to_array (activation->environment, '=');
 }
 
 dbus_bool_t
@@ -1734,15 +1756,20 @@ bus_activation_activate_service (BusActivation  *activation,
   dbus_bool_t retval;
   dbus_bool_t was_pending_activation;
   DBusString command;
+  int limit;
+  DBusSpawnFlags flags = DBUS_SPAWN_NONE;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  if (activation->n_pending_activations >=
-      bus_context_get_max_pending_activations (activation->context))
+  limit = bus_context_get_max_pending_activations (activation->context);
+
+  if (activation->n_pending_activations >= limit)
     {
       dbus_set_error (error, DBUS_ERROR_LIMITS_EXCEEDED,
-                      "The maximum number of pending activations has been reached, activation of %s failed",
-                      service_name);
+                      "The maximum number of pending activations has been "
+                      "reached, activation of %s failed "
+                      "(max_pending_service_starts=%d)",
+                      service_name, limit);
       return FALSE;
     }
 
@@ -1758,6 +1785,24 @@ bus_activation_activate_service (BusActivation  *activation,
       entry = activation_find_entry (activation, service_name, error);
       if (!entry)
         return FALSE;
+    }
+
+  if (auto_activation &&
+      entry != NULL &&
+      !bus_context_check_security_policy (activation->context,
+        transaction,
+        connection, /* sender */
+        NULL, /* addressed recipient */
+        NULL, /* proposed recipient */
+        activation_message,
+        entry,
+        error))
+    {
+      _DBUS_ASSERT_ERROR_IS_SET (error);
+      _dbus_verbose ("activation not authorized: %s: %s\n",
+          error != NULL ? error->name : "(error ignored)",
+          error != NULL ? error->message : "(error ignored)");
+      return FALSE;
     }
 
   /* Bypass the registry lookup if we're auto-activating, bus_dispatch would not
@@ -2034,9 +2079,11 @@ bus_activation_activate_service (BusActivation  *activation,
           if (service != NULL)
             {
               bus_context_log (activation->context,
-                               DBUS_SYSTEM_LOG_INFO, "Activating via systemd: service name='%s' unit='%s'",
+                               DBUS_SYSTEM_LOG_INFO, "Activating via systemd: service name='%s' unit='%s' requested by '%s' (%s)",
                                service_name,
-                               entry->systemd_service);
+                               entry->systemd_service,
+                               bus_connection_get_name (connection),
+                               bus_connection_get_loginfo (connection));
               /* Wonderful, systemd is connected, let's just send the msg */
               retval = bus_dispatch_matches (activation_transaction, NULL,
                                              systemd, message, error);
@@ -2044,9 +2091,11 @@ bus_activation_activate_service (BusActivation  *activation,
           else
             {
               bus_context_log (activation->context,
-                               DBUS_SYSTEM_LOG_INFO, "Activating systemd to hand-off: service name='%s' unit='%s'",
+                               DBUS_SYSTEM_LOG_INFO, "Activating systemd to hand-off: service name='%s' unit='%s' requested by '%s' (%s)",
                                service_name,
-                               entry->systemd_service);
+                               entry->systemd_service,
+                               bus_connection_get_name (connection),
+                               bus_connection_get_loginfo (connection));
               /* systemd is not around, let's "activate" it. */
               retval = bus_activation_activate_service (activation, NULL, activation_transaction, TRUE,
                                                         message, "org.freedesktop.systemd1", error);
@@ -2158,19 +2207,27 @@ bus_activation_activate_service (BusActivation  *activation,
   _dbus_verbose ("Spawning %s ...\n", argv[0]);
   if (servicehelper != NULL)
     bus_context_log (activation->context,
-                     DBUS_SYSTEM_LOG_INFO, "Activating service name='%s' (using servicehelper)",
-                     service_name);
+                     DBUS_SYSTEM_LOG_INFO, "Activating service name='%s' requested by '%s' (%s) (using servicehelper)",
+                     service_name,
+                     bus_connection_get_name (connection),
+                     bus_connection_get_loginfo (connection));
   else
     bus_context_log (activation->context,
-                     DBUS_SYSTEM_LOG_INFO, "Activating service name='%s'",
-                     service_name);
+                     DBUS_SYSTEM_LOG_INFO, "Activating service name='%s' requested by '%s' (%s)",
+                     service_name,
+                     bus_connection_get_name (connection),
+                     bus_connection_get_loginfo (connection));
 
   dbus_error_init (&tmp_error);
+
+  if (bus_context_get_using_syslog (activation->context))
+    flags |= DBUS_SPAWN_REDIRECT_OUTPUT;
 
   if (!_dbus_spawn_async_with_babysitter (&pending_activation->babysitter,
                                           service_name,
                                           argv,
                                           envp,
+                                          flags,
                                           child_setup,
                                           activation,
                                           &tmp_error))
@@ -2308,13 +2365,19 @@ dbus_activation_systemd_failure (BusActivation *activation,
   return TRUE;
 }
 
+const char *
+bus_activation_entry_get_assumed_apparmor_label (BusActivationEntry *entry)
+{
+  return entry->assumed_apparmor_label;
+}
+
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
 
 #include <stdio.h>
 
-#define SERVICE_NAME_1 "MyService1"
-#define SERVICE_NAME_2 "MyService2"
-#define SERVICE_NAME_3 "MyService3"
+#define SERVICE_NAME_1 "com.example.MyService1"
+#define SERVICE_NAME_2 "org.example.MyService2"
+#define SERVICE_NAME_3 "net.example.MyService3"
 
 #define SERVICE_FILE_1 "service-1.service"
 #define SERVICE_FILE_2 "service-2.service"
@@ -2521,9 +2584,13 @@ do_test (const char *description, dbus_bool_t oom_test, CheckData *data)
 }
 
 static dbus_bool_t
-do_service_reload_test (DBusString *dir, dbus_bool_t oom_test)
+do_service_reload_test (const DBusString *test_data_dir,
+                        DBusString       *dir,
+                        dbus_bool_t       oom_test)
 {
   BusActivation *activation;
+  BusConfigServiceDir config;
+  BusContext    *context;
   DBusString     address;
   DBusList      *directories;
   CheckData      d;
@@ -2531,10 +2598,18 @@ do_service_reload_test (DBusString *dir, dbus_bool_t oom_test)
   directories = NULL;
   _dbus_string_init_const (&address, "");
 
-  if (!_dbus_list_append (&directories, _dbus_string_get_data (dir)))
+  config.path = _dbus_string_get_data (dir);
+  config.flags = BUS_SERVICE_DIR_FLAGS_NONE;
+
+  if (!_dbus_list_append (&directories, &config))
     return FALSE;
 
-  activation = bus_activation_new (NULL, &address, &directories, NULL);
+  context = bus_context_new_test (test_data_dir,
+                                  "valid-config-files/debug-allow-all.conf");
+  if (context == NULL)
+    return FALSE;
+
+  activation = bus_activation_new (context, &address, &directories, NULL);
   if (!activation)
     return FALSE;
 
@@ -2595,6 +2670,7 @@ do_service_reload_test (DBusString *dir, dbus_bool_t oom_test)
 
   bus_activation_unref (activation);
   _dbus_list_clear (&directories);
+  bus_context_unref (context);
 
   return TRUE;
 }
@@ -2625,7 +2701,7 @@ bus_activation_service_reload_test (const DBusString *test_data_dir)
   if (!init_service_reload_test (&directory))
     _dbus_assert_not_reached ("could not initiate service reload test");
 
-  if (!do_service_reload_test (&directory, FALSE))
+  if (!do_service_reload_test (test_data_dir, &directory, FALSE))
     {
       /* Do nothing? */
     }
@@ -2637,7 +2713,7 @@ bus_activation_service_reload_test (const DBusString *test_data_dir)
   if (!init_service_reload_test (&directory))
     _dbus_assert_not_reached ("could not initiate service reload test");
 
-  if (!do_service_reload_test (&directory, TRUE))
+  if (!do_service_reload_test (test_data_dir, &directory, TRUE))
     {
       /* Do nothing? */
     }

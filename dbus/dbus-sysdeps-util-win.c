@@ -273,8 +273,7 @@ _dbus_rlimit_save_fd_limit (DBusError *error)
 }
 
 dbus_bool_t
-_dbus_rlimit_raise_fd_limit_if_privileged (unsigned int  desired,
-                                           DBusError    *error)
+_dbus_rlimit_raise_fd_limit (DBusError *error)
 {
   fd_limit_not_supported (error);
   return FALSE;
@@ -294,75 +293,6 @@ _dbus_rlimit_free (DBusRLimit *lim)
   /* _dbus_rlimit_save_fd_limit() cannot return non-NULL on Windows
    * so there cannot be anything to free */
   _dbus_assert (lim == NULL);
-}
-
-void
-_dbus_init_system_log (dbus_bool_t is_daemon)
-{
-  /* OutputDebugStringA doesn't need any special initialization, do nothing */
-}
-
-/**
- * Log a message to the system log file (e.g. syslog on Unix).
- *
- * @param severity a severity value
- * @param msg a printf-style format string
- */
-void
-_dbus_system_log (DBusSystemLogSeverity severity, const char *msg, ...)
-{
-  va_list args;
-
-  va_start (args, msg);
-
-  _dbus_system_logv (severity, msg, args);
-
-  va_end (args);
-}
-
-/**
- * Log a message to the system log file (e.g. syslog on Unix).
- *
- * @param severity a severity value
- * @param msg a printf-style format string
- * @param args arguments for the format string
- *
- * If the FATAL severity is given, this function will terminate the program
- * with an error code.
- */
-void
-_dbus_system_logv (DBusSystemLogSeverity severity, const char *msg, va_list args)
-{
-  char *s = "";
-  char buf[1024];
-  char format[1024];
-
-  switch(severity) 
-   {
-     case DBUS_SYSTEM_LOG_INFO: s = "info"; break;
-     case DBUS_SYSTEM_LOG_WARNING: s = "warning"; break;
-     case DBUS_SYSTEM_LOG_SECURITY: s = "security"; break;
-     case DBUS_SYSTEM_LOG_FATAL: s = "fatal"; break;
-   }
-   
-  snprintf(format, sizeof(format), "%s%s", s ,msg);
-  vsnprintf(buf, sizeof(buf), format, args);
-  OutputDebugStringA(buf);
-  
-  if (severity == DBUS_SYSTEM_LOG_FATAL)
-    exit (1);
-}
-
-/** Installs a signal handler
- *
- * @param sig the signal to handle
- * @param handler the handler
- */
-void
-_dbus_set_signal_handler (int               sig,
-                          DBusSignalHandler handler)
-{
-  _dbus_verbose ("_dbus_set_signal_handler() has to be implemented\n");
 }
 
 /**
@@ -1437,12 +1367,14 @@ _dbus_lm_strerror(int error_number)
       return "The password does not meet the requirements of the password filter DLLs.";
 #endif
 
-    }
-  msg = strerror (error_number);
-  if (msg == NULL)
-    msg = "unknown";
+      default:
+        msg = strerror (error_number);
 
-  return msg;
+        if (msg == NULL)
+          msg = "unknown";
+
+        return msg;
+    }
 #endif //DBUS_WINCE
 }
 
@@ -1470,75 +1402,86 @@ _dbus_command_for_pid (unsigned long  pid,
   return FALSE;
 }
 
-/*
- * replaces the term DBUS_PREFIX in configure_time_path by the
- * current dbus installation directory. On unix this function is a noop
+/**
+ * Replace the DBUS_PREFIX in the given path, in-place, by the
+ * current D-Bus installation directory. On Unix this function
+ * does nothing, successfully.
  *
- * @param configure_time_path
- * @return real path
+ * @param path path to edit
+ * @return #FALSE on OOM
  */
-const char *
-_dbus_replace_install_prefix (const char *configure_time_path)
+dbus_bool_t
+_dbus_replace_install_prefix (DBusString *path)
 {
 #ifndef DBUS_PREFIX
-  return configure_time_path;
+  /* leave path unchanged */
+  return TRUE;
 #else
-  static char retval[1000];
-  static char runtime_prefix[1000];
-  int len = 1000;
+  DBusString runtime_prefix;
   int i;
 
-  if (!configure_time_path)
-    return NULL;
+  if (!_dbus_string_init (&runtime_prefix))
+    return FALSE;
 
-  if ((!_dbus_get_install_root(runtime_prefix, len) ||
-       strncmp (configure_time_path, DBUS_PREFIX "/",
-                strlen (DBUS_PREFIX) + 1))) {
-     strncpy (retval, configure_time_path, sizeof (retval) - 1);
-     /* strncpy does not guarantee to 0-terminate the string */
-     retval[sizeof (retval) - 1] = '\0';
-  } else {
-     size_t remaining;
+  if (!_dbus_get_install_root (&runtime_prefix))
+    {
+      _dbus_string_free (&runtime_prefix);
+      return FALSE;
+    }
 
-     strncpy (retval, runtime_prefix, sizeof (retval) - 1);
-     retval[sizeof (retval) - 1] = '\0';
-     remaining = sizeof (retval) - 1 - strlen (retval);
-     strncat (retval,
-         configure_time_path + strlen (DBUS_PREFIX) + 1,
-         remaining);
-  }
+  if (_dbus_string_get_length (&runtime_prefix) == 0)
+    {
+      /* cannot determine install root, leave path unchanged */
+      _dbus_string_free (&runtime_prefix);
+      return TRUE;
+    }
+
+  if (_dbus_string_starts_with_c_str (path, DBUS_PREFIX "/"))
+    {
+      /* Replace DBUS_PREFIX "/" with runtime_prefix.
+       * Note unusual calling convention: source is first, then dest */
+      if (!_dbus_string_replace_len (
+            &runtime_prefix, 0, _dbus_string_get_length (&runtime_prefix),
+            path, 0, strlen (DBUS_PREFIX) + 1))
+        {
+          _dbus_string_free (&runtime_prefix);
+          return FALSE;
+        }
+    }
 
   /* Somehow, in some situations, backslashes get collapsed in the string.
    * Since windows C library accepts both forward and backslashes as
    * path separators, convert all backslashes to forward slashes.
    */
 
-  for(i = 0; retval[i] != '\0'; i++) {
-    if(retval[i] == '\\')
-      retval[i] = '/';
-  }
-  return retval;
+  for (i = 0; i < _dbus_string_get_length (path); i++)
+    {
+      if (_dbus_string_get_byte (path, i) == '\\')
+        _dbus_string_set_byte (path, i, '/');
+    }
+
+  _dbus_string_free (&runtime_prefix);
+  return TRUE;
 #endif
 }
 
-/**
- * return the relocated DATADIR
- *
- * @returns relocated DATADIR static string
- */
-
-static const char *
-_dbus_windows_get_datadir (void)
-{
-	return _dbus_replace_install_prefix(DBUS_DATADIR);
-}
-
-#undef DBUS_DATADIR
-#define DBUS_DATADIR _dbus_windows_get_datadir ()
-
-
 #define DBUS_STANDARD_SESSION_SERVICEDIR "/dbus-1/services"
 #define DBUS_STANDARD_SYSTEM_SERVICEDIR "/dbus-1/system-services"
+
+/**
+ * Returns the standard directories for a session bus to look for
+ * transient service activation files. On Windows, there are none.
+ *
+ * @param dirs the directory list we are returning
+ * @returns #TRUE
+ */
+dbus_bool_t
+_dbus_set_up_transient_session_servicedirs (DBusList  **dirs,
+                                            DBusError  *error)
+{
+  /* Not an error, we just don't have transient session services on Windows */
+  return TRUE;
+}
 
 /**
  * Returns the standard directories for a session bus to look for service
@@ -1580,27 +1523,30 @@ _dbus_get_standard_session_servicedirs (DBusList **dirs)
       }
   }
 #else
-/*
- the code for accessing services requires absolute base pathes
- in case DBUS_DATADIR is relative make it absolute
-*/
-#ifdef DBUS_WIN
   {
     DBusString p;
 
-    _dbus_string_init_const (&p, DBUS_DATADIR);
+    if (!_dbus_string_init (&p))
+      goto oom;
 
-    if (!_dbus_path_is_absolute (&p))
+    /* DBUS_DATADIR is assumed to be absolute; the build systems should
+     * ensure that. */
+    if (!_dbus_string_append (&p, DBUS_DATADIR) ||
+        !_dbus_replace_install_prefix (&p))
       {
-        char install_root[1000];
-        if (_dbus_get_install_root (install_root, sizeof(install_root)))
-          if (!_dbus_string_append (&servicedir_path, install_root))
-            goto oom;
+        _dbus_string_free (&p);
+        goto oom;
       }
+
+    if (!_dbus_string_append (&servicedir_path,
+          _dbus_string_get_const_data (&p)))
+      {
+        _dbus_string_free (&p);
+        goto oom;
+      }
+
+    _dbus_string_free (&p);
   }
-#endif
-  if (!_dbus_string_append (&servicedir_path, DBUS_DATADIR))
-    goto oom;
 
   if (!_dbus_string_append (&servicedir_path, _DBUS_PATH_SEPARATOR))
     goto oom;
@@ -1661,7 +1607,8 @@ _dbus_get_config_file_name (DBusString *str,
 {
   DBusString tmp;
 
-  if (!_dbus_string_append (str, _dbus_windows_get_datadir ()))
+  if (!_dbus_string_append (str, DBUS_DATADIR) ||
+      !_dbus_replace_install_prefix (str))
     return FALSE;
 
   _dbus_string_init_const (&tmp, "dbus-1");
@@ -1678,28 +1625,32 @@ _dbus_get_config_file_name (DBusString *str,
 }
 
 /**
- * Append the absolute path of the system.conf file
+ * Get the absolute path of the system.conf file
  * (there is no system bus on Windows so this can just
  * return FALSE and print a warning or something)
  *
- * @param str the string to append to
+ * @param str the string to append to, which must be empty on entry
  * @returns #FALSE if no memory
  */
 dbus_bool_t
-_dbus_append_system_config_file (DBusString *str)
+_dbus_get_system_config_file (DBusString *str)
 {
+  _dbus_assert (_dbus_string_get_length (str) == 0);
+
   return _dbus_get_config_file_name(str, "system.conf");
 }
 
 /**
- * Append the absolute path of the session.conf file.
+ * Get the absolute path of the session.conf file.
  *
- * @param str the string to append to
+ * @param str the string to append to, which must be empty on entry
  * @returns #FALSE if no memory
  */
 dbus_bool_t
-_dbus_append_session_config_file (DBusString *str)
+_dbus_get_session_config_file (DBusString *str)
 {
+  _dbus_assert (_dbus_string_get_length (str) == 0);
+
   return _dbus_get_config_file_name(str, "session.conf");
 }
 

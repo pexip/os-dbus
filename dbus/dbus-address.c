@@ -112,7 +112,7 @@ _dbus_address_append_escaped (DBusString       *escaped,
   ret = FALSE;
 
   orig_len = _dbus_string_get_length (escaped);
-  p = (const unsigned char *) _dbus_string_get_const_data (unescaped);
+  p = _dbus_string_get_const_udata (unescaped);
   end = p + _dbus_string_get_length (unescaped);
   while (p != end)
     {
@@ -354,14 +354,14 @@ append_unescaped_value (DBusString       *unescaped,
  * in the semicolon-separated list should be tried first.
  * 
  * @param address the address.
- * @param entry return location to an array of entries.
+ * @param entry_result return location to an array of entries.
  * @param array_len return location for array length.
  * @param error address where an error can be returned.
  * @returns #TRUE on success, #FALSE otherwise.
  */
 dbus_bool_t
 dbus_parse_address (const char         *address,
-		    DBusAddressEntry ***entry,
+		    DBusAddressEntry ***entry_result,
 		    int                *array_len,
                     DBusError          *error)
 {
@@ -553,7 +553,7 @@ dbus_parse_address (const char         *address,
     }
 
   _dbus_list_clear (&entries);
-  *entry = entry_array;
+  *entry_result = entry_array;
 
   return TRUE;
 
@@ -717,7 +717,7 @@ _dbus_address_test (void)
 
       if (strcmp (escaped, test->escaped) != 0)
         {
-          _dbus_warn ("Escaped '%s' as '%s' should have been '%s'\n",
+          _dbus_warn ("Escaped '%s' as '%s' should have been '%s'",
                       test->unescaped, escaped, test->escaped);
           exit (1);
         }
@@ -726,7 +726,7 @@ _dbus_address_test (void)
       unescaped = dbus_address_unescape_value (test->escaped, &error);
       if (unescaped == NULL)
         {
-          _dbus_warn ("Failed to unescape '%s': %s\n",
+          _dbus_warn ("Failed to unescape '%s': %s",
                       test->escaped, error.message);
           dbus_error_free (&error);
           exit (1);
@@ -734,7 +734,7 @@ _dbus_address_test (void)
 
       if (strcmp (unescaped, test->unescaped) != 0)
         {
-          _dbus_warn ("Unescaped '%s' as '%s' should have been '%s'\n",
+          _dbus_warn ("Unescaped '%s' as '%s' should have been '%s'",
                       test->escaped, unescaped, test->unescaped);
           exit (1);
         }
@@ -752,7 +752,7 @@ _dbus_address_test (void)
                                                &error);
       if (unescaped != NULL)
         {
-          _dbus_warn ("Should not have successfully unescaped '%s' to '%s'\n",
+          _dbus_warn ("Should not have successfully unescaped '%s' to '%s'",
                       invalid_escaped_values[i], unescaped);
           dbus_free (unescaped);
           exit (1);

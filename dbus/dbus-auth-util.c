@@ -51,7 +51,7 @@ process_test_subdir (const DBusString          *test_base_dir,
   dir = NULL;
   
   if (!_dbus_string_init (&test_directory))
-    _dbus_assert_not_reached ("didn't allocate test_directory\n");
+    _dbus_assert_not_reached ("didn't allocate test_directory");
 
   _dbus_string_init_const (&filename, subdir);
   
@@ -64,12 +64,12 @@ process_test_subdir (const DBusString          *test_base_dir,
 
   _dbus_string_free (&filename);
   if (!_dbus_string_init (&filename))
-    _dbus_assert_not_reached ("didn't allocate filename string\n");
+    _dbus_assert_not_reached ("didn't allocate filename string");
 
   dir = _dbus_directory_open (&test_directory, &error);
   if (dir == NULL)
     {
-      _dbus_warn ("Could not open %s: %s\n",
+      _dbus_warn ("Could not open %s: %s",
                   _dbus_string_get_const_data (&test_directory),
                   error.message);
       dbus_error_free (&error);
@@ -113,7 +113,7 @@ process_test_subdir (const DBusString          *test_base_dir,
 
   if (dbus_error_is_set (&error))
     {
-      _dbus_warn ("Could not get next file in %s: %s\n",
+      _dbus_warn ("Could not get next file in %s: %s",
                   _dbus_string_get_const_data (&test_directory), error.message);
       dbus_error_free (&error);
       goto failed;

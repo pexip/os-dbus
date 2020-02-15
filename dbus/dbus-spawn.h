@@ -38,10 +38,16 @@ typedef struct DBusBabysitter DBusBabysitter;
 typedef void (* DBusBabysitterFinishedFunc) (DBusBabysitter *sitter,
                                              void           *user_data);
 
+typedef enum {
+  DBUS_SPAWN_REDIRECT_OUTPUT = (1 << 0),
+  DBUS_SPAWN_NONE = 0
+} DBusSpawnFlags;
+
 dbus_bool_t _dbus_spawn_async_with_babysitter     (DBusBabysitter           **sitter_p,
                                                    const char                *log_name,
-                                                   char                     **argv,
+                                                   char              * const *argv,
                                                    char                     **env,
+                                                   DBusSpawnFlags             flags,
                                                    DBusSpawnChildSetupFunc    child_setup,
                                                    void                      *user_data,
                                                    DBusError                 *error);
@@ -62,6 +68,7 @@ dbus_bool_t _dbus_babysitter_set_watch_functions  (DBusBabysitter            *si
                                                    DBusWatchToggledFunction   toggled_function,
                                                    void                      *data,
                                                    DBusFreeFunction           free_data_function);
+void        _dbus_babysitter_block_for_child_exit (DBusBabysitter            *sitter);
 
 DBUS_END_DECLS
 

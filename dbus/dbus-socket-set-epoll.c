@@ -144,6 +144,7 @@ socket_set_epoll_add (DBusSocketSet  *set,
   struct epoll_event event;
   int err;
 
+  _DBUS_ZERO (event);
   event.data.fd = fd;
 
   if (enabled)
@@ -171,15 +172,15 @@ socket_set_epoll_add (DBusSocketSet  *set,
         break;
 
       case EBADF:
-        _dbus_warn ("Bad fd %d\n", fd);
+        _dbus_warn ("Bad fd %d", fd);
         break;
 
       case EEXIST:
-        _dbus_warn ("fd %d added and then added again\n", fd);
+        _dbus_warn ("fd %d added and then added again", fd);
         break;
 
       default:
-        _dbus_warn ("Misc error when trying to watch fd %d: %s\n", fd,
+        _dbus_warn ("Misc error when trying to watch fd %d: %s", fd,
                     strerror (err));
         break;
     }
@@ -196,6 +197,7 @@ socket_set_epoll_enable (DBusSocketSet  *set,
   struct epoll_event event;
   int err;
 
+  _DBUS_ZERO (event);
   event.data.fd = fd;
   event.events = watch_flags_to_epoll_events (flags);
 
@@ -209,19 +211,19 @@ socket_set_epoll_enable (DBusSocketSet  *set,
   switch (err)
     {
       case EBADF:
-        _dbus_warn ("Bad fd %d\n", fd);
+        _dbus_warn ("Bad fd %d", fd);
         break;
 
       case ENOENT:
-        _dbus_warn ("fd %d enabled before it was added\n", fd);
+        _dbus_warn ("fd %d enabled before it was added", fd);
         break;
 
       case ENOMEM:
-        _dbus_warn ("Insufficient memory to change watch for fd %d\n", fd);
+        _dbus_warn ("Insufficient memory to change watch for fd %d", fd);
         break;
 
       default:
-        _dbus_warn ("Misc error when trying to watch fd %d: %s\n", fd,
+        _dbus_warn ("Misc error when trying to watch fd %d: %s", fd,
                     strerror (err));
         break;
     }
@@ -251,6 +253,7 @@ socket_set_epoll_disable (DBusSocketSet  *set,
    * work on 2.6.32). Compile this file with -DTEST_BEHAVIOUR_OF_EPOLLET for
    * test code.
    */
+  _DBUS_ZERO (event);
   event.data.fd = fd;
   event.events = EPOLLET;
 
@@ -258,7 +261,7 @@ socket_set_epoll_disable (DBusSocketSet  *set,
     return;
 
   err = errno;
-  _dbus_warn ("Error when trying to watch fd %d: %s\n", fd,
+  _dbus_warn ("Error when trying to watch fd %d: %s", fd,
               strerror (err));
 }
 
@@ -270,13 +273,14 @@ socket_set_epoll_remove (DBusSocketSet  *set,
   int err;
   /* Kernels < 2.6.9 require a non-NULL struct pointer, even though its
    * contents are ignored */
-  struct epoll_event dummy = { 0 };
+  struct epoll_event dummy;
+  _DBUS_ZERO (dummy);
 
   if (epoll_ctl (self->epfd, EPOLL_CTL_DEL, fd, &dummy) == 0)
     return;
 
   err = errno;
-  _dbus_warn ("Error when trying to remove fd %d: %s\n", fd, strerror (err));
+  _dbus_warn ("Error when trying to remove fd %d: %s", fd, strerror (err));
 }
 
 /* Optimally, this should be the same as in DBusLoop: we use it to translate
@@ -345,6 +349,8 @@ main (void)
   int epfd = epoll_create1 (EPOLL_CLOEXEC);
   int fd = 0; /* stdin */
   int ret;
+
+  _DBUS_ZERO (input);
 
   input.events = EPOLLHUP | EPOLLET;
   ret = epoll_ctl (epfd, EPOLL_CTL_ADD, fd, &input);

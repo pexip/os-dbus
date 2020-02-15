@@ -3,9 +3,6 @@
 /* Define if building universal (internal helper macro) */
 #undef AC_APPLE_UNIVERSAL_BUILD
 
-/* poll doesn't work on devices */
-#undef BROKEN_POLL
-
 /* Directory for installing the binaries */
 #undef DBUS_BINDIR
 
@@ -21,7 +18,8 @@
 /* Use kqueue */
 #undef DBUS_BUS_ENABLE_KQUEUE
 
-/* Directory to check for console ownerhip */
+/* Directory to check for pam_console/pam_foreground flag files, or undefined
+   */
 #undef DBUS_CONSOLE_AUTH_DIR
 
 /* File to check for console ownerhip */
@@ -72,9 +70,6 @@
 /* Define to use epoll(4) on Linux */
 #undef DBUS_HAVE_LINUX_EPOLL
 
-/* Define to printf modifier for 64 bit integer type */
-#undef DBUS_INT64_PRINTF_MODIFIER
-
 /* Directory for installing the libexec binaries */
 #undef DBUS_LIBEXECDIR
 
@@ -92,9 +87,6 @@
 
 /* The name of the socket the system bus listens on by default */
 #undef DBUS_SYSTEM_SOCKET
-
-/* Full path to the daemon in the builddir */
-#undef DBUS_TEST_EXEC
 
 /* Full path to the launch helper test program in the builddir */
 #undef DBUS_TEST_LAUNCH_HELPER_BINARY
@@ -135,17 +127,14 @@
 /* The name of the gettext domain */
 #undef GETTEXT_PACKAGE
 
-/* Prevent post-2.38 APIs */
+/* Prevent post-2.44 APIs */
 #undef GLIB_VERSION_MAX_ALLOWED
 
-/* Ignore post-2.36 deprecations */
+/* Ignore post-2.40 deprecations */
 #undef GLIB_VERSION_MIN_REQUIRED
 
 /* Disable GLib public API sanity checking */
 #undef G_DISABLE_CHECKS
-
-/* Have abstract socket namespace */
-#undef HAVE_ABSTRACT_SOCKETS
 
 /* Define to 1 if you have the `accept4' function. */
 #undef HAVE_ACCEPT4
@@ -158,6 +147,9 @@
 
 /* AppArmor Support */
 #undef HAVE_APPARMOR
+
+/* Define if libapparmor is version 2.10 or later */
+#undef HAVE_APPARMOR_2_10
 
 /* Define to 1 if you have backtrace(). */
 #undef HAVE_BACKTRACE
@@ -179,6 +171,10 @@
 
 /* Have the ddfd member of DIR */
 #undef HAVE_DDFD
+
+/* Define to 1 if you have the declaration of `environ', and to 0 if you
+   don't. */
+#undef HAVE_DECL_ENVIRON
 
 /* Define to 1 if you have the declaration of `LOG_PERROR', and to 0 if you
    don't. */
@@ -203,9 +199,6 @@
 /* Define to 1 if you have the <execinfo.h> header file. */
 #undef HAVE_EXECINFO_H
 
-/* Define to 1 if you have the <expat.h> header file. */
-#undef HAVE_EXPAT_H
-
 /* Define to 1 if you have the `fpathconf' function. */
 #undef HAVE_FPATHCONF
 
@@ -223,6 +216,9 @@
 
 /* Define to 1 if you have the `getrlimit' function. */
 #undef HAVE_GETRLIMIT
+
+/* Define if you have gio-unix-2.0 */
+#undef HAVE_GIO_UNIX
 
 /* Have GNU-style varargs macros */
 #undef HAVE_GNUC_VARARGS
@@ -393,6 +389,9 @@
 /* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
 
+/* Define if debugging is disabled */
+#undef NDEBUG
+
 /* Name of package */
 #undef PACKAGE
 
@@ -437,9 +436,6 @@
 
 /* Define to 1 if you have the ANSI C header files. */
 #undef STDC_HEADERS
-
-/* Full path to the dbus-launch in the builddir */
-#undef TEST_BUS_LAUNCH_BINARY
 
 /* Listening address for regression tests */
 #undef TEST_LISTEN
@@ -494,6 +490,9 @@
 /* Define to 1 if the X Window System is missing or not being used. */
 #undef X_DISPLAY_MISSING
 
+/* Define to enable BSD features */
+#undef _BSD_SOURCE
+
 
 #if defined(HAVE_NSGETENVIRON) && defined(HAVE_CRT_EXTERNS_H)
 # include <sys/time.h>
@@ -519,6 +518,9 @@
 /* Define to 2 if the system does not provide POSIX.1 features except with
    this defined. */
 #undef _POSIX_1_SOURCE
+
+/* Define to enable POSIX features */
+#undef _POSIX_C_SOURCE
 
 /* Define to 1 if you need to in order for `stat' and other things to work. */
 #undef _POSIX_SOURCE

@@ -26,11 +26,11 @@ set -e
 set -x
 
 export DBUS_DEBUG_OUTPUT=1
-export DBUS_USE_TEST_BINARY=1
 echo "# dbus-daemon binary: ${DBUS_TEST_DAEMON:=dbus-daemon}"
 echo "# dbus-launch binary: ${DBUS_TEST_DBUS_LAUNCH:=dbus-launch}"
 echo "# dbus-monitor binary: ${DBUS_TEST_DBUS_LAUNCH:=dbus-monitor}"
 echo "# dbus-send binary: ${DBUS_TEST_DBUS_SEND:=dbus-send}"
+echo "# dbus-uuidgen binary: ${DBUS_TEST_DBUS_UUIDGEN:=dbus-uuidgen}"
 
 if test -n "$DBUS_TEST_DATA"; then
     echo "# test data: $DBUS_TEST_DATA"
@@ -46,6 +46,16 @@ else
     # dbus-launch doesn't accept --session so add a harmless command-line
     # argument
     launch_config="--sh-syntax"
+fi
+
+if ! "${DBUS_TEST_DBUS_UUIDGEN}" --get >/dev/null; then
+    if test -n "$DBUS_TEST_UNINSTALLED"; then
+        echo "1..0 # SKIP - Unable to test dbus-launch without a machine ID"
+        exit 0
+    else
+        echo "Bail out! dbus not correctly installed: no machine ID"
+        exit 1
+    fi
 fi
 
 if ! workdir="$(mktemp -d)"; then
@@ -127,12 +137,13 @@ test_disconnection () {
 }
 
 test_exit_with_x11 () {
+    arg="$1"
     unset DBUS_SESSION_BUS_ADDRESS
     unset DBUS_SESSION_BUS_PID
     unset DBUS_SESSION_BUS_WINDOWID
 
     start_xvfb
-    eval "$($DBUS_TEST_DBUS_LAUNCH --sh-syntax --exit-with-session "$launch_config" </dev/null)"
+    eval "$($DBUS_TEST_DBUS_LAUNCH --sh-syntax "$arg" "$launch_config" </dev/null)"
 
     test -n "$DBUS_SESSION_BUS_ADDRESS"
     env | grep '^DBUS_SESSION_BUS_ADDRESS='
@@ -150,7 +161,7 @@ test_exit_with_x11 () {
     test_disconnection
 
     test_num=$(($test_num + 1))
-    echo "ok ${test_num} - dbus-launch --exit-with-session"
+    echo "ok ${test_num} - dbus-launch $arg"
 }
 
 test_autolaunch () {
@@ -198,7 +209,7 @@ test_xdg_runtime_dir () {
     export XDG_RUNTIME_DIR="$workdir"
     fake_uuid="ffffffffffffffffffffffffffffffff"
 
-    if echo "$workdir" | grep '[^0-9A-Za-z_-/.]'; then
+    if echo "$workdir" | grep '[^-0-9A-Za-z_/.]'; then
         test_num=$(($test_num + 1))
         echo "ok ${test_num} # SKIP - $workdir would need escaping"
         return
@@ -247,8 +258,9 @@ test_xdg_runtime_dir () {
     echo "ok ${test_num} - dbus-launch --autolaunch with XDG_RUNTIME_DIR"
 }
 
-echo "1..3"
-test_exit_with_x11
+echo "1..4"
+test_exit_with_x11 --exit-with-session
+test_exit_with_x11 --exit-with-x11
 test_autolaunch
 test_xdg_runtime_dir
 

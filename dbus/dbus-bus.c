@@ -105,7 +105,7 @@ addresses_shutdown_func (void *data)
   while (i < N_BUS_TYPES)
     {
       if (bus_connections[i] != NULL)
-        _dbus_warn_check_failed ("dbus_shutdown() called but connections were still live. This probably means the application did not drop all its references to bus connections.\n");
+        _dbus_warn_check_failed ("dbus_shutdown() called but connections were still live. This probably means the application did not drop all its references to bus connections.");
       
       dbus_free (bus_connection_addresses[i]);
       bus_connection_addresses[i] = NULL;
@@ -168,9 +168,9 @@ init_session_address (void)
       else if (supported && !retval)
         {
           if (dbus_error_is_set(&error))
-            _dbus_warn ("Dynamic session lookup supported but failed: %s\n", error.message);
+            _dbus_warn ("Dynamic session lookup supported but failed: %s", error.message);
           else
-            _dbus_warn ("Dynamic session lookup supported but failed silently\n");
+            _dbus_warn ("Dynamic session lookup supported but failed silently");
         }
       _dbus_string_free (&addr);
     }
@@ -933,7 +933,7 @@ dbus_bus_get_unix_user (DBusConnection *connection,
  * probably the bus ID is not useful; instead, use the machine ID
  * since it's accessible without necessarily connecting to the bus and
  * may be persistent beyond a single bus instance (across reboots for
- * example). See dbus_get_local_machine_id().
+ * example). See dbus_try_get_local_machine_id().
  *
  * In addition to an ID for each bus and an ID for each machine, there is
  * an ID for each address that the bus is listening on; that can

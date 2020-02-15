@@ -22,7 +22,9 @@ set (dbusinclude_HEADERS
 	${DBUS_DIR}/dbus-syntax.h
 	${DBUS_DIR}/dbus-threads.h
 	${DBUS_DIR}/dbus-types.h
-	dbus-arch-deps.h
+)
+set (dbusinclude_ARCH_HEADERS
+	${CMAKE_CURRENT_BINARY_DIR}/dbus-arch-deps.h
 )
 
 ### source code that goes in the installed client library
@@ -168,6 +170,7 @@ if (DBUS_ENABLE_EMBEDDED_TESTS)
 	set (DBUS_UTIL_SOURCES 
 		${DBUS_UTIL_SOURCES}
 		${DBUS_DIR}/dbus-test.c
+		${DBUS_DIR}/dbus-spawn-test.c
 	)
 endif (DBUS_ENABLE_EMBEDDED_TESTS)
 
@@ -237,15 +240,12 @@ set(libdbus_HEADERS
 	${DBUS_LIB_HEADERS}
 	${DBUS_SHARED_HEADERS}
 )
-if (MSVC)
-    set (BUILD_FILEVERSION ${DBUS_MAJOR_VERSION},${DBUS_MINOR_VERSION},${DBUS_MICRO_VERSION},${DBUS_PATCH_VERSION})
-    set (BUILD_TIMESTAMP ${DBUS_BUILD_TIMESTAMP})
-    
-    configure_file(${DBUS_DIR}/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo.rc)
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/afxres.h "")
-    list(APPEND libdbus_SOURCES versioninfo.rc)
-    set_source_files_properties(versioninfo.rc COMPILE_FLAGS "-D__LINE__=1")
-endif (MSVC)
+
+set (BUILD_FILEVERSION ${DBUS_MAJOR_VERSION},${DBUS_MINOR_VERSION},${DBUS_MICRO_VERSION},${DBUS_PATCH_VERSION})
+set (BUILD_TIMESTAMP ${DBUS_BUILD_TIMESTAMP})
+
+configure_file(${DBUS_DIR}/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo.rc)
+list(APPEND libdbus_SOURCES versioninfo.rc)
 
 if(MSVC_IDE)
 	project_source_group(${GROUP_CODE} DBUS_LIB_SOURCES DBUS_LIB_HEADERS)
@@ -253,8 +253,13 @@ if(MSVC_IDE)
 	project_source_group(${GROUP_CODE} DBUS_UTIL_SOURCES DBUS_UTIL_SOURCES)
 endif(MSVC_IDE)
 
-### Client library
+# for clock_getres() on e.g. GNU/Linux (but not Android)
+find_library(LIBRT rt)
 
+# for socket() on QNX
+find_library(LIBSOCKET socket)
+
+### Client library
 add_library(dbus-1 SHARED
 			${libdbus_SOURCES}
 			${libdbus_HEADERS}
@@ -275,13 +280,19 @@ if(WIN32)
     if(WINCE)
         target_link_libraries(dbus-1 ws2)
     else(WINCE)
-        target_link_libraries(dbus-1 ws2_32 advapi32 netapi32 iphlpapi)
+        target_link_libraries(dbus-1 ws2_32 advapi32 netapi32 iphlpapi dbghelp)
     endif(WINCE)
 else(WIN32)
     if(DEFINED DBUS_LIBRARY_REVISION)
         set_target_properties(dbus-1 PROPERTIES VERSION ${DBUS_LIBRARY_MAJOR}.${DBUS_LIBRARY_AGE}.${DBUS_LIBRARY_REVISION} SOVERSION ${DBUS_LIBRARY_MAJOR})
     endif()
-    target_link_libraries(dbus-1 ${CMAKE_THREAD_LIBS_INIT} rt)
+    target_link_libraries(dbus-1 ${CMAKE_THREAD_LIBS_INIT})
+    if(LIBRT)
+        target_link_libraries(dbus-1 ${LIBRT})
+    endif()
+    if(LIBSOCKET)
+        target_link_libraries(dbus-1 ${LIBSOCKET})
+    endif()
 endif(WIN32)
 
 # Assume that Linux has -Wl,--version-script and other platforms do not
@@ -292,7 +303,8 @@ if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
 endif("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
 
 install(TARGETS dbus-1 ${INSTALL_TARGETS_DEFAULT_ARGS})
-install_files(/include/dbus FILES ${dbusinclude_HEADERS})
+install(FILES ${dbusinclude_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dbus-1.0/dbus)
+install(FILES ${dbusinclude_ARCH_HEADERS} DESTINATION ${CMAKE_INSTALL_LIBDIR}/dbus-1.0/include/dbus)
 
 ### Internal library, used for the daemon, tools and tests, compiled statically.
 
@@ -308,7 +320,13 @@ if(WIN32)
         target_link_libraries(dbus-internal ws2_32 advapi32 netapi32 iphlpapi)
     endif(WINCE)
 else(WIN32)
-    target_link_libraries(dbus-internal ${CMAKE_THREAD_LIBS_INIT} rt)
+    target_link_libraries(dbus-internal ${CMAKE_THREAD_LIBS_INIT})
+    if(LIBRT)
+        target_link_libraries(dbus-internal ${LIBRT})
+    endif()
+    if(LIBSOCKET)
+        target_link_libraries(dbus-internal ${LIBSOCKET})
+    endif()
 endif(WIN32)
 
 if (DBUS_ENABLE_EMBEDDED_TESTS)

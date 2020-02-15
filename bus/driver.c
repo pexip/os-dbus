@@ -43,13 +43,6 @@
 #include <dbus/dbus-marshal-validate.h>
 #include <string.h>
 
-typedef enum
-{
-  BUS_DRIVER_FOUND_SELF,
-  BUS_DRIVER_FOUND_PEER,
-  BUS_DRIVER_FOUND_ERROR,
-} BusDriverFound;
-
 static inline const char *
 nonnull (const char *maybe_null,
          const char *if_null)
@@ -75,7 +68,7 @@ bus_driver_get_owner_of_name (DBusConnection *connection,
   return bus_service_get_primary_owners_connection (serv);
 }
 
-static BusDriverFound
+BusDriverFound
 bus_driver_get_conn_helper (DBusConnection  *connection,
                             DBusMessage     *message,
                             const char      *what_we_want,
@@ -428,6 +421,9 @@ bus_driver_handle_hello (DBusConnection *connection,
   dbus_bool_t retval;
   BusRegistry *registry;
   BusConnections *connections;
+  DBusError tmp_error;
+  int limit;
+  const char *limit_name;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -445,11 +441,19 @@ bus_driver_handle_hello (DBusConnection *connection,
    * incomplete connections. It's even OK if the connection wants to
    * retry the hello message, we support that.
    */
+  dbus_error_init (&tmp_error);
   connections = bus_connection_get_connections (connection);
   if (!bus_connections_check_limits (connections, connection,
-                                     error))
+                                     &limit_name, &limit,
+                                     &tmp_error))
     {
-      _DBUS_ASSERT_ERROR_IS_SET (error);
+      BusContext *context;
+
+      _DBUS_ASSERT_ERROR_IS_SET (&tmp_error);
+      context = bus_connection_get_context (connection);
+      bus_context_log (context, DBUS_SYSTEM_LOG_WARNING, "%s (%s=%d)",
+          tmp_error.message, limit_name, limit);
+      dbus_move_error (&tmp_error, error);
       return FALSE;
     }
 
@@ -962,11 +966,11 @@ bus_driver_handle_activate_service (DBusConnection *connection,
   return retval;
 }
 
-static dbus_bool_t
-send_ack_reply (DBusConnection *connection,
-                BusTransaction *transaction,
-                DBusMessage    *message,
-                DBusError      *error)
+dbus_bool_t
+bus_driver_send_ack_reply (DBusConnection *connection,
+                           BusTransaction *transaction,
+                           DBusMessage    *message,
+                           DBusError      *error)
 {
   DBusMessage *reply;
 
@@ -1078,21 +1082,6 @@ bus_driver_handle_update_activation_environment (DBusConnection *connection,
   DBusMessageIter systemd_iter;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
-
-  if (!bus_driver_check_message_is_for_us (message, error))
-    return FALSE;
-
-#ifdef DBUS_UNIX
-    {
-      /* UpdateActivationEnvironment is basically a recipe for privilege
-       * escalation so let's be extra-careful: do not allow the sysadmin
-       * to shoot themselves in the foot.
-       */
-      if (!bus_driver_check_caller_is_privileged (connection, transaction,
-                                                  message, error))
-        return FALSE;
-    }
-#endif
 
   context = bus_connection_get_context (connection);
 
@@ -1277,8 +1266,7 @@ bus_driver_handle_update_activation_environment (DBusConnection *connection,
         }
     }
 
-  if (!send_ack_reply (connection, transaction,
-                       message, error))
+  if (!bus_driver_send_ack_reply (connection, transaction, message, error))
     goto out;
 
   retval = TRUE;
@@ -1301,6 +1289,7 @@ bus_driver_handle_add_match (DBusConnection *connection,
   const char *text, *bustype;
   DBusString str;
   BusMatchmaker *matchmaker;
+  int limit;
   BusContext *context;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -1308,15 +1297,25 @@ bus_driver_handle_add_match (DBusConnection *connection,
   text = NULL;
   rule = NULL;
 
-  if (bus_connection_get_n_match_rules (connection) >=
-      bus_context_get_max_match_rules_per_connection (bus_transaction_get_context (transaction)))
+  context = bus_transaction_get_context (transaction);
+  limit = bus_context_get_max_match_rules_per_connection (context);
+
+  if (bus_connection_get_n_match_rules (connection) >= limit)
     {
-      dbus_set_error (error, DBUS_ERROR_LIMITS_EXCEEDED,
+      DBusError tmp_error;
+
+      dbus_error_init (&tmp_error);
+      dbus_set_error (&tmp_error, DBUS_ERROR_LIMITS_EXCEEDED,
                       "Connection \"%s\" is not allowed to add more match rules "
-                      "(increase limits in configuration file if required)",
+                      "(increase limits in configuration file if required; "
+                      "max_match_rules_per_connection=%d)",
                       bus_connection_is_active (connection) ?
                       bus_connection_get_name (connection) :
-                      "(inactive)");
+                      "(inactive)",
+                      limit);
+      bus_context_log (context, DBUS_SYSTEM_LOG_WARNING, "%s",
+                       tmp_error.message);
+      dbus_move_error (&tmp_error, error);
       goto failed;
     }
 
@@ -1334,11 +1333,17 @@ bus_driver_handle_add_match (DBusConnection *connection,
   if (rule == NULL)
     goto failed;
 
-  context = bus_transaction_get_context (transaction);
-  bustype = context ? bus_context_get_type (context) : NULL;
-  if (bus_match_rule_get_client_is_eavesdropping (rule) &&
-      !bus_apparmor_allows_eavesdropping (connection, bustype, error))
-    goto failed;
+  bustype = bus_context_get_type (context);
+
+  if (bus_match_rule_get_client_is_eavesdropping (rule))
+    {
+      if (!bus_driver_check_caller_is_privileged (connection,
+                                                  transaction,
+                                                  message,
+                                                  error) ||
+          !bus_apparmor_allows_eavesdropping (connection, bustype, error))
+        goto failed;
+    }
 
   matchmaker = bus_connection_get_matchmaker (connection);
 
@@ -1348,8 +1353,7 @@ bus_driver_handle_add_match (DBusConnection *connection,
       goto failed;
     }
 
-  if (!send_ack_reply (connection, transaction,
-                       message, error))
+  if (!bus_driver_send_ack_reply (connection, transaction, message, error))
     {
       bus_matchmaker_remove_rule (matchmaker, rule);
       goto failed;
@@ -1399,8 +1403,7 @@ bus_driver_handle_remove_match (DBusConnection *connection,
   /* Send the ack before we remove the rule, since the ack is undone
    * on transaction cancel, but rule removal isn't.
    */
-  if (!send_ack_reply (connection, transaction,
-                       message, error))
+  if (!bus_driver_send_ack_reply (connection, transaction, message, error))
     goto failed;
 
   matchmaker = bus_connection_get_matchmaker (connection);
@@ -1507,6 +1510,8 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
 				      DBusMessage    *message,
 				      DBusError      *error)
 {
+  static const char dbus_service_name[] = DBUS_SERVICE_DBUS;
+
   const char *text;
   DBusList *base_names;
   DBusList *link;
@@ -1515,7 +1520,6 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
   BusService *service;
   DBusMessage *reply;
   DBusMessageIter iter, array_iter;
-  char *dbus_service_name = DBUS_SERVICE_DBUS;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -1536,7 +1540,7 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
       _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
     {
       /* ORG_FREEDESKTOP_DBUS owns itself */
-      if (! _dbus_list_append (&base_names, dbus_service_name))
+      if (! _dbus_list_append (&base_names, (char *) dbus_service_name))
         goto oom;
     }
   else if (service == NULL)
@@ -1637,6 +1641,8 @@ bus_driver_handle_get_connection_unix_user (DBusConnection *connection,
           uid = DBUS_UID_UNSET;
         break;
       case BUS_DRIVER_FOUND_ERROR:
+        /* fall through */
+      default:
         goto failed;
     }
 
@@ -1704,6 +1710,8 @@ bus_driver_handle_get_connection_unix_process_id (DBusConnection *connection,
           pid = DBUS_PID_UNSET;
         break;
       case BUS_DRIVER_FOUND_ERROR:
+        /* fall through */
+      default:
         goto failed;
     }
 
@@ -1751,7 +1759,7 @@ bus_driver_handle_get_adt_audit_session_data (DBusConnection *connection,
   DBusConnection *conn;
   DBusMessage *reply;
   void *data = NULL;
-  dbus_uint32_t data_size;
+  dbus_int32_t data_size;
   const char *service;
   BusDriverFound found;
 
@@ -1831,8 +1839,9 @@ bus_driver_handle_get_connection_selinux_security_context (DBusConnection *conne
   if (reply == NULL)
     goto oom;
 
-  /* FIXME: Obtain the SELinux security context for the bus daemon itself */
-  if (found == BUS_DRIVER_FOUND_PEER)
+  if (found == BUS_DRIVER_FOUND_SELF)
+    context = bus_selinux_get_self ();
+  else if (found == BUS_DRIVER_FOUND_PEER)
     context = bus_connection_get_selinux_id (conn);
   else
     context = NULL;
@@ -1901,6 +1910,8 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
           ulong_uid = DBUS_UID_UNSET;
         break;
       case BUS_DRIVER_FOUND_ERROR:
+        /* fall through */
+      default:
         goto failed;
     }
 
@@ -2172,16 +2183,9 @@ bus_driver_handle_become_monitor (DBusConnection *connection,
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  if (!bus_driver_check_message_is_for_us (message, error))
-    goto out;
-
   context = bus_transaction_get_context (transaction);
   bustype = context ? bus_context_get_type (context) : NULL;
   if (!bus_apparmor_allows_eavesdropping (connection, bustype, error))
-    goto out;
-
-  if (!bus_driver_check_caller_is_privileged (connection, transaction,
-                                              message, error))
     goto out;
 
   if (!dbus_message_get_args (message, error,
@@ -2242,7 +2246,7 @@ bus_driver_handle_become_monitor (DBusConnection *connection,
   /* Send the ack before we remove the rule, since the ack is undone
    * on transaction cancel, but becoming a monitor isn't.
    */
-  if (!send_ack_reply (connection, transaction, message, error))
+  if (!bus_driver_send_ack_reply (connection, transaction, message, error))
     goto out;
 
   if (!bus_connection_be_monitor (connection, transaction, &rules, error))
@@ -2267,6 +2271,109 @@ out:
   return ret;
 }
 
+static dbus_bool_t
+bus_driver_handle_get_machine_id (DBusConnection *connection,
+                                  BusTransaction *transaction,
+                                  DBusMessage *message,
+                                  DBusError *error)
+{
+  DBusMessage *reply = NULL;
+  DBusString uuid;
+  const char *str;
+
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  if (!_dbus_string_init (&uuid))
+    {
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  if (!_dbus_get_local_machine_uuid_encoded (&uuid, error))
+    goto fail;
+
+  reply = dbus_message_new_method_return (message);
+
+  if (reply == NULL)
+    goto oom;
+
+  str = _dbus_string_get_const_data (&uuid);
+
+  if (!dbus_message_append_args (reply,
+                                 DBUS_TYPE_STRING, &str,
+                                 DBUS_TYPE_INVALID))
+    goto oom;
+
+  _dbus_assert (dbus_message_has_signature (reply, "s"));
+
+  if (!bus_transaction_send_from_driver (transaction, connection, reply))
+    goto oom;
+
+  _dbus_string_free (&uuid);
+  dbus_message_unref (reply);
+  return TRUE;
+
+oom:
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  BUS_SET_OOM (error);
+
+fail:
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+
+  if (reply != NULL)
+    dbus_message_unref (reply);
+
+  _dbus_string_free (&uuid);
+  return FALSE;
+}
+
+static dbus_bool_t
+bus_driver_handle_ping (DBusConnection *connection,
+                        BusTransaction *transaction,
+                        DBusMessage *message,
+                        DBusError *error)
+{
+  return bus_driver_send_ack_reply (connection, transaction, message, error);
+}
+
+static dbus_bool_t bus_driver_handle_get (DBusConnection *connection,
+                                          BusTransaction *transaction,
+                                          DBusMessage *message,
+                                          DBusError *error);
+
+static dbus_bool_t bus_driver_handle_get_all (DBusConnection *connection,
+                                              BusTransaction *transaction,
+                                              DBusMessage *message,
+                                              DBusError *error);
+
+static dbus_bool_t bus_driver_handle_set (DBusConnection *connection,
+                                          BusTransaction *transaction,
+                                          DBusMessage *message,
+                                          DBusError *error);
+
+static dbus_bool_t features_getter (BusContext      *context,
+                                    DBusMessageIter *variant_iter);
+static dbus_bool_t interfaces_getter (BusContext      *context,
+                                      DBusMessageIter *variant_iter);
+
+typedef enum
+{
+  /* Various older methods were available at every object path. We have to
+   * preserve that behaviour for backwards compatibility, but we can at least
+   * stop doing that for newly added methods.
+   * The special Peer interface should also work at any object path.
+   * <https://bugs.freedesktop.org/show_bug.cgi?id=101256> */
+  METHOD_FLAG_ANY_PATH = (1 << 0),
+
+  /* If set, callers must be privileged. On Unix, the uid of the connection
+   * must either be the uid of this process, or 0 (root). On Windows,
+   * the SID of the connection must be the SID of this process. */
+  METHOD_FLAG_PRIVILEGED = (1 << 1),
+
+  METHOD_FLAG_NONE = 0
+} MethodFlags;
+
 typedef struct
 {
   const char *name;
@@ -2276,7 +2383,16 @@ typedef struct
                            BusTransaction *transaction,
                            DBusMessage    *message,
                            DBusError      *error);
+  MethodFlags flags;
 } MessageHandler;
+
+typedef struct
+{
+  const char *name;
+  const char *type;
+  dbus_bool_t (* getter) (BusContext      *context,
+                          DBusMessageIter *variant_iter);
+} PropertyHandler;
 
 /* For speed it might be useful to sort this in order of
  * frequency of use (but doesn't matter with only a few items
@@ -2286,114 +2402,178 @@ static const MessageHandler dbus_message_handlers[] = {
   { "Hello",
     "",
     DBUS_TYPE_STRING_AS_STRING,
-    bus_driver_handle_hello },
+    bus_driver_handle_hello,
+    METHOD_FLAG_ANY_PATH },
   { "RequestName",
     DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_UINT32_AS_STRING,
     DBUS_TYPE_UINT32_AS_STRING,
-    bus_driver_handle_acquire_service },
+    bus_driver_handle_acquire_service,
+    METHOD_FLAG_ANY_PATH },
   { "ReleaseName",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_UINT32_AS_STRING,
-    bus_driver_handle_release_service },
+    bus_driver_handle_release_service,
+    METHOD_FLAG_ANY_PATH },
   { "StartServiceByName",
     DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_UINT32_AS_STRING,
     DBUS_TYPE_UINT32_AS_STRING,
-    bus_driver_handle_activate_service },
+    bus_driver_handle_activate_service,
+    METHOD_FLAG_ANY_PATH },
   { "UpdateActivationEnvironment",
     DBUS_TYPE_ARRAY_AS_STRING DBUS_DICT_ENTRY_BEGIN_CHAR_AS_STRING DBUS_TYPE_STRING_AS_STRING DBUS_TYPE_STRING_AS_STRING DBUS_DICT_ENTRY_END_CHAR_AS_STRING,
     "",
-    bus_driver_handle_update_activation_environment },
+    bus_driver_handle_update_activation_environment,
+    METHOD_FLAG_PRIVILEGED },
   { "NameHasOwner",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_BOOLEAN_AS_STRING,
-    bus_driver_handle_service_exists },
+    bus_driver_handle_service_exists,
+    METHOD_FLAG_ANY_PATH },
   { "ListNames",
     "",
     DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING,
-    bus_driver_handle_list_services },
+    bus_driver_handle_list_services,
+    METHOD_FLAG_ANY_PATH },
   { "ListActivatableNames",
     "",
     DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING,
-    bus_driver_handle_list_activatable_services },
+    bus_driver_handle_list_activatable_services,
+    METHOD_FLAG_ANY_PATH },
   { "AddMatch",
     DBUS_TYPE_STRING_AS_STRING,
     "",
-    bus_driver_handle_add_match },
+    bus_driver_handle_add_match,
+    METHOD_FLAG_ANY_PATH },
   { "RemoveMatch",
     DBUS_TYPE_STRING_AS_STRING,
     "",
-    bus_driver_handle_remove_match },
+    bus_driver_handle_remove_match,
+    METHOD_FLAG_ANY_PATH },
   { "GetNameOwner",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_STRING_AS_STRING,
-    bus_driver_handle_get_service_owner },
+    bus_driver_handle_get_service_owner,
+    METHOD_FLAG_ANY_PATH },
   { "ListQueuedOwners",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_STRING_AS_STRING,
-    bus_driver_handle_list_queued_owners },
+    bus_driver_handle_list_queued_owners,
+    METHOD_FLAG_ANY_PATH },
   { "GetConnectionUnixUser",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_UINT32_AS_STRING,
-    bus_driver_handle_get_connection_unix_user },
+    bus_driver_handle_get_connection_unix_user,
+    METHOD_FLAG_ANY_PATH },
   { "GetConnectionUnixProcessID",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_UINT32_AS_STRING,
-    bus_driver_handle_get_connection_unix_process_id },
+    bus_driver_handle_get_connection_unix_process_id,
+    METHOD_FLAG_ANY_PATH },
   { "GetAdtAuditSessionData",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BYTE_AS_STRING,
-    bus_driver_handle_get_adt_audit_session_data },
+    bus_driver_handle_get_adt_audit_session_data,
+    METHOD_FLAG_ANY_PATH },
   { "GetConnectionSELinuxSecurityContext",
     DBUS_TYPE_STRING_AS_STRING,
     DBUS_TYPE_ARRAY_AS_STRING DBUS_TYPE_BYTE_AS_STRING,
-    bus_driver_handle_get_connection_selinux_security_context },
+    bus_driver_handle_get_connection_selinux_security_context,
+    METHOD_FLAG_ANY_PATH },
   { "ReloadConfig",
     "",
     "",
-    bus_driver_handle_reload_config },
+    bus_driver_handle_reload_config,
+    METHOD_FLAG_ANY_PATH },
   { "GetId",
     "",
     DBUS_TYPE_STRING_AS_STRING,
-    bus_driver_handle_get_id },
+    bus_driver_handle_get_id,
+    METHOD_FLAG_ANY_PATH },
   { "GetConnectionCredentials", "s", "a{sv}",
-    bus_driver_handle_get_connection_credentials },
+    bus_driver_handle_get_connection_credentials,
+    METHOD_FLAG_ANY_PATH },
   { NULL, NULL, NULL, NULL }
+};
+
+static const PropertyHandler dbus_property_handlers[] = {
+  { "Features", "as", features_getter },
+  { "Interfaces", "as", interfaces_getter },
+  { NULL, NULL, NULL }
 };
 
 static dbus_bool_t bus_driver_handle_introspect (DBusConnection *,
     BusTransaction *, DBusMessage *, DBusError *);
 
+static const MessageHandler properties_message_handlers[] = {
+  { "Get", "ss", "v", bus_driver_handle_get, METHOD_FLAG_NONE },
+  { "GetAll", "s", "a{sv}", bus_driver_handle_get_all, METHOD_FLAG_NONE },
+  { "Set", "ssv", "", bus_driver_handle_set, METHOD_FLAG_NONE },
+  { NULL, NULL, NULL, NULL }
+};
+
 static const MessageHandler introspectable_message_handlers[] = {
-  { "Introspect", "", DBUS_TYPE_STRING_AS_STRING, bus_driver_handle_introspect },
+  { "Introspect", "", DBUS_TYPE_STRING_AS_STRING, bus_driver_handle_introspect,
+    METHOD_FLAG_ANY_PATH },
   { NULL, NULL, NULL, NULL }
 };
 
 static const MessageHandler monitoring_message_handlers[] = {
-  { "BecomeMonitor", "asu", "", bus_driver_handle_become_monitor },
+  { "BecomeMonitor", "asu", "", bus_driver_handle_become_monitor,
+    METHOD_FLAG_PRIVILEGED },
   { NULL, NULL, NULL, NULL }
 };
 
 #ifdef DBUS_ENABLE_VERBOSE_MODE
 static const MessageHandler verbose_message_handlers[] = {
-  { "EnableVerbose", "", "", bus_driver_handle_enable_verbose},
-  { "DisableVerbose", "", "", bus_driver_handle_disable_verbose},
+  { "EnableVerbose", "", "", bus_driver_handle_enable_verbose,
+    METHOD_FLAG_NONE },
+  { "DisableVerbose", "", "", bus_driver_handle_disable_verbose,
+    METHOD_FLAG_NONE },
   { NULL, NULL, NULL, NULL }
 };
 #endif
 
 #ifdef DBUS_ENABLE_STATS
 static const MessageHandler stats_message_handlers[] = {
-  { "GetStats", "", "a{sv}", bus_stats_handle_get_stats },
-  { "GetConnectionStats", "s", "a{sv}", bus_stats_handle_get_connection_stats },
-  { "GetAllMatchRules", "", "a{sas}", bus_stats_handle_get_all_match_rules },
+  { "GetStats", "", "a{sv}", bus_stats_handle_get_stats,
+    METHOD_FLAG_NONE },
+  { "GetConnectionStats", "s", "a{sv}", bus_stats_handle_get_connection_stats,
+    METHOD_FLAG_NONE },
+  { "GetAllMatchRules", "", "a{sas}", bus_stats_handle_get_all_match_rules,
+    METHOD_FLAG_NONE },
   { NULL, NULL, NULL, NULL }
 };
 #endif
+
+static const MessageHandler peer_message_handlers[] = {
+  { "GetMachineId", "", "s", bus_driver_handle_get_machine_id,
+    METHOD_FLAG_ANY_PATH },
+  { "Ping", "", "", bus_driver_handle_ping, METHOD_FLAG_ANY_PATH },
+  { NULL, NULL, NULL, NULL }
+};
+
+typedef enum
+{
+  /* Various older interfaces were available at every object path. We have to
+   * preserve that behaviour for backwards compatibility, but we can at least
+   * stop doing that for newly added interfaces:
+   * <https://bugs.freedesktop.org/show_bug.cgi?id=101256>
+   * Introspectable and Peer are also useful at all object paths. */
+  INTERFACE_FLAG_ANY_PATH = (1 << 0),
+
+  /* Set this flag for interfaces that should not show up in the
+   * Interfaces property. */
+  INTERFACE_FLAG_UNINTERESTING = (1 << 1),
+
+  INTERFACE_FLAG_NONE = 0
+} InterfaceFlags;
 
 typedef struct {
   const char *name;
   const MessageHandler *message_handlers;
   const char *extra_introspection;
+  InterfaceFlags flags;
+  const PropertyHandler *property_handlers;
 } InterfaceHandler;
 
 /* These should ideally be sorted by frequency of use, although it
@@ -2410,15 +2590,42 @@ static InterfaceHandler interface_handlers[] = {
     "    </signal>\n"
     "    <signal name=\"NameAcquired\">\n"
     "      <arg type=\"s\"/>\n"
-    "    </signal>\n" },
-  { DBUS_INTERFACE_INTROSPECTABLE, introspectable_message_handlers, NULL },
-  { DBUS_INTERFACE_MONITORING, monitoring_message_handlers, NULL },
+    "    </signal>\n",
+    /* Not in the Interfaces property because if you can get the properties
+     * of the o.fd.DBus interface, then you certainly have the o.fd.DBus
+     * interface, so there is little point in listing it explicitly.
+     * Partially available at all paths for backwards compatibility. */
+    INTERFACE_FLAG_ANY_PATH | INTERFACE_FLAG_UNINTERESTING,
+    dbus_property_handlers },
+  { DBUS_INTERFACE_PROPERTIES, properties_message_handlers,
+    "    <signal name=\"PropertiesChanged\">\n"
+    "      <arg type=\"s\" name=\"interface_name\"/>\n"
+    "      <arg type=\"a{sv}\" name=\"changed_properties\"/>\n"
+    "      <arg type=\"as\" name=\"invalidated_properties\"/>\n"
+    "    </signal>\n",
+    /* Not in the Interfaces property because if you can get the properties
+     * of the o.fd.DBus interface, then you certainly have Properties. */
+    INTERFACE_FLAG_UNINTERESTING },
+  { DBUS_INTERFACE_INTROSPECTABLE, introspectable_message_handlers, NULL,
+    /* Not in the Interfaces property because introspection isn't really a
+     * feature in the same way as e.g. Monitoring.
+     * Available at all paths so tools like d-feet can start from "/". */
+    INTERFACE_FLAG_ANY_PATH | INTERFACE_FLAG_UNINTERESTING },
+  { DBUS_INTERFACE_MONITORING, monitoring_message_handlers, NULL,
+    INTERFACE_FLAG_NONE },
 #ifdef DBUS_ENABLE_VERBOSE_MODE
-  { DBUS_INTERFACE_VERBOSE, verbose_message_handlers, NULL },
+  { DBUS_INTERFACE_VERBOSE, verbose_message_handlers, NULL,
+    INTERFACE_FLAG_NONE },
 #endif
 #ifdef DBUS_ENABLE_STATS
-  { BUS_INTERFACE_STATS, stats_message_handlers, NULL },
+  { BUS_INTERFACE_STATS, stats_message_handlers, NULL,
+    INTERFACE_FLAG_NONE },
 #endif
+  { DBUS_INTERFACE_PEER, peer_message_handlers, NULL,
+    /* Not in the Interfaces property because it's a pseudo-interface
+     * on all object paths of all connections, rather than a feature of the
+     * bus driver object. */
+    INTERFACE_FLAG_ANY_PATH | INTERFACE_FLAG_UNINTERESTING },
   { NULL, NULL, NULL }
 };
 
@@ -2458,10 +2665,13 @@ write_args_for_direction (DBusString *xml,
 }
 
 dbus_bool_t
-bus_driver_generate_introspect_string (DBusString *xml)
+bus_driver_generate_introspect_string (DBusString *xml,
+                                       dbus_bool_t is_canonical_path,
+                                       DBusMessage *message)
 {
   const InterfaceHandler *ih;
   const MessageHandler *mh;
+  const PropertyHandler *ph;
 
   if (!_dbus_string_append (xml, DBUS_INTROSPECT_1_0_XML_DOCTYPE_DECL_NODE))
     return FALSE;
@@ -2470,6 +2680,9 @@ bus_driver_generate_introspect_string (DBusString *xml)
 
   for (ih = interface_handlers; ih->name != NULL; ih++)
     {
+      if (!(is_canonical_path || (ih->flags & INTERFACE_FLAG_ANY_PATH)))
+        continue;
+
       if (!_dbus_string_append_printf (xml, "  <interface name=\"%s\">\n",
                                        ih->name))
         return FALSE;
@@ -2490,12 +2703,48 @@ bus_driver_generate_introspect_string (DBusString *xml)
             return FALSE;
         }
 
+      for (ph = ih->property_handlers; ph != NULL && ph->name != NULL; ph++)
+        {
+          /* We only have constant properties so far, so hard-code that bit */
+          if (!_dbus_string_append_printf (xml,
+                                           "    <property name=\"%s\" type=\"%s\" access=\"read\">\n",
+                                           ph->name, ph->type))
+            return FALSE;
+
+          if (!_dbus_string_append (xml,
+                                    "      <annotation name=\"org.freedesktop.DBus.Property.EmitsChangedSignal\" value=\"const\"/>\n"
+                                    "    </property>\n"))
+            return FALSE;
+        }
+
       if (ih->extra_introspection != NULL &&
           !_dbus_string_append (xml, ih->extra_introspection))
         return FALSE;
 
       if (!_dbus_string_append (xml, "  </interface>\n"))
         return FALSE;
+    }
+
+  if (message != NULL)
+    {
+      /* Make the bus driver object path discoverable */
+      if (dbus_message_has_path (message, "/"))
+        {
+          if (!_dbus_string_append (xml,
+                "  <node name=\"org/freedesktop/DBus\"/>\n"))
+            return FALSE;
+        }
+      else if (dbus_message_has_path (message, "/org"))
+        {
+          if (!_dbus_string_append (xml,
+                "  <node name=\"freedesktop/DBus\"/>\n"))
+            return FALSE;
+        }
+      else if (dbus_message_has_path (message, "/org/freedesktop"))
+        {
+          if (!_dbus_string_append (xml, "  <node name=\"DBus\"/>\n"))
+            return FALSE;
+        }
     }
 
   if (!_dbus_string_append (xml, "</node>\n"))
@@ -2513,6 +2762,7 @@ bus_driver_handle_introspect (DBusConnection *connection,
   DBusString xml;
   DBusMessage *reply;
   const char *v_STRING;
+  dbus_bool_t is_canonical_path;
 
   _dbus_verbose ("Introspect() on bus driver\n");
 
@@ -2533,7 +2783,9 @@ bus_driver_handle_introspect (DBusConnection *connection,
       return FALSE;
     }
 
-  if (!bus_driver_generate_introspect_string (&xml))
+  is_canonical_path = dbus_message_has_path (message, DBUS_PATH_DBUS);
+
+  if (!bus_driver_generate_introspect_string (&xml, is_canonical_path, message))
     goto oom;
 
   v_STRING = _dbus_string_get_const_data (&xml);
@@ -2566,38 +2818,6 @@ bus_driver_handle_introspect (DBusConnection *connection,
   return FALSE;
 }
 
-/*
- * Set @error and return FALSE if the message is not directed to the
- * dbus-daemon by its canonical object path. This is hardening against
- * system services with poorly-written security policy files, which
- * might allow sending dangerously broad equivalence classes of messages
- * such as "anything with this assumed-to-be-safe object path".
- *
- * dbus-daemon is unusual in that it normally ignores the object path
- * of incoming messages; we need to keep that behaviour for the "read"
- * read-only method calls like GetConnectionUnixUser for backwards
- * compatibility, but it seems safer to be more restrictive for things
- * intended to be root-only or privileged-developers-only.
- *
- * It is possible that there are other system services with the same
- * quirk as dbus-daemon.
- */
-dbus_bool_t
-bus_driver_check_message_is_for_us (DBusMessage *message,
-                                    DBusError   *error)
-{
-  if (!dbus_message_has_path (message, DBUS_PATH_DBUS))
-    {
-      dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
-          "Method '%s' is only available at the canonical object path '%s'",
-          dbus_message_get_member (message), DBUS_PATH_DBUS);
-
-      return FALSE;
-    }
-
-  return TRUE;
-}
-
 dbus_bool_t
 bus_driver_handle_message (DBusConnection *connection,
                            BusTransaction *transaction,
@@ -2608,6 +2828,7 @@ bus_driver_handle_message (DBusConnection *connection,
   const InterfaceHandler *ih;
   const MessageHandler *mh;
   dbus_bool_t found_interface = FALSE;
+  dbus_bool_t is_canonical_path;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -2673,8 +2894,13 @@ bus_driver_handle_message (DBusConnection *connection,
   _dbus_assert (dbus_message_get_sender (message) != NULL ||
                 strcmp (name, "Hello") == 0);
 
+  is_canonical_path = dbus_message_has_path (message, DBUS_PATH_DBUS);
+
   for (ih = interface_handlers; ih->name != NULL; ih++)
     {
+      if (!(is_canonical_path || (ih->flags & INTERFACE_FLAG_ANY_PATH)))
+        continue;
+
       if (interface != NULL && strcmp (interface, ih->name) != 0)
         continue;
 
@@ -2686,6 +2912,24 @@ bus_driver_handle_message (DBusConnection *connection,
             continue;
 
           _dbus_verbose ("Found driver handler for %s\n", name);
+
+          if ((mh->flags & METHOD_FLAG_PRIVILEGED) &&
+              !bus_driver_check_caller_is_privileged (connection, transaction,
+                                                      message, error))
+            {
+              _DBUS_ASSERT_ERROR_IS_SET (error);
+              return FALSE;
+            }
+
+          if (!(is_canonical_path || (mh->flags & METHOD_FLAG_ANY_PATH)))
+            {
+              _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+              dbus_set_error (error, DBUS_ERROR_ACCESS_DENIED,
+                  "Method '%s' is only available at the canonical object path '%s'",
+                  dbus_message_get_member (message), DBUS_PATH_DBUS);
+              _DBUS_ASSERT_ERROR_IS_SET (error);
+              return FALSE;
+            }
 
           if (!dbus_message_has_signature (message, mh->in_args))
             {
@@ -2733,4 +2977,299 @@ bus_driver_remove_connection (DBusConnection *connection)
   /* FIXME 1.0 Does nothing for now, should unregister the connection
    * with the bus driver.
    */
+}
+
+static dbus_bool_t
+features_getter (BusContext      *context,
+                 DBusMessageIter *variant_iter)
+{
+  DBusMessageIter arr_iter;
+
+  if (!dbus_message_iter_open_container (variant_iter, DBUS_TYPE_ARRAY,
+                                         DBUS_TYPE_STRING_AS_STRING,
+                                         &arr_iter))
+    return FALSE;
+
+  if (bus_apparmor_enabled ())
+    {
+      const char *s = "AppArmor";
+
+      if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
+        goto abandon;
+    }
+
+  if (bus_selinux_enabled ())
+    {
+      const char *s = "SELinux";
+
+      if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
+        goto abandon;
+    }
+
+  if (bus_context_get_systemd_activation (context))
+    {
+      const char *s = "SystemdActivation";
+
+      if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
+        goto abandon;
+    }
+
+  return dbus_message_iter_close_container (variant_iter, &arr_iter);
+
+abandon:
+  dbus_message_iter_abandon_container (variant_iter, &arr_iter);
+  return FALSE;
+}
+
+static dbus_bool_t
+interfaces_getter (BusContext      *context,
+                   DBusMessageIter *variant_iter)
+{
+  DBusMessageIter arr_iter;
+  const InterfaceHandler *ih;
+
+  if (!dbus_message_iter_open_container (variant_iter, DBUS_TYPE_ARRAY,
+                                         DBUS_TYPE_STRING_AS_STRING,
+                                         &arr_iter))
+    return FALSE;
+
+  for (ih = interface_handlers; ih->name != NULL; ih++)
+    {
+      if (ih->flags & INTERFACE_FLAG_UNINTERESTING)
+        continue;
+
+      if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING,
+                                           &ih->name))
+        goto abandon;
+    }
+
+  return dbus_message_iter_close_container (variant_iter, &arr_iter);
+
+abandon:
+  dbus_message_iter_abandon_container (variant_iter, &arr_iter);
+  return FALSE;
+}
+
+static const InterfaceHandler *
+bus_driver_find_interface (const char  *name,
+                           dbus_bool_t  canonical_path,
+                           DBusError   *error)
+{
+  const InterfaceHandler *ih;
+
+  for (ih = interface_handlers; ih->name != NULL; ih++)
+    {
+      if (!(canonical_path || (ih->flags & INTERFACE_FLAG_ANY_PATH)))
+        continue;
+
+      if (strcmp (name, ih->name) == 0)
+        return ih;
+    }
+
+  dbus_set_error (error, DBUS_ERROR_UNKNOWN_INTERFACE,
+                  "Interface \"%s\" not found", name);
+  return NULL;
+}
+
+static const PropertyHandler *
+interface_handler_find_property (const InterfaceHandler *ih,
+                                 const char             *name,
+                                 DBusError              *error)
+{
+  const PropertyHandler *ph;
+
+  for (ph = ih->property_handlers; ph != NULL && ph->name != NULL; ph++)
+    {
+      if (strcmp (name, ph->name) == 0)
+        return ph;
+    }
+
+  dbus_set_error (error, DBUS_ERROR_UNKNOWN_PROPERTY,
+                  "Property \"%s.%s\" not found", ih->name, name);
+  return NULL;
+}
+
+static dbus_bool_t
+bus_driver_handle_get (DBusConnection *connection,
+                       BusTransaction *transaction,
+                       DBusMessage    *message,
+                       DBusError      *error)
+{
+  const InterfaceHandler *ih;
+  const PropertyHandler *handler;
+  const char *iface;
+  const char *prop;
+  BusContext *context;
+  DBusMessage *reply = NULL;
+  DBusMessageIter iter;
+  DBusMessageIter var_iter;
+
+  /* The message signature has already been checked for us,
+   * so this should always succeed. */
+  if (!dbus_message_get_args (message, error,
+                              DBUS_TYPE_STRING, &iface,
+                              DBUS_TYPE_STRING, &prop,
+                              DBUS_TYPE_INVALID))
+    return FALSE;
+
+  /* We only implement Properties on /org/freedesktop/DBus so far. */
+  ih = bus_driver_find_interface (iface, TRUE, error);
+
+  if (ih == NULL)
+    return FALSE;
+
+  handler = interface_handler_find_property (ih, prop, error);
+
+  if (handler == NULL)
+    return FALSE;
+
+  context = bus_transaction_get_context (transaction);
+
+  reply = dbus_message_new_method_return (message);
+
+  if (reply == NULL)
+    goto oom;
+
+  dbus_message_iter_init_append (reply, &iter);
+
+  if (!dbus_message_iter_open_container (&iter, DBUS_TYPE_VARIANT,
+                                         handler->type, &var_iter))
+    goto oom;
+
+  if (!handler->getter (context, &var_iter))
+    {
+      dbus_message_iter_abandon_container (&iter, &var_iter);
+      goto oom;
+    }
+
+  if (!dbus_message_iter_close_container (&iter, &var_iter))
+    goto oom;
+
+  if (!bus_transaction_send_from_driver (transaction, connection, reply))
+    goto oom;
+
+  dbus_message_unref (reply);
+  return TRUE;
+
+oom:
+  if (reply != NULL)
+    dbus_message_unref (reply);
+
+  BUS_SET_OOM (error);
+  return FALSE;
+}
+
+static dbus_bool_t
+bus_driver_handle_get_all (DBusConnection *connection,
+                           BusTransaction *transaction,
+                           DBusMessage    *message,
+                           DBusError      *error)
+{
+  const InterfaceHandler *ih;
+  const char *iface;
+  const PropertyHandler *ph;
+  DBusMessageIter reply_iter;
+  DBusMessageIter array_iter;
+  BusContext *context;
+  DBusMessage *reply = NULL;
+
+  /* The message signature has already been checked for us,
+   * so this should always succeed. */
+  if (!dbus_message_get_args (message, error,
+                              DBUS_TYPE_STRING, &iface,
+                              DBUS_TYPE_INVALID))
+    return FALSE;
+
+  /* We only implement Properties on /org/freedesktop/DBus so far. */
+  ih = bus_driver_find_interface (iface, TRUE, error);
+
+  if (ih == NULL)
+    return FALSE;
+
+  context = bus_transaction_get_context (transaction);
+
+  reply = _dbus_asv_new_method_return (message, &reply_iter, &array_iter);
+
+  if (reply == NULL)
+    goto oom;
+
+  for (ph = ih->property_handlers; ph != NULL && ph->name != NULL; ph++)
+    {
+      DBusMessageIter entry_iter;
+      DBusMessageIter var_iter;
+
+      if (!_dbus_asv_open_entry (&array_iter, &entry_iter, ph->name,
+                                 ph->type, &var_iter))
+        goto oom_abandon_message;
+
+      if (!ph->getter (context, &var_iter))
+        {
+          _dbus_asv_abandon_entry (&array_iter, &entry_iter, &var_iter);
+          goto oom_abandon_message;
+        }
+
+      if (!_dbus_asv_close_entry (&array_iter, &entry_iter, &var_iter))
+        goto oom_abandon_message;
+    }
+
+  if (!_dbus_asv_close (&reply_iter, &array_iter))
+    goto oom;
+
+  if (!bus_transaction_send_from_driver (transaction, connection, reply))
+    goto oom;
+
+  dbus_message_unref (reply);
+  return TRUE;
+
+oom_abandon_message:
+  _dbus_asv_abandon (&reply_iter, &array_iter);
+  /* fall through */
+oom:
+  if (reply != NULL)
+    dbus_message_unref (reply);
+
+  BUS_SET_OOM (error);
+  return FALSE;
+}
+
+static dbus_bool_t
+bus_driver_handle_set (DBusConnection *connection,
+                       BusTransaction *transaction,
+                       DBusMessage    *message,
+                       DBusError      *error)
+{
+  const InterfaceHandler *ih;
+  const char *iface;
+  const char *prop;
+  const PropertyHandler *handler;
+  DBusMessageIter iter;
+
+  /* We already checked this in bus_driver_handle_message() */
+  _dbus_assert (dbus_message_has_signature (message, "ssv"));
+
+  if (!dbus_message_iter_init (message, &iter))
+    _dbus_assert_not_reached ("Message type was already checked to be 'ssv'");
+
+  dbus_message_iter_get_basic (&iter, &iface);
+
+  if (!dbus_message_iter_next (&iter))
+    _dbus_assert_not_reached ("Message type was already checked to be 'ssv'");
+
+  dbus_message_iter_get_basic (&iter, &prop);
+
+  /* We only implement Properties on /org/freedesktop/DBus so far. */
+  ih = bus_driver_find_interface (iface, TRUE, error);
+
+  if (ih == NULL)
+    return FALSE;
+
+  handler = interface_handler_find_property (ih, prop, error);
+
+  if (handler == NULL)
+    return FALSE;
+
+  /* We don't implement any properties that can be set yet. */
+  dbus_set_error (error, DBUS_ERROR_PROPERTY_READ_ONLY,
+                  "Property '%s.%s' cannot be set", iface, prop);
+  return FALSE;
 }

@@ -19,6 +19,8 @@ quit (void)
     }
 }
 
+static void die (const char *message) _DBUS_GNUC_NORETURN;
+
 static void
 die (const char *message)
 {
@@ -90,9 +92,8 @@ check_hello_from_self_reply (DBusPendingCall *pcall,
       
       dbus_message_unref (echo_reply);
     }
-  else if (type == DBUS_MESSAGE_TYPE_ERROR)
+  else if (dbus_set_error_from_message (&error, reply))
     {
-      dbus_set_error_from_message (&error, reply);
       printf ("Error type in reply: %s\n", error.message);
 
       if (strcmp (error.name, DBUS_ERROR_NO_MEMORY) != 0)
@@ -112,7 +113,7 @@ check_hello_from_self_reply (DBusPendingCall *pcall,
       dbus_error_free (&error);
     }
   else
-     _dbus_assert_not_reached ("Unexpected message received\n");
+     _dbus_assert_not_reached ("Unexpected message received");
 
   hello_from_self_reply_received = TRUE;
   

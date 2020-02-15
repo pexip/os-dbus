@@ -92,7 +92,13 @@ TESTS = $(am__EXEEXT_1)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__append_1 = \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test-systemserver.sh \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-ids \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-dispatch \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-timeout \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-disconnected \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-privserver-client \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-shutdown \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-threads-init \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(NULL)
 
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@noinst_PROGRAMS = test-pending-call-dispatch$(EXEEXT) \
@@ -107,13 +113,16 @@ TESTS = $(am__EXEEXT_1)
 subdir = test/name-test
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
-	$(top_srcdir)/m4/compiler.m4 \
+	$(top_srcdir)/m4/ax_ac_append_to_file.m4 \
+	$(top_srcdir)/m4/ax_ac_print_to_file.m4 \
+	$(top_srcdir)/m4/ax_add_am_macro_static.m4 \
+	$(top_srcdir)/m4/ax_am_macros_static.m4 \
+	$(top_srcdir)/m4/ax_code_coverage.m4 \
+	$(top_srcdir)/m4/ax_file_escapes.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
 	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/tp-compiler-flag.m4 \
-	$(top_srcdir)/m4/tp-compiler-warnings.m4 \
 	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
@@ -423,7 +432,13 @@ AM_RECURSIVE_TARGETS = check recheck
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__EXEEXT_1 =  \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test-systemserver.sh \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-disconnected$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-ids$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-dispatch$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-timeout$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-disconnected$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-privserver-client$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-shutdown$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-threads-init$(EXEEXT)
 TEST_SUITE_LOG = test-suite.log
 LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
 am__set_b = \
@@ -447,6 +462,8 @@ ACLOCAL = @ACLOCAL@
 ADT_LIBS = @ADT_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+APPARMOR_2_10_CFLAGS = @APPARMOR_2_10_CFLAGS@
+APPARMOR_2_10_LIBS = @APPARMOR_2_10_LIBS@
 APPARMOR_CFLAGS = @APPARMOR_CFLAGS@
 APPARMOR_LIBS = @APPARMOR_LIBS@
 AR = @AR@
@@ -460,6 +477,11 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CFLAG_VISIBILITY = @CFLAG_VISIBILITY@
+CODE_COVERAGE_CFLAGS = @CODE_COVERAGE_CFLAGS@
+CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
+CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
+CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
+CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
@@ -469,7 +491,6 @@ CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR_FROM_PKGSYSCONFDIR = @DATADIR_FROM_PKGSYSCONFDIR@
 DBUS_BINDIR = @DBUS_BINDIR@
-DBUS_CONSOLE_AUTH_DIR = @DBUS_CONSOLE_AUTH_DIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
@@ -481,7 +502,6 @@ DBUS_LIBEXECDIR = @DBUS_LIBEXECDIR@
 DBUS_MAJOR_VERSION = @DBUS_MAJOR_VERSION@
 DBUS_MICRO_VERSION = @DBUS_MICRO_VERSION@
 DBUS_MINOR_VERSION = @DBUS_MINOR_VERSION@
-DBUS_PATH_OR_ABSTRACT = @DBUS_PATH_OR_ABSTRACT@
 DBUS_PREFIX = @DBUS_PREFIX@
 DBUS_SESSION_BUS_CONNECT_ADDRESS = @DBUS_SESSION_BUS_CONNECT_ADDRESS@
 DBUS_SESSION_BUS_LISTEN_ADDRESS = @DBUS_SESSION_BUS_LISTEN_ADDRESS@
@@ -517,9 +537,19 @@ EXPANDED_LIBDIR = @EXPANDED_LIBDIR@
 EXPANDED_LIBEXECDIR = @EXPANDED_LIBEXECDIR@
 EXPANDED_LOCALSTATEDIR = @EXPANDED_LOCALSTATEDIR@
 EXPANDED_PREFIX = @EXPANDED_PREFIX@
+EXPANDED_RUNSTATEDIR = @EXPANDED_RUNSTATEDIR@
 EXPANDED_SYSCONFDIR = @EXPANDED_SYSCONFDIR@
+EXPAT_CFLAGS = @EXPAT_CFLAGS@
+EXPAT_LIBS = @EXPAT_LIBS@
+EXTRA_CFLAGS = @EXTRA_CFLAGS@
+EXTRA_CXXFLAGS = @EXTRA_CXXFLAGS@
+EXTRA_LDFLAGS = @EXTRA_LDFLAGS@
 FGREP = @FGREP@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETTEXT_PACKAGE = @GETTEXT_PACKAGE@
+GIO_UNIX_CFLAGS = @GIO_UNIX_CFLAGS@
+GIO_UNIX_LIBS = @GIO_UNIX_LIBS@
 GLIB_CFLAGS = @GLIB_CFLAGS@
 GLIB_LIBS = @GLIB_LIBS@
 GREP = @GREP@
@@ -531,6 +561,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LAUNCHCTL = @LAUNCHCTL@
 LAUNCHD_AGENT_DIR = @LAUNCHD_AGENT_DIR@
+LCOV = @LCOV@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBDBUS_LIBS = @LIBDBUS_LIBS@
@@ -573,6 +604,7 @@ RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -589,11 +621,12 @@ THREAD_LIBS = @THREAD_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VERSION = @VERSION@
-WINDRES = @WINDRES@
+WARN_CFLAGS = @WARN_CFLAGS@
+WARN_CXXFLAGS = @WARN_CXXFLAGS@
+WARN_LDFLAGS = @WARN_LDFLAGS@
+WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
 XMKMF = @XMKMF@
 XMLTO = @XMLTO@
-XML_CFLAGS = @XML_CFLAGS@
-XML_LIBS = @XML_LIBS@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
 X_EXTRA_LIBS = @X_EXTRA_LIBS@
@@ -632,6 +665,8 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
+ifnGNUmake = @ifnGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -643,6 +678,7 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgconfig_prefix = @pkgconfig_prefix@
 pkgpyexecdir = @pkgpyexecdir@
 pkgpythondir = @pkgpythondir@
 prefix = @prefix@
@@ -667,6 +703,10 @@ AM_CPPFLAGS = \
 	-DDBUS_COMPILATION \
 	$(NULL)
 
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
+
 
 # if assertions are enabled, improve backtraces
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
@@ -689,13 +729,15 @@ SH_LOG_COMPILER = $(SHELL)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export PYTHON=@PYTHON@; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TEST_DATA=@abs_top_builddir@/test/data; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TEST_DAEMON=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT); \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TEST_DBUS_LAUNCH=@abs_top_builddir@/tools/dbus-launch$(EXEEXT); \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export XDG_RUNTIME_DIR=@abs_top_builddir@/test/XDG_RUNTIME_DIR; \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        unset DBUS_SESSION_BUS_ADDRESS; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        unset DBUS_SESSION_BUS_PID; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        $(NULL)
 
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@check_DATA = \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@       uninstalled-session.conf \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@       $(NULL)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	uninstalled-session.conf \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(NULL)
 
 EXTRA_DIST = run-test.sh run-test-systemserver.sh test-wait-for-echo.py test-activation-forking.py
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_dispatch_LDADD = $(top_builddir)/dbus/libdbus-1.la
@@ -1031,9 +1073,51 @@ recheck: all $(check_DATA)
 	        am__force_recheck=am--force-recheck \
 	        TEST_LOGS="$$log_list"; \
 	exit $$?
+test-ids.log: test-ids$(EXEEXT)
+	@p='test-ids$(EXEEXT)'; \
+	b='test-ids'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-pending-call-dispatch.log: test-pending-call-dispatch$(EXEEXT)
+	@p='test-pending-call-dispatch$(EXEEXT)'; \
+	b='test-pending-call-dispatch'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-pending-call-timeout.log: test-pending-call-timeout$(EXEEXT)
+	@p='test-pending-call-timeout$(EXEEXT)'; \
+	b='test-pending-call-timeout'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-pending-call-disconnected.log: test-pending-call-disconnected$(EXEEXT)
 	@p='test-pending-call-disconnected$(EXEEXT)'; \
 	b='test-pending-call-disconnected'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-privserver-client.log: test-privserver-client$(EXEEXT)
+	@p='test-privserver-client$(EXEEXT)'; \
+	b='test-privserver-client'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-shutdown.log: test-shutdown$(EXEEXT)
+	@p='test-shutdown$(EXEEXT)'; \
+	b='test-shutdown'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-threads-init.log: test-threads-init$(EXEEXT)
+	@p='test-threads-init$(EXEEXT)'; \
+	b='test-threads-init'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -1234,8 +1318,8 @@ uninstall-am:
 
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@uninstalled-session.conf: $(top_builddir)/bus/session.conf Makefile
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(SED) -e 's|<standard_session_servicedirs.*$$|<servicedir>@abs_top_builddir@/test/data/valid-service-files</servicedir>|g' \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@               -e 's|<include.*$$||g' \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@               < $< > $@
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@		-e 's|<include.*$$||g' \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@		< $< > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

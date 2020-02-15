@@ -260,7 +260,7 @@ init_system_db (void)
           else
             {
               /* This really should not happen. */
-              _dbus_warn ("Could not get password database information for UID of current process: %s\n",
+              _dbus_warn ("Could not get password database information for UID of current process: %s",
                           error.message);
               dbus_error_free (&error);
               return FALSE;
@@ -463,6 +463,16 @@ _dbus_homedir_from_uid (dbus_uid_t         uid,
 {
   DBusUserDatabase *db;
   const DBusUserInfo *info;
+
+  if (uid == _dbus_getuid () && uid == _dbus_geteuid ())
+    {
+      const char *from_environment;
+
+      from_environment = _dbus_getenv ("HOME");
+
+      if (from_environment != NULL)
+        return _dbus_string_append (homedir, from_environment);
+    }
 
   /* FIXME: this can't distinguish ENOMEM from other errors */
   if (!_dbus_user_database_lock_system ())

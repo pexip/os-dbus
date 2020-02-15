@@ -100,7 +100,7 @@ struct BusConfigParser
 
   DBusList *mechanisms; /**< Auth mechanisms */
 
-  DBusList *service_dirs; /**< Directories to look for session services in */
+  DBusList *service_dirs; /**< BusConfigServiceDirs to look for session services in */
 
   DBusList *conf_dirs;   /**< Directories to look for policy configuration in */
 
@@ -232,7 +232,33 @@ merge_service_context_hash (DBusHashTable *dest,
   return FALSE;
 }
 
-static dbus_bool_t
+/*
+ * Create a new BusConfigServiceDir. Takes ownership of path if #TRUE is returned.
+ *
+ * @returns #FALSE on OOM
+ */
+static BusConfigServiceDir *
+bus_config_service_dir_new_take (char *path,
+    BusServiceDirFlags flags)
+{
+  BusConfigServiceDir *self = dbus_new0 (BusConfigServiceDir, 1);
+
+  if (self == NULL)
+    return NULL;
+
+  self->path = path; /* take ownership */
+  self->flags = flags;
+  return self;
+}
+
+static void
+bus_config_service_dir_free (BusConfigServiceDir *self)
+{
+  dbus_free (self->path);
+  dbus_free (self);
+}
+
+static BusConfigServiceDir *
 service_dirs_find_dir (DBusList **service_dirs,
                        const char *dir)
 {
@@ -242,40 +268,79 @@ service_dirs_find_dir (DBusList **service_dirs,
 
   for (link = *service_dirs; link; link = _dbus_list_get_next_link(service_dirs, link))
     {
-      const char *link_dir;
-      
-      link_dir = (const char *)link->data;
-      if (strcmp (dir, link_dir) == 0)
-        return TRUE;
+      BusConfigServiceDir *link_dir = link->data;
+
+      if (strcmp (dir, link_dir->path) == 0)
+        return link_dir;
     }
 
-  return FALSE;
+  return NULL;
 }
 
-static dbus_bool_t
-service_dirs_append_unique_or_free (DBusList **service_dirs,
-                                    char *dir)
-{
-  if (!service_dirs_find_dir (service_dirs, dir))
-    return _dbus_list_append (service_dirs, dir);  
-
-  dbus_free (dir);
-  return TRUE;
-}
-
-static void 
+static void
 service_dirs_append_link_unique_or_free (DBusList **service_dirs,
                                          DBusList *dir_link)
 {
-  if (!service_dirs_find_dir (service_dirs, dir_link->data))
+  BusConfigServiceDir *dir = dir_link->data;
+  BusConfigServiceDir *already = service_dirs_find_dir (service_dirs,
+                                                        dir->path);
+
+  if (already == NULL)
     {
       _dbus_list_append_link (service_dirs, dir_link);
     }
   else
     {
-      dbus_free (dir_link->data);
+      /* BusServiceDirFlags are chosen such that the compatible thing to do
+       * is to "and" the flags. For example, if a directory is explicitly
+       * added as a <servicedir> (which is watched with inotify) and is also
+       * the transient service directory (which should not be watched),
+       * the compatible thing to do is to watch it. */
+      already->flags &= dir->flags;
+      bus_config_service_dir_free (dir_link->data);
       _dbus_list_free_link (dir_link);
     }
+}
+
+/*
+ * Consume links from dirs (a list of paths), converting them into links in
+ * service_dirs (a list of unique BusServiceDir).
+ *
+ * On success, return TRUE. dirs will be empty, and every original entry in
+ * dirs will have a corresponding service_dirs entry.
+ *
+ * On OOM, return FALSE. Each original entry of dirs has either been
+ * appended to service_dirs or left in dirs.
+ */
+static dbus_bool_t
+service_dirs_absorb_string_list (DBusList           **service_dirs,
+                                 DBusList           **dirs,
+                                 BusServiceDirFlags   flags)
+{
+  DBusList *link;
+
+  _dbus_assert (service_dirs != NULL);
+  _dbus_assert (dirs != NULL);
+
+  while ((link = _dbus_list_pop_first_link (dirs)))
+    {
+      char *path = link->data;
+      BusConfigServiceDir *dir = bus_config_service_dir_new_take (path, flags);
+
+      if (dir == NULL)
+        {
+          /* OOM - roll back (this does not need to allocate memory) */
+          _dbus_list_prepend_link (service_dirs, link);
+          return FALSE;
+        }
+
+      /* Ownership of path has been taken by dir */
+      link->data = dir;
+      service_dirs_append_link_unique_or_free (service_dirs, link);
+    }
+
+  _dbus_assert (*dirs == NULL);
+  return TRUE;
 }
 
 static dbus_bool_t
@@ -515,7 +580,7 @@ bus_config_parser_unref (BusConfigParser *parser)
       _dbus_list_clear (&parser->listen_on);
 
       _dbus_list_foreach (&parser->service_dirs,
-                          (DBusForeachFunction) dbus_free,
+                          (DBusForeachFunction) bus_config_service_dir_free,
                           NULL);
 
       _dbus_list_clear (&parser->service_dirs);
@@ -832,9 +897,8 @@ start_busconfig_child (BusConfigParser   *parser,
     }
   else if (element_type == ELEMENT_STANDARD_SESSION_SERVICEDIRS)
     {
-      DBusList *link;
-      DBusList *dirs;
-      dirs = NULL;
+      DBusError local_error = DBUS_ERROR_INIT;
+      DBusList *dirs = NULL;
 
       if (!check_no_attributes (parser, "standard_session_servicedirs", attribute_names, attribute_values, error))
         return FALSE;
@@ -845,20 +909,54 @@ start_busconfig_child (BusConfigParser   *parser,
           return FALSE;
         }
 
+      if (_dbus_set_up_transient_session_servicedirs (&dirs, &local_error))
+        {
+          if (!service_dirs_absorb_string_list (&parser->service_dirs, &dirs,
+                BUS_SERVICE_DIR_FLAGS_NO_WATCH |
+                BUS_SERVICE_DIR_FLAGS_STRICT_NAMING))
+            {
+              BUS_SET_OOM (error);
+              _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
+                  NULL);
+              _dbus_list_clear (&dirs);
+              return FALSE;
+            }
+        }
+      else
+        {
+          /* Failing to set these up isn't fatal */
+          _dbus_warn ("Unable to set up transient service directory: %s",
+                      local_error.message);
+          dbus_error_free (&local_error);
+        }
+
+      _dbus_assert (dirs == NULL);
+
       if (!_dbus_get_standard_session_servicedirs (&dirs))
         {
           BUS_SET_OOM (error);
           return FALSE;
         }
 
-        while ((link = _dbus_list_pop_first_link (&dirs)))
-          service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
+      /* We have traditionally watched the standard session service
+       * directories with inotify, and allowed service files whose names do not
+       * match the bus name */
+      if (!service_dirs_absorb_string_list (&parser->service_dirs, &dirs,
+                                            BUS_SERVICE_DIR_FLAGS_NONE))
+        {
+          BUS_SET_OOM (error);
+          _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
+              NULL);
+          _dbus_list_clear (&dirs);
+          return FALSE;
+        }
+
+      _dbus_assert (dirs == NULL);
 
       return TRUE;
     }
   else if (element_type == ELEMENT_STANDARD_SYSTEM_SERVICEDIRS)
     {
-      DBusList *link;
       DBusList *dirs;
       dirs = NULL;
 
@@ -877,8 +975,19 @@ start_busconfig_child (BusConfigParser   *parser,
           return FALSE;
         }
 
-        while ((link = _dbus_list_pop_first_link (&dirs)))
-          service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
+      /* We have traditionally watched the standard system service
+       * directories with inotify, and allowed service files whose names do not
+       * match the bus name (the servicehelper won't successfully activate
+       * them, but we do still parse them) */
+      if (!service_dirs_absorb_string_list (&parser->service_dirs, &dirs,
+                                            BUS_SERVICE_DIR_FLAGS_NONE))
+        {
+          BUS_SET_OOM (error);
+          _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
+              NULL);
+          _dbus_list_clear (&dirs);
+          return FALSE;
+        }
 
       return TRUE;
     }
@@ -1049,7 +1158,7 @@ start_busconfig_child (BusConfigParser   *parser,
                                                  &e->d.policy.gid_uid_or_at_console))
             e->d.policy.type = POLICY_USER;
           else
-            _dbus_warn ("Unknown username \"%s\" in message bus configuration file\n",
+            _dbus_warn ("Unknown username \"%s\" in message bus configuration file",
                         user);
         }
       else if (group != NULL)
@@ -1061,7 +1170,7 @@ start_busconfig_child (BusConfigParser   *parser,
                                                   &e->d.policy.gid_uid_or_at_console))
             e->d.policy.type = POLICY_GROUP;
           else
-            _dbus_warn ("Unknown group \"%s\" in message bus configuration file\n",
+            _dbus_warn ("Unknown group \"%s\" in message bus configuration file",
                         group);          
         }
       else if (at_console != NULL)
@@ -1167,6 +1276,43 @@ start_busconfig_child (BusConfigParser   *parser,
     }
 }
 
+/*
+ * Parse an attribute named name, whose content is content, or NULL if
+ * missing. It is meant to be a (long) integer between min and max inclusive.
+ * If it is missing, use def as the default value (which does not
+ * necessarily need to be between min and max).
+ */
+static dbus_bool_t
+parse_int_attribute (const char *name,
+                     const char *content,
+                     long        min,
+                     long        max,
+                     long        def,
+                     long       *value,
+                     DBusError  *error)
+{
+  DBusString parse_string;
+
+  *value = def;
+
+  if (content == NULL)
+    return TRUE;
+
+  _dbus_string_init_const (&parse_string, content);
+
+  if (!_dbus_string_parse_int (&parse_string, 0, value, NULL) ||
+      *value < min || *value > max)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Bad value \"%s\" for %s attribute, must be an "
+                      "integer in range %ld to %ld inclusive",
+                      content, name, min, max);
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 static dbus_bool_t
 append_rule_from_element (BusConfigParser   *parser,
                           const char        *element_name,
@@ -1176,28 +1322,47 @@ append_rule_from_element (BusConfigParser   *parser,
                           DBusError         *error)
 {
   const char *log;
+
+  /* Group: send_ attributes */
   const char *send_interface;
   const char *send_member;
   const char *send_error;
   const char *send_destination;
   const char *send_path;
   const char *send_type;
+  const char *send_requested_reply;
+  const char *send_broadcast;
+  /* TRUE if any send_ attribute is present */
+  dbus_bool_t any_send_attribute;
+
+  /* Group: receive_ attributes */
   const char *receive_interface;
   const char *receive_member;
   const char *receive_error;
   const char *receive_sender;
   const char *receive_path;
   const char *receive_type;
-  const char *eavesdrop;
-  const char *send_requested_reply;
   const char *receive_requested_reply;
+  /* TRUE if any receive_ attribute is present */
+  dbus_bool_t any_receive_attribute;
+
+  /* Group: message-matching modifiers that can go on send_ or receive_ */
+  const char *eavesdrop;
+  const char *max_fds_attr;
+  long max_fds = DBUS_MAXIMUM_MESSAGE_UNIX_FDS;
+  const char *min_fds_attr;
+  long min_fds = 0;
+  /* TRUE if any message-matching modifier is present */
+  dbus_bool_t any_message_attribute;
+
+  /* Non-message-related attributes */
   const char *own;
   const char *own_prefix;
   const char *user;
   const char *group;
 
   BusPolicyRule *rule;
-  
+
   if (!locate_attributes (parser, element_name,
                           attribute_names,
                           attribute_values,
@@ -1208,6 +1373,7 @@ append_rule_from_element (BusConfigParser   *parser,
                           "send_destination", &send_destination,
                           "send_path", &send_path,
                           "send_type", &send_type,
+                          "send_broadcast", &send_broadcast,
                           "receive_interface", &receive_interface,
                           "receive_member", &receive_member,
                           "receive_error", &receive_error,
@@ -1215,6 +1381,8 @@ append_rule_from_element (BusConfigParser   *parser,
                           "receive_path", &receive_path,
                           "receive_type", &receive_type,
                           "eavesdrop", &eavesdrop,
+                          "max_fds", &max_fds_attr,
+                          "min_fds", &min_fds_attr,
                           "send_requested_reply", &send_requested_reply,
                           "receive_requested_reply", &receive_requested_reply,
                           "own", &own,
@@ -1225,11 +1393,35 @@ append_rule_from_element (BusConfigParser   *parser,
                           NULL))
     return FALSE;
 
-  if (!(send_interface || send_member || send_error || send_destination ||
-        send_type || send_path ||
-        receive_interface || receive_member || receive_error || receive_sender ||
-        receive_type || receive_path || eavesdrop ||
-        send_requested_reply || receive_requested_reply ||
+  any_send_attribute = (send_destination != NULL ||
+                        send_broadcast != NULL ||
+                        send_path != NULL ||
+                        send_type != NULL ||
+                        send_interface != NULL ||
+                        send_member != NULL ||
+                        send_error != NULL ||
+                        send_requested_reply != NULL);
+  any_receive_attribute = (receive_sender != NULL ||
+                           receive_path != NULL ||
+                           receive_type != NULL ||
+                           receive_interface != NULL ||
+                           receive_member != NULL ||
+                           receive_error != NULL ||
+                           receive_requested_reply != NULL ||
+                           /* <allow eavesdrop="true"/> means the same as
+                            * <allow receive_sender="*" eavesdrop="true"/>,
+                            * but <allow send_anything="anything"/> can also
+                            * take the eavesdrop attribute and still counts
+                            * as a send rule. */
+                           (!any_send_attribute && eavesdrop != NULL));
+  any_message_attribute = (any_send_attribute ||
+                           any_receive_attribute ||
+                           eavesdrop != NULL ||
+                           max_fds_attr != NULL ||
+                           min_fds_attr != NULL);
+
+  if (!(any_send_attribute ||
+        any_receive_attribute ||
         own || own_prefix || user || group))
     {
       dbus_set_error (error, DBUS_ERROR_FAILED,
@@ -1255,113 +1447,56 @@ append_rule_from_element (BusConfigParser   *parser,
    *     interface + member
    *     error
    * 
-   *   base send_ can combine with send_destination, send_path, send_type, send_requested_reply
+   *   base send_ can combine with send_destination, send_path, send_type, send_requested_reply, send_broadcast, eavesdrop
    *   base receive_ with receive_sender, receive_path, receive_type, receive_requested_reply, eavesdrop
    *
    *   user, group, own, own_prefix must occur alone
-   *
-   * Pretty sure the below stuff is broken, FIXME think about it more.
    */
 
-  if ((send_interface && (send_error ||
-                          receive_interface ||
-                          receive_member ||
-                          receive_error ||
-                          receive_sender ||
-                          receive_requested_reply ||
-                          own || own_prefix ||
-                          user ||
-                          group)) ||
-
-      (send_member && (send_error ||
-                       receive_interface ||
-                       receive_member ||
-                       receive_error ||
-                       receive_sender ||
-                       receive_requested_reply ||
-                       own || own_prefix ||
-                       user ||
-                       group)) ||
-
-      (send_error && (receive_interface ||
-                      receive_member ||
-                      receive_error ||
-                      receive_sender ||
-                      receive_requested_reply ||
-                      own || own_prefix ||
-                      user ||
-                      group)) ||
-
-      (send_destination && (receive_interface ||
-                            receive_member ||
-                            receive_error ||
-                            receive_sender ||
-                            receive_requested_reply ||
-                            own || own_prefix ||
-                            user ||
-                            group)) ||
-
-      (send_type && (receive_interface ||
-                     receive_member ||
-                     receive_error ||
-                     receive_sender ||
-                     receive_requested_reply ||
-                     own || own_prefix ||
-                     user ||
-                     group)) ||
-
-      (send_path && (receive_interface ||
-                     receive_member ||
-                     receive_error ||
-                     receive_sender ||
-                     receive_requested_reply ||
-                     own || own_prefix ||
-                     user ||
-                     group)) ||
-
-      (send_requested_reply && (receive_interface ||
-                                receive_member ||
-                                receive_error ||
-                                receive_sender ||
-                                receive_requested_reply ||
-                                own || own_prefix ||
-                                user ||
-                                group)) ||
-
-      (receive_interface && (receive_error ||
-                             own || own_prefix ||
-                             user ||
-                             group)) ||
-
-      (receive_member && (receive_error ||
-                          own || own_prefix ||
-                          user ||
-                          group)) ||
-
-      (receive_error && (own || own_prefix ||
-                         user ||
-                         group)) ||
-
-      (eavesdrop && (own || own_prefix ||
-                     user ||
-                     group)) ||
-
-      (receive_requested_reply && (own || own_prefix ||
-                                   user ||
-                                   group)) ||
-
-      (own && (own_prefix || user || group)) ||
-
-      (own_prefix && (own || user || group)) ||
-
-      (user && group))
+  if (any_message_attribute +
+      ((own != NULL) +
+       (own_prefix != NULL) +
+       (user != NULL) +
+       (group != NULL)) > 1)
     {
       dbus_set_error (error, DBUS_ERROR_FAILED,
-                      "Invalid combination of attributes on element <%s>",
+                      "Invalid combination of attributes on element <%s>: "
+                      "own, own_prefix, user, group and the message-related "
+                      "attributes cannot be combined",
                       element_name);
       return FALSE;
     }
-  
+
+  if (any_send_attribute && any_receive_attribute)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Invalid combination of attributes on element <%s>: "
+                      "send and receive attributes cannot be combined",
+                      element_name);
+      return FALSE;
+    }
+
+  if ((send_member != NULL || send_interface != NULL) && send_error != NULL)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Invalid combination of attributes on element <%s>: "
+                      "send_error cannot be combined with send_member or "
+                      "send_interface",
+                      element_name);
+      return FALSE;
+    }
+
+  if ((receive_member != NULL || receive_interface != NULL) &&
+      receive_error != NULL)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Invalid combination of attributes on element <%s>: "
+                      "receive_error cannot be combined with receive_member "
+                      "or receive_interface",
+                      element_name);
+      return FALSE;
+    }
+
   rule = NULL;
 
   /* In BusPolicyRule, NULL represents wildcard.
@@ -1369,8 +1504,7 @@ append_rule_from_element (BusConfigParser   *parser,
    */
 #define IS_WILDCARD(str) ((str) && ((str)[0]) == '*' && ((str)[1]) == '\0')
 
-  if (send_interface || send_member || send_error || send_destination ||
-      send_path || send_type || send_requested_reply)
+  if (any_send_attribute)
     {
       int message_type;
       
@@ -1410,6 +1544,29 @@ append_rule_from_element (BusConfigParser   *parser,
           return FALSE;
         }
 
+      if (send_broadcast &&
+          !(strcmp (send_broadcast, "true") == 0 ||
+            strcmp (send_broadcast, "false") == 0))
+        {
+          dbus_set_error (error, DBUS_ERROR_FAILED,
+                          "Bad value \"%s\" for %s attribute, must be true or false",
+                          send_broadcast, "send_broadcast");
+          return FALSE;
+        }
+
+      if (send_destination != NULL &&
+          send_broadcast != NULL &&
+          strcmp (send_broadcast, "true") == 0)
+        {
+          /* Broadcast messages have no destination, so this cannot
+           * possibly match */
+          dbus_set_error (error, DBUS_ERROR_FAILED,
+                          "Rule with send_broadcast=\"true\" and "
+                          "send_destination=\"%s\" cannot match anything",
+                          send_destination);
+          return FALSE;
+        }
+
       if (send_requested_reply &&
           !(strcmp (send_requested_reply, "true") == 0 ||
             strcmp (send_requested_reply, "false") == 0))
@@ -1419,7 +1576,19 @@ append_rule_from_element (BusConfigParser   *parser,
                           "send_requested_reply", send_requested_reply);
           return FALSE;
         }
-      
+
+      /* Matching only messages with DBUS_MAXIMUM_MESSAGE_UNIX_FDS or fewer
+       * fds is the same as matching all messages, so we always set a maximum,
+       * but perhaps an unrealistically high one. */
+      if (!parse_int_attribute ("max_fds", max_fds_attr,
+                                0, DBUS_MAXIMUM_MESSAGE_UNIX_FDS,
+                                DBUS_MAXIMUM_MESSAGE_UNIX_FDS, &max_fds,
+                                error) ||
+          !parse_int_attribute ("min_fds", min_fds_attr,
+                                0, DBUS_MAXIMUM_MESSAGE_UNIX_FDS, 0, &min_fds,
+                                error))
+        return FALSE;
+
       rule = bus_policy_rule_new (BUS_POLICY_RULE_SEND, allow); 
       if (rule == NULL)
         goto nomem;
@@ -1433,12 +1602,27 @@ append_rule_from_element (BusConfigParser   *parser,
       if (send_requested_reply)
         rule->d.send.requested_reply = (strcmp (send_requested_reply, "true") == 0);
 
+      if (send_broadcast)
+        {
+          if (strcmp (send_broadcast, "true") == 0)
+            rule->d.send.broadcast = BUS_POLICY_TRISTATE_TRUE;
+          else
+            rule->d.send.broadcast = BUS_POLICY_TRISTATE_FALSE;
+        }
+      else
+        {
+          rule->d.send.broadcast = BUS_POLICY_TRISTATE_ANY;
+        }
+
       rule->d.send.message_type = message_type;
       rule->d.send.path = _dbus_strdup (send_path);
       rule->d.send.interface = _dbus_strdup (send_interface);
       rule->d.send.member = _dbus_strdup (send_member);
       rule->d.send.error = _dbus_strdup (send_error);
       rule->d.send.destination = _dbus_strdup (send_destination);
+      rule->d.send.max_fds = max_fds;
+      rule->d.send.min_fds = min_fds;
+
       if (send_path && rule->d.send.path == NULL)
         goto nomem;
       if (send_interface && rule->d.send.interface == NULL)
@@ -1450,8 +1634,7 @@ append_rule_from_element (BusConfigParser   *parser,
       if (send_destination && rule->d.send.destination == NULL)
         goto nomem;
     }
-  else if (receive_interface || receive_member || receive_error || receive_sender ||
-           receive_path || receive_type || eavesdrop || receive_requested_reply)
+  else if (any_receive_attribute)
     {
       int message_type;
       
@@ -1501,7 +1684,16 @@ append_rule_from_element (BusConfigParser   *parser,
                           "receive_requested_reply", receive_requested_reply);
           return FALSE;
         }
-      
+
+      if (!parse_int_attribute ("max_fds", max_fds_attr,
+                                0, DBUS_MAXIMUM_MESSAGE_UNIX_FDS,
+                                DBUS_MAXIMUM_MESSAGE_UNIX_FDS, &max_fds,
+                                error) ||
+          !parse_int_attribute ("min_fds", min_fds_attr,
+                                0, DBUS_MAXIMUM_MESSAGE_UNIX_FDS, 0, &min_fds,
+                                error))
+        return FALSE;
+
       rule = bus_policy_rule_new (BUS_POLICY_RULE_RECEIVE, allow); 
       if (rule == NULL)
         goto nomem;
@@ -1518,6 +1710,8 @@ append_rule_from_element (BusConfigParser   *parser,
       rule->d.receive.member = _dbus_strdup (receive_member);
       rule->d.receive.error = _dbus_strdup (receive_error);
       rule->d.receive.origin = _dbus_strdup (receive_sender);
+      rule->d.receive.max_fds = max_fds;
+      rule->d.receive.min_fds = min_fds;
 
       if (receive_path && rule->d.receive.path == NULL)
         goto nomem;
@@ -1581,7 +1775,7 @@ append_rule_from_element (BusConfigParser   *parser,
             }
           else
             {
-              _dbus_warn ("Unknown username \"%s\" on element <%s>\n",
+              _dbus_warn ("Unknown username \"%s\" on element <%s>",
                           user, element_name);
             }
         }
@@ -1613,7 +1807,7 @@ append_rule_from_element (BusConfigParser   *parser,
             }
           else
             {
-              _dbus_warn ("Unknown group \"%s\" on element <%s>\n",
+              _dbus_warn ("Unknown group \"%s\" on element <%s>",
                           group, element_name);
             }
         }
@@ -1632,6 +1826,7 @@ append_rule_from_element (BusConfigParser   *parser,
       switch (pe->d.policy.type)
         {
         case POLICY_IGNORED:
+        default:
           /* drop the rule on the floor */
           break;
           
@@ -2055,6 +2250,7 @@ bus_config_parser_end_element (BusConfigParser   *parser,
   switch (e->type)
     {
     case ELEMENT_NONE:
+    default:
       _dbus_assert_not_reached ("element in stack has no type");
       break;
 
@@ -2122,7 +2318,8 @@ make_full_path (const DBusString *basedir,
 {
   if (_dbus_path_is_absolute (filename))
     {
-      return _dbus_string_copy (filename, 0, full_path, 0);
+      if (!_dbus_string_copy (filename, 0, full_path, 0))
+        return FALSE;
     }
   else
     {
@@ -2131,9 +2328,12 @@ make_full_path (const DBusString *basedir,
       
       if (!_dbus_concat_dir_and_file (full_path, filename))
         return FALSE;
-
-      return TRUE;
     }
+
+  if (!_dbus_replace_install_prefix (full_path))
+    return FALSE;
+
+  return TRUE;
 }
 
 static dbus_bool_t
@@ -2306,15 +2506,17 @@ include_dir (BusConfigParser   *parser,
             {
               if (dbus_error_is_set (error))
                 {
-                  /* We log to syslog unconditionally here, because this is
+                  /* We use both syslog and stderr here, because this is
                    * the configuration parser, so we don't yet know whether
-                   * this bus is going to want to write to syslog! (There's
-                   * also some layer inversion going on, if we want to use
-                   * the bus context.) */
-                  _dbus_system_log (DBUS_SYSTEM_LOG_INFO,
-                                    "Encountered error '%s' while parsing '%s'\n",
-                                    error->message,
-                                    _dbus_string_get_const_data (&full_path));
+                   * this bus is going to want to write to syslog! Err on
+                   * the side of making sure the message gets to the sysadmin
+                   * somehow. */
+                  _dbus_init_system_log ("dbus-daemon",
+                      DBUS_LOG_FLAGS_STDERR | DBUS_LOG_FLAGS_SYSTEM_LOG);
+                  _dbus_log (DBUS_SYSTEM_LOG_INFO,
+                             "Encountered error '%s' while parsing '%s'",
+                             error->message,
+                             _dbus_string_get_const_data (&full_path));
                   dbus_error_free (error);
                 }
             }
@@ -2390,6 +2592,7 @@ bus_config_parser_content (BusConfigParser   *parser,
   switch (top_element_type (parser))
     {
     case ELEMENT_NONE:
+    default:
       _dbus_assert_not_reached ("element at top of stack has no type");
       return FALSE;
 
@@ -2594,8 +2797,10 @@ bus_config_parser_content (BusConfigParser   *parser,
     case ELEMENT_SERVICEDIR:
       {
         char *s;
+        BusConfigServiceDir *dir;
         DBusString full_path;
-        
+        DBusList *link;
+
         e->had_content = TRUE;
 
         if (!_dbus_string_init (&full_path))
@@ -2613,14 +2818,29 @@ bus_config_parser_content (BusConfigParser   *parser,
             goto nomem;
           }
 
-        /* _only_ extra session directories can be specified */
-        if (!service_dirs_append_unique_or_free (&parser->service_dirs, s))
+        /* <servicedir/> has traditionally implied that we watch the
+         * directory with inotify, and allow service files whose names do not
+         * match the bus name */
+        dir = bus_config_service_dir_new_take (s, BUS_SERVICE_DIR_FLAGS_NONE);
+
+        if (dir == NULL)
           {
             _dbus_string_free (&full_path);
             dbus_free (s);
             goto nomem;
           }
 
+        link = _dbus_list_alloc_link (dir);
+
+        if (link == NULL)
+          {
+            _dbus_string_free (&full_path);
+            bus_config_service_dir_free (dir);
+            goto nomem;
+          }
+
+        /* cannot fail */
+        service_dirs_append_link_unique_or_free (&parser->service_dirs, link);
         _dbus_string_free (&full_path);
       }
       break;
@@ -2790,6 +3010,51 @@ bus_config_parser_steal_service_context_table (BusConfigParser *parser)
   return table;
 }
 
+/*
+ * Return a list of the directories that should be watched with inotify,
+ * as strings. The list might be empty and is in arbitrary order.
+ *
+ * The list must be empty on entry. On success, the links are owned by the
+ * caller and must be freed, but the data in each link remains owned by
+ * the BusConfigParser and must not be freed: in GObject-Introspection
+ * notation, it is (transfer container).
+ */
+dbus_bool_t
+bus_config_parser_get_watched_dirs (BusConfigParser *parser,
+                                    DBusList **watched_dirs)
+{
+  DBusList *link;
+
+  _dbus_assert (*watched_dirs == NULL);
+
+  for (link = _dbus_list_get_first_link (&parser->conf_dirs);
+       link != NULL;
+       link = _dbus_list_get_next_link (&parser->conf_dirs, link))
+    {
+      if (!_dbus_list_append (watched_dirs, link->data))
+        goto oom;
+    }
+
+  for (link = _dbus_list_get_first_link (&parser->service_dirs);
+       link != NULL;
+       link = _dbus_list_get_next_link (&parser->service_dirs, link))
+    {
+      BusConfigServiceDir *dir = link->data;
+
+      if (dir->flags & BUS_SERVICE_DIR_FLAGS_NO_WATCH)
+        continue;
+
+      if (!_dbus_list_append (watched_dirs, dir->path))
+        goto oom;
+    }
+
+  return TRUE;
+
+oom:
+  _dbus_list_clear (watched_dirs);
+  return FALSE;
+}
+
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
 #include <stdio.h>
 
@@ -2804,7 +3069,7 @@ static dbus_bool_t
 do_check_own_rules (BusPolicy  *policy)
 {
   const struct {
-    char *name;
+    const char *name;
     dbus_bool_t allowed;
   } checks[] = {
     {"org.freedesktop", FALSE},
@@ -2834,12 +3099,12 @@ do_check_own_rules (BusPolicy  *policy)
               ret ? "allowed" : "not allowed");
       if (checks[i].allowed && !ret)
         {
-          _dbus_warn ("Cannot own %s\n", checks[i].name);
+          _dbus_warn ("Cannot own %s", checks[i].name);
           return FALSE;
         }
       if (!checks[i].allowed && ret)
         {
-          _dbus_warn ("Can own %s\n", checks[i].name);
+          _dbus_warn ("Can own %s", checks[i].name);
           return FALSE;
         }
       _dbus_string_free (&service_name);
@@ -2875,7 +3140,7 @@ do_load (const DBusString *full_path,
         }
       else if (validity == VALID)
         {
-          _dbus_warn ("Failed to load valid file but still had memory: %s\n",
+          _dbus_warn ("Failed to load valid file but still had memory: %s",
                       error.message);
 
           dbus_error_free (&error);
@@ -2900,7 +3165,7 @@ do_load (const DBusString *full_path,
 
       if (validity == INVALID)
         {
-          _dbus_warn ("Accepted invalid file\n");
+          _dbus_warn ("Accepted invalid file");
           return FALSE;
         }
 
@@ -2938,7 +3203,7 @@ process_test_valid_subdir (const DBusString *test_base_dir,
   dir = NULL;
 
   if (!_dbus_string_init (&test_directory))
-    _dbus_assert_not_reached ("didn't allocate test_directory\n");
+    _dbus_assert_not_reached ("didn't allocate test_directory");
 
   _dbus_string_init_const (&filename, subdir);
 
@@ -2951,13 +3216,13 @@ process_test_valid_subdir (const DBusString *test_base_dir,
 
   _dbus_string_free (&filename);
   if (!_dbus_string_init (&filename))
-    _dbus_assert_not_reached ("didn't allocate filename string\n");
+    _dbus_assert_not_reached ("didn't allocate filename string");
 
   dbus_error_init (&error);
   dir = _dbus_directory_open (&test_directory, &error);
   if (dir == NULL)
     {
-      _dbus_warn ("Could not open %s: %s\n",
+      _dbus_warn ("Could not open %s: %s",
                   _dbus_string_get_const_data (&test_directory),
                   error.message);
       dbus_error_free (&error);
@@ -3019,7 +3284,7 @@ process_test_valid_subdir (const DBusString *test_base_dir,
 
   if (dbus_error_is_set (&error))
     {
-      _dbus_warn ("Could not get next file in %s: %s\n",
+      _dbus_warn ("Could not get next file in %s: %s",
                   _dbus_string_get_const_data (&test_directory),
                   error.message);
       dbus_error_free (&error);
@@ -3088,8 +3353,29 @@ elements_equal (const Element *a,
 	return FALSE;
       break;
 
+    case ELEMENT_NONE:
+    case ELEMENT_BUSCONFIG:
+    case ELEMENT_USER:
+    case ELEMENT_LISTEN:
+    case ELEMENT_AUTH:
+    case ELEMENT_ALLOW:
+    case ELEMENT_DENY:
+    case ELEMENT_FORK:
+    case ELEMENT_PIDFILE:
+    case ELEMENT_SERVICEDIR:
+    case ELEMENT_SERVICEHELPER:
+    case ELEMENT_INCLUDEDIR:
+    case ELEMENT_CONFIGTYPE:
+    case ELEMENT_SELINUX:
+    case ELEMENT_ASSOCIATE:
+    case ELEMENT_STANDARD_SESSION_SERVICEDIRS:
+    case ELEMENT_STANDARD_SYSTEM_SERVICEDIRS:
+    case ELEMENT_KEEP_UMASK:
+    case ELEMENT_SYSLOG:
+    case ELEMENT_ALLOW_ANONYMOUS:
+    case ELEMENT_APPARMOR:
     default:
-      /* do nothing */
+      /* do nothing: nothing in the Element struct for these types */
       break;
     }
 
@@ -3140,6 +3426,34 @@ lists_of_c_strings_equal (DBusList *a,
 }
 
 static dbus_bool_t
+lists_of_service_dirs_equal (DBusList *a,
+                             DBusList *b)
+{
+  DBusList *ia;
+  DBusList *ib;
+
+  ia = a;
+  ib = b;
+
+  while (ia != NULL && ib != NULL)
+    {
+      BusConfigServiceDir *da = ia->data;
+      BusConfigServiceDir *db = ib->data;
+
+      if (strcmp (da->path, db->path))
+        return FALSE;
+
+      if (da->flags != db->flags)
+        return FALSE;
+
+      ia = _dbus_list_get_next_link (&a, ia);
+      ib = _dbus_list_get_next_link (&b, ib);
+    }
+
+  return ia == NULL && ib == NULL;
+}
+
+static dbus_bool_t
 limits_equal (const BusLimits *a,
 	      const BusLimits *b)
 {
@@ -3182,7 +3496,7 @@ config_parsers_equal (const BusConfigParser *a,
   if (!lists_of_c_strings_equal (a->mechanisms, b->mechanisms))
     return FALSE;
 
-  if (!lists_of_c_strings_equal (a->service_dirs, b->service_dirs))
+  if (!lists_of_service_dirs_equal (a->service_dirs, b->service_dirs))
     return FALSE;
   
   /* FIXME: compare policy */
@@ -3230,7 +3544,7 @@ all_are_equiv (const DBusString *target_directory)
   dir = _dbus_directory_open (target_directory, &error);
   if (dir == NULL)
     {
-      _dbus_warn ("Could not open %s: %s\n",
+      _dbus_warn ("Could not open %s: %s",
 		  _dbus_string_get_const_data (target_directory),
 		  error.message);
       dbus_error_free (&error);
@@ -3267,7 +3581,7 @@ all_are_equiv (const DBusString *target_directory)
 
       if (parser == NULL)
 	{
-	  _dbus_warn ("Could not load file %s: %s\n",
+	  _dbus_warn ("Could not load file %s: %s",
 		      _dbus_string_get_const_data (&full_path),
 		      error.message);
           _dbus_string_free (&full_path);
@@ -3336,7 +3650,7 @@ process_test_equiv_subdir (const DBusString *test_base_dir,
   dir = _dbus_directory_open (&test_directory, &error);
   if (dir == NULL)
     {
-      _dbus_warn ("Could not open %s: %s\n",
+      _dbus_warn ("Could not open %s: %s",
 		  _dbus_string_get_const_data (&test_directory),
 		  error.message);
       dbus_error_free (&error);
@@ -3381,52 +3695,79 @@ process_test_equiv_subdir (const DBusString *test_base_dir,
 
 static const char *test_session_service_dir_matches[] = 
         {
-#ifdef DBUS_UNIX
-         "/testhome/foo/.testlocal/testshare/dbus-1/services",
-         "/testusr/testlocal/testshare/dbus-1/services",
-         "/testusr/testshare/dbus-1/services",
-         DBUS_DATADIR"/dbus-1/services",
-#endif
 /* will be filled in test_default_session_servicedirs() */
 #ifdef DBUS_WIN
-         NULL,
-         NULL,
+         NULL, /* install root-based */
+         NULL, /* CommonProgramFiles-based */
+#else
+         NULL, /* XDG_RUNTIME_DIR-based */
+         NULL, /* XDG_DATA_HOME-based */
+         NULL, /* XDG_DATA_DIRS-based */
+         NULL, /* XDG_DATA_DIRS-based */
+         DBUS_DATADIR "/dbus-1/services",
 #endif
          NULL
         };
 
 static dbus_bool_t
-test_default_session_servicedirs (void)
+test_default_session_servicedirs (const DBusString *test_base_dir)
 {
-  DBusList *dirs;
+  BusConfigParser *parser = NULL;
+  DBusError error = DBUS_ERROR_INIT;
+  DBusList **dirs;
+  DBusList *watched_dirs = NULL;
   DBusList *link;
+  DBusString tmp;
+  DBusString full_path;
   DBusString progs;
   DBusString install_root_based;
+  DBusString runtime_dir_based;
+  DBusString data_home_based;
+  DBusString data_dirs_based;
+  DBusString data_dirs_based2;
   int i;
   dbus_bool_t ret = FALSE;
 #ifdef DBUS_WIN
-  const char *tmp;
   const char *common_progs;
+#else
+  const char *dbus_test_builddir;
+  const char *xdg_data_home;
+  const char *xdg_runtime_dir;
 #endif
 
-  /* On Unix we don't actually use these, but it's easier to handle the
-   * deallocation if we always allocate them, whether needed or not */
-  if (!_dbus_string_init (&progs) ||
-      !_dbus_string_init (&install_root_based))
+  /* On each platform we don't actually use all of these, but it's easier to
+   * handle the deallocation if we always allocate them, whether needed or
+   * not */
+  if (!_dbus_string_init (&full_path) ||
+      !_dbus_string_init (&progs) ||
+      !_dbus_string_init (&install_root_based) ||
+      !_dbus_string_init (&runtime_dir_based) ||
+      !_dbus_string_init (&data_home_based) ||
+      !_dbus_string_init (&data_dirs_based) ||
+      !_dbus_string_init (&data_dirs_based2))
     _dbus_assert_not_reached ("OOM allocating strings");
+
+  if (!_dbus_string_copy (test_base_dir, 0,
+                          &full_path, 0))
+    _dbus_assert_not_reached ("couldn't copy test_base_dir to full_path");
+
+  _dbus_string_init_const (&tmp, "valid-config-files");
+
+  if (!_dbus_concat_dir_and_file (&full_path, &tmp))
+    _dbus_assert_not_reached ("couldn't allocate full path");
+
+  _dbus_string_init_const (&tmp, "standard-session-dirs.conf");
+
+  if (!_dbus_concat_dir_and_file (&full_path, &tmp))
+    _dbus_assert_not_reached ("couldn't allocate full path");
 
 #ifdef DBUS_WIN
   if (!_dbus_string_append (&install_root_based, DBUS_DATADIR) ||
-      !_dbus_string_append (&install_root_based, "/dbus-1/services"))
+      !_dbus_string_append (&install_root_based, "/dbus-1/services") ||
+      !_dbus_replace_install_prefix (&install_root_based))
     goto out;
 
-  tmp = _dbus_replace_install_prefix (
-      _dbus_string_get_const_data (&install_root_based));
-
-  if (tmp == NULL ||
-      !_dbus_string_set_length (&install_root_based, 0) ||
-      !_dbus_string_append (&install_root_based, tmp))
-    goto out;
+  _dbus_assert (_dbus_path_is_absolute (&install_root_based));
 
   test_session_service_dir_matches[0] = _dbus_string_get_const_data (
       &install_root_based);
@@ -3443,72 +3784,143 @@ test_default_session_servicedirs (void)
 
       test_session_service_dir_matches[1] = _dbus_string_get_const_data(&progs);
     }
-#endif
-  dirs = NULL;
+#else
+  dbus_test_builddir = _dbus_getenv ("DBUS_TEST_BUILDDIR");
+  xdg_data_home = _dbus_getenv ("XDG_DATA_HOME");
+  xdg_runtime_dir = _dbus_getenv ("XDG_RUNTIME_DIR");
 
-  printf ("Testing retrieving the default session service directories\n");
-  if (!_dbus_get_standard_session_servicedirs (&dirs))
-    _dbus_assert_not_reached ("couldn't get stardard dirs");
-
-  /* make sure our defaults end with share/dbus-1/service */
-  while ((link = _dbus_list_pop_first_link (&dirs)))
+  if (dbus_test_builddir == NULL || xdg_data_home == NULL ||
+      xdg_runtime_dir == NULL)
     {
-      DBusString path;
-      
-      printf ("    default service dir: %s\n", (char *)link->data);
-      _dbus_string_init_const (&path, (char *)link->data);
-      if (!_dbus_string_ends_with_c_str (&path, "dbus-1/services"))
-        {
-          printf ("error with default session service directories\n");
-	      dbus_free (link->data);
-    	  _dbus_list_free_link (link);
-          goto out;
-        }
- 
-      dbus_free (link->data);
-      _dbus_list_free_link (link);
+      printf ("Not testing default session service directories because a "
+              "build-time testing environment variable is not set: "
+              "see AM_TESTS_ENVIRONMENT in tests/Makefile.am\n");
+      ret = TRUE;
+      goto out;
     }
 
-#ifdef DBUS_UNIX
-  if (!dbus_setenv ("XDG_DATA_HOME", "/testhome/foo/.testlocal/testshare"))
-    _dbus_assert_not_reached ("couldn't setenv XDG_DATA_HOME");
+  if (!_dbus_string_append (&data_dirs_based, dbus_test_builddir) ||
+      !_dbus_string_append (&data_dirs_based, "/XDG_DATA_DIRS/dbus-1/services") ||
+      !_dbus_string_append (&data_dirs_based2, dbus_test_builddir) ||
+      !_dbus_string_append (&data_dirs_based2, "/XDG_DATA_DIRS2/dbus-1/services") ||
+      !_dbus_string_append (&runtime_dir_based, xdg_runtime_dir) ||
+      !_dbus_string_append (&data_home_based, xdg_data_home) ||
+      !_dbus_string_append (&data_home_based, "/dbus-1/services"))
+    _dbus_assert_not_reached ("out of memory");
 
-  if (!dbus_setenv ("XDG_DATA_DIRS", ":/testusr/testlocal/testshare: :/testusr/testshare:"))
-    _dbus_assert_not_reached ("couldn't setenv XDG_DATA_DIRS");
+  if (!_dbus_ensure_directory (&runtime_dir_based, NULL))
+    _dbus_assert_not_reached ("Unable to create fake XDG_RUNTIME_DIR");
+
+  if (!_dbus_string_append (&runtime_dir_based, "/dbus-1/services"))
+    _dbus_assert_not_reached ("out of memory");
+
+  /* Sanity check: the Makefile sets this up. We assume that if this is
+   * right, the XDG_DATA_DIRS will be too. */
+  if (!_dbus_string_starts_with_c_str (&data_home_based, dbus_test_builddir))
+    _dbus_assert_not_reached ("$XDG_DATA_HOME should start with $DBUS_TEST_BUILDDIR");
+
+  if (!_dbus_string_starts_with_c_str (&runtime_dir_based, dbus_test_builddir))
+    _dbus_assert_not_reached ("$XDG_RUNTIME_DIR should start with $DBUS_TEST_BUILDDIR");
+
+  test_session_service_dir_matches[0] = _dbus_string_get_const_data (
+      &runtime_dir_based);
+  test_session_service_dir_matches[1] = _dbus_string_get_const_data (
+      &data_home_based);
+  test_session_service_dir_matches[2] = _dbus_string_get_const_data (
+      &data_dirs_based);
+  test_session_service_dir_matches[3] = _dbus_string_get_const_data (
+      &data_dirs_based2);
 #endif
-  if (!_dbus_get_standard_session_servicedirs (&dirs))
-    _dbus_assert_not_reached ("couldn't get stardard dirs");
 
-  /* make sure we read and parse the env variable correctly */
-  i = 0;
-  while ((link = _dbus_list_pop_first_link (&dirs)))
+  parser = bus_config_load (&full_path, TRUE, NULL, &error);
+
+  if (parser == NULL)
+    _dbus_assert_not_reached (error.message);
+
+  dirs = bus_config_parser_get_service_dirs (parser);
+
+  for (link = _dbus_list_get_first_link (dirs), i = 0;
+       link != NULL;
+       link = _dbus_list_get_next_link (dirs, link), i++)
     {
-      printf ("    test service dir: %s\n", (char *)link->data);
+      BusConfigServiceDir *dir = link->data;
+      BusServiceDirFlags expected = BUS_SERVICE_DIR_FLAGS_NONE;
+
+      printf ("    test service dir: '%s'\n", dir->path);
+      printf ("    current standard service dir: '%s'\n", test_session_service_dir_matches[i]);
       if (test_session_service_dir_matches[i] == NULL)
         {
           printf ("more directories parsed than in match set\n");
-          dbus_free (link->data);
-          _dbus_list_free_link (link);
           goto out;
         }
  
-      if (strcmp (test_session_service_dir_matches[i], 
-                  (char *)link->data) != 0)
+      if (strcmp (test_session_service_dir_matches[i], dir->path) != 0)
         {
-          printf ("%s directory does not match %s in the match set\n", 
-                  (char *)link->data,
-                  test_session_service_dir_matches[i]);
-          dbus_free (link->data);
-          _dbus_list_free_link (link);
+          printf ("'%s' directory does not match '%s' in the match set\n",
+                  dir->path, test_session_service_dir_matches[i]);
           goto out;
         }
 
-      ++i;
+#ifndef DBUS_WIN
+      /* On Unix we expect the first directory in the search path to be
+       * in the XDG_RUNTIME_DIR, and we expect it to have special flags */
+      if (i == 0)
+        expected = (BUS_SERVICE_DIR_FLAGS_NO_WATCH |
+                    BUS_SERVICE_DIR_FLAGS_STRICT_NAMING);
+#endif
 
-      dbus_free (link->data);
-      _dbus_list_free_link (link);
+      if (dir->flags != expected)
+        {
+          printf ("'%s' directory has flags 0x%x, should be 0x%x\n",
+                  dir->path, dir->flags, expected);
+          goto out;
+        }
     }
   
+  if (test_session_service_dir_matches[i] != NULL)
+    {
+      printf ("extra data %s in the match set was not matched\n",
+              test_session_service_dir_matches[i]);
+      goto out;
+    }
+
+  if (!bus_config_parser_get_watched_dirs (parser, &watched_dirs))
+    _dbus_assert_not_reached ("out of memory");
+
+#ifdef DBUS_WIN
+  /* We expect all directories to be watched (not that it matters on Windows,
+   * because we don't know how) */
+  i = 0;
+#else
+  /* We expect all directories except the first to be watched, because
+   * the first one is transient */
+  i = 1;
+#endif
+
+  for (link = _dbus_list_get_first_link (&watched_dirs);
+       link != NULL;
+       link = _dbus_list_get_next_link (&watched_dirs, link), i++)
+    {
+      printf ("    watched service dir: '%s'\n", (const char *) link->data);
+      printf ("    current standard service dir: '%s'\n",
+              test_session_service_dir_matches[i]);
+
+      if (test_session_service_dir_matches[i] == NULL)
+        {
+          printf ("more directories parsed than in match set\n");
+          goto out;
+        }
+
+      if (strcmp (test_session_service_dir_matches[i],
+                  (const char *) link->data) != 0)
+        {
+          printf ("'%s' directory does not match '%s' in the match set\n",
+                  (const char *) link->data,
+                  test_session_service_dir_matches[i]);
+          goto out;
+        }
+    }
+
   if (test_session_service_dir_matches[i] != NULL)
     {
       printf ("extra data %s in the match set was not matched\n",
@@ -3519,25 +3931,27 @@ test_default_session_servicedirs (void)
   ret = TRUE;
 
 out:
+  if (parser != NULL)
+    bus_config_parser_unref (parser);
+
+  _dbus_list_clear (&watched_dirs);
+  _dbus_string_free (&full_path);
   _dbus_string_free (&install_root_based);
   _dbus_string_free (&progs);
+  _dbus_string_free (&runtime_dir_based);
+  _dbus_string_free (&data_home_based);
+  _dbus_string_free (&data_dirs_based);
+  _dbus_string_free (&data_dirs_based2);
   return ret;
 }
 
+#ifndef DBUS_WIN
 static const char *test_system_service_dir_matches[] = 
         {
-#ifdef DBUS_UNIX
          "/usr/local/share/dbus-1/system-services",
          "/usr/share/dbus-1/system-services",
-#endif
          DBUS_DATADIR"/dbus-1/system-services",
-#ifdef DBUS_UNIX
          "/lib/dbus-1/system-services",
-#endif
-
-#ifdef DBUS_WIN
-         NULL,
-#endif
          NULL
         };
 
@@ -3546,69 +3960,10 @@ test_default_system_servicedirs (void)
 {
   DBusList *dirs;
   DBusList *link;
-  DBusString progs;
-#ifndef DBUS_UNIX
-  const char *common_progs;
-#endif
   int i;
 
-  /* On Unix we don't actually use this variable, but it's easier to handle the
-   * deallocation if we always allocate it, whether needed or not */
-  if (!_dbus_string_init (&progs))
-    _dbus_assert_not_reached ("OOM allocating progs");
-
-#ifndef DBUS_UNIX
-  common_progs = _dbus_getenv ("CommonProgramFiles");
-
-  if (common_progs) 
-    {
-      if (!_dbus_string_append (&progs, common_progs)) 
-        {
-          _dbus_string_free (&progs);
-          return FALSE;
-        }
-
-      if (!_dbus_string_append (&progs, "/dbus-1/system-services")) 
-        {
-          _dbus_string_free (&progs);
-          return FALSE;
-        }
-      test_system_service_dir_matches[1] = _dbus_string_get_const_data(&progs);
-    }
-#endif
   dirs = NULL;
 
-  printf ("Testing retrieving the default system service directories\n");
-  if (!_dbus_get_standard_system_servicedirs (&dirs))
-    _dbus_assert_not_reached ("couldn't get stardard dirs");
-
-  /* make sure our defaults end with share/dbus-1/system-service */
-  while ((link = _dbus_list_pop_first_link (&dirs)))
-    {
-      DBusString path;
-      
-      printf ("    default service dir: %s\n", (char *)link->data);
-      _dbus_string_init_const (&path, (char *)link->data);
-      if (!_dbus_string_ends_with_c_str (&path, "dbus-1/system-services"))
-        {
-          printf ("error with default system service directories\n");
-	      dbus_free (link->data);
-    	  _dbus_list_free_link (link);
-          _dbus_string_free (&progs);
-          return FALSE;
-        }
- 
-      dbus_free (link->data);
-      _dbus_list_free_link (link);
-    }
-
-#ifdef DBUS_UNIX
-  if (!dbus_setenv ("XDG_DATA_HOME", "/testhome/foo/.testlocal/testshare"))
-    _dbus_assert_not_reached ("couldn't setenv XDG_DATA_HOME");
-
-  if (!dbus_setenv ("XDG_DATA_DIRS", ":/testusr/testlocal/testshare: :/testusr/testshare:"))
-    _dbus_assert_not_reached ("couldn't setenv XDG_DATA_DIRS");
-#endif
   if (!_dbus_get_standard_system_servicedirs (&dirs))
     _dbus_assert_not_reached ("couldn't get stardard dirs");
 
@@ -3622,7 +3977,6 @@ test_default_system_servicedirs (void)
           printf ("more directories parsed than in match set\n");
           dbus_free (link->data);
           _dbus_list_free_link (link);
-          _dbus_string_free (&progs);
           return FALSE;
         }
  
@@ -3634,7 +3988,6 @@ test_default_system_servicedirs (void)
                   test_system_service_dir_matches[i]);
           dbus_free (link->data);
           _dbus_list_free_link (link);
-          _dbus_string_free (&progs);
           return FALSE;
         }
 
@@ -3649,13 +4002,12 @@ test_default_system_servicedirs (void)
       printf ("extra data %s in the match set was not matched\n",
               test_system_service_dir_matches[i]);
 
-      _dbus_string_free (&progs);
       return FALSE;
     }
     
-  _dbus_string_free (&progs);
   return TRUE;
 }
+#endif
 		   
 dbus_bool_t
 bus_config_parser_test (const DBusString *test_data_dir)
@@ -3667,7 +4019,7 @@ bus_config_parser_test (const DBusString *test_data_dir)
       return TRUE;
     }
 
-  if (!test_default_session_servicedirs())
+  if (!test_default_session_servicedirs (test_data_dir))
     return FALSE;
 
 #ifdef DBUS_WIN

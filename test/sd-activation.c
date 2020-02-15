@@ -1,4 +1,7 @@
-/* Unit tests for systemd activation.
+/* Unit tests for systemd activation, with or without AppArmor.
+ *
+ * We compile this source file twice: once with AppArmor support (if available)
+ * and once without.
  *
  * Copyright © 2010-2011 Nokia Corporation
  * Copyright © 2015 Collabora Ltd.
@@ -26,7 +29,16 @@
 
 #include <config.h>
 
+#include <errno.h>
+#include <unistd.h>
 #include <string.h>
+#include <sys/types.h>
+
+#include <glib/gstdio.h>
+
+#if defined(HAVE_APPARMOR_2_10) && defined(DBUS_TEST_APPARMOR_ACTIVATION)
+#include <sys/apparmor.h>
+#endif
 
 #include "test-utils-glib.h"
 
@@ -40,13 +52,34 @@ typedef struct {
 
     DBusConnection *caller;
     const char *caller_name;
+    DBusMessage *caller_message;
+    dbus_bool_t caller_filter_added;
+
     DBusConnection *systemd;
     const char *systemd_name;
     DBusMessage *systemd_message;
+    dbus_bool_t systemd_filter_added;
+
     DBusConnection *activated;
     const char *activated_name;
     DBusMessage *activated_message;
+    dbus_bool_t activated_filter_added;
+
+    gchar *transient_service_file;
+    gchar *tmp_runtime_dir;
 } Fixture;
+
+typedef enum
+{
+  FLAG_EARLY_TRANSIENT_SERVICE = (1 << 0),
+  FLAG_NONE = 0
+} Flags;
+
+typedef struct
+{
+  const gchar *bus_name;
+  Flags flags;
+} Config;
 
 /* this is a macro so it gets the right line number */
 #define assert_signal(m, \
@@ -90,6 +123,21 @@ do { \
   g_assert_cmpstr (dbus_message_get_interface (m), ==, NULL); \
   g_assert_cmpstr (dbus_message_get_member (m), ==, NULL); \
   g_assert_cmpstr (dbus_message_get_signature (m), ==, signature); \
+  g_assert_cmpint (dbus_message_get_serial (m), !=, 0); \
+  g_assert_cmpint (dbus_message_get_reply_serial (m), !=, 0); \
+} while (0)
+
+#define assert_error_reply(m, sender, destination, error_name) \
+do { \
+  g_assert_cmpstr (dbus_message_type_to_string (dbus_message_get_type (m)), \
+      ==, dbus_message_type_to_string (DBUS_MESSAGE_TYPE_ERROR)); \
+  g_assert_cmpstr (dbus_message_get_sender (m), ==, sender); \
+  g_assert_cmpstr (dbus_message_get_destination (m), ==, destination); \
+  g_assert_cmpstr (dbus_message_get_error_name (m), ==, error_name); \
+  g_assert_cmpstr (dbus_message_get_path (m), ==, NULL); \
+  g_assert_cmpstr (dbus_message_get_interface (m), ==, NULL); \
+  g_assert_cmpstr (dbus_message_get_member (m), ==, NULL); \
+  g_assert_cmpstr (dbus_message_get_signature (m), ==, "s"); \
   g_assert_cmpint (dbus_message_get_serial (m), !=, 0); \
   g_assert_cmpint (dbus_message_get_reply_serial (m), !=, 0); \
 } while (0)
@@ -147,27 +195,152 @@ activated_filter (DBusConnection *connection,
   g_assert (f->activated_message == NULL);
   f->activated_message = dbus_message_ref (message);
 
+  /* Test code is expected to reply to method calls itself */
+  if (dbus_message_get_type (message) == DBUS_MESSAGE_TYPE_METHOD_CALL)
+    return DBUS_HANDLER_RESULT_HANDLED;
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
+static DBusHandlerResult
+caller_filter (DBusConnection *connection,
+    DBusMessage *message,
+    void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+        "NameAcquired") ||
+      dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+        "NameLost"))
+    {
+      return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+    }
+
+  g_assert (f->caller_message == NULL);
+  f->caller_message = dbus_message_ref (message);
+
   return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
 static void
-setup (Fixture *f,
-    gconstpointer context G_GNUC_UNUSED)
+fixture_create_transient_service (Fixture *f,
+                                  const gchar *name)
 {
-  f->ctx = test_main_context_get ();
+  gchar *service;
+  gchar *content;
+  gboolean ok;
+
+  service = g_strdup_printf ("%s.service", name);
+  f->transient_service_file = g_build_filename (f->tmp_runtime_dir, "dbus-1",
+      "services", service, NULL);
+  g_free (service);
+
+  content = g_strdup_printf (
+      "[D-BUS Service]\n"
+      "Name=%s\n"
+      "Exec=/bin/false %s\n"
+      "SystemdService=dbus-%s.service\n", name, name, name);
+  ok = g_file_set_contents (f->transient_service_file, content, -1, &f->ge);
+  g_assert_no_error (f->ge);
+  g_assert (ok);
+  g_free (content);
+}
+
+static void
+setup (Fixture *f,
+    gconstpointer context)
+{
+  const Config *config = context;
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION) && defined(HAVE_APPARMOR_2_10)
+  aa_features *features;
+#endif
 
   f->ge = NULL;
   dbus_error_init (&f->e);
 
+  f->tmp_runtime_dir = g_dir_make_tmp ("dbus-daemon-test.XXXXXX", &f->ge);
+  g_assert_no_error (f->ge);
+
+  if (config != NULL && (config->flags & FLAG_EARLY_TRANSIENT_SERVICE) != 0)
+    {
+      gchar *dbus1 = g_build_filename (f->tmp_runtime_dir, "dbus-1", NULL);
+      gchar *services = g_build_filename (dbus1, "services", NULL);
+
+      /* We just created it so the directories shouldn't exist yet */
+      test_mkdir (dbus1, 0700);
+      test_mkdir (services, 0700);
+      fixture_create_transient_service (f, config->bus_name);
+      g_free (dbus1);
+      g_free (services);
+    }
+
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION) && !defined(HAVE_APPARMOR_2_10)
+
+  g_test_skip ("AppArmor support not compiled or AppArmor 2.10 unavailable");
+  return;
+
+#else
+
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+  if (!aa_is_enabled ())
+    {
+      g_test_message ("aa_is_enabled() -> %s", g_strerror (errno));
+      g_test_skip ("AppArmor not enabled");
+      return;
+    }
+
+  if (aa_features_new_from_kernel (&features) != 0)
+    {
+      g_test_skip ("Unable to check AppArmor features");
+      return;
+    }
+
+  if (!aa_features_supports (features, "dbus/mask/send") ||
+      !aa_features_supports (features, "dbus/mask/receive"))
+    {
+      g_test_skip ("D-Bus send/receive mediation unavailable");
+      aa_features_unref (features);
+      return;
+    }
+
+  aa_features_unref (features);
+#endif
+
+  f->ctx = test_main_context_get ();
+
   f->address = test_get_dbus_daemon (
       "valid-config-files/systemd-activation.conf",
-      TEST_USER_ME, &f->daemon_pid);
+      TEST_USER_ME, f->tmp_runtime_dir, &f->daemon_pid);
 
   if (f->address == NULL)
     return;
 
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+  /*
+   * Make use of the fact that the LSM security label (and other process
+   * properties) that are used for access-control are whatever was current
+   * at the time the connection was opened.
+   *
+   * 42 is arbitrary. In a real use of AppArmor it would be a securely-random
+   * value, to prevent less-privileged code (that does not know the magic
+   * value) from changing back.
+   */
+  if (aa_change_hat ("caller", 42) != 0)
+    g_error ("Unable to change profile to ...//^caller: %s",
+             g_strerror (errno));
+#endif
+
   f->caller = test_connect_to_bus (f->ctx, f->address);
   f->caller_name = dbus_bus_get_unique_name (f->caller);
+
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+  if (aa_change_hat (NULL, 42) != 0)
+    g_error ("Unable to change back to initial profile: %s",
+             g_strerror (errno));
+#endif
+
+#endif
 }
 
 static void
@@ -203,6 +376,7 @@ test_activation (Fixture *f,
   f->systemd = test_connect_to_bus (f->ctx, f->address);
   if (!dbus_connection_add_filter (f->systemd, systemd_filter, f, NULL))
     g_error ("OOM");
+  f->systemd_filter_added = TRUE;
   f->systemd_name = dbus_bus_get_unique_name (f->systemd);
   take_well_known_name (f, f->systemd, "org.freedesktop.systemd1");
 
@@ -222,6 +396,7 @@ test_activation (Fixture *f,
   if (!dbus_connection_add_filter (f->activated, activated_filter,
         f, NULL))
     g_error ("OOM");
+  f->activated_filter_added = TRUE;
   f->activated_name = dbus_bus_get_unique_name (f->activated);
   take_well_known_name (f, f->activated, "com.example.SystemdActivatable1");
 
@@ -509,6 +684,324 @@ test_uae (Fixture *f,
 }
 
 static void
+test_deny_send (Fixture *f,
+    gconstpointer context)
+{
+  DBusMessage *m;
+  const Config *config = context;
+
+  g_assert (config != NULL);
+  g_assert (config->bus_name != NULL);
+
+  if (f->address == NULL)
+    return;
+
+  if (!dbus_connection_add_filter (f->caller, caller_filter, f, NULL))
+    g_error ("OOM");
+
+  f->caller_filter_added = TRUE;
+
+  /* The sender sends a message to an activatable service. */
+  m = dbus_message_new_method_call (config->bus_name, "/foo",
+      "com.example.bar", "Call");
+  if (m == NULL)
+    g_error ("OOM");
+
+  dbus_connection_send (f->caller, m, NULL);
+  dbus_message_unref (m);
+
+  /*
+   * Even before the fake systemd connects to the bus, we get an error
+   * back: activation is not allowed.
+   *
+   * In the normal case, this is because the XML policy does not allow
+   * anyone to send messages to the bus name com.example.SendDenied.
+   *
+   * In the AppArmor case, this is because the AppArmor policy does not allow
+   * this process to send messages to the bus name
+   * com.example.SendDeniedByAppArmorName, or to the label
+   * @DBUS_TEST_EXEC@/com.example.SendDeniedByAppArmorLabel that we assume the
+   * service com.example.SendDeniedByAppArmorLabel will receive after systemd
+   * runs it.
+   */
+
+  while (f->caller_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->caller_message;
+  f->caller_message = NULL;
+  assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
+      DBUS_ERROR_ACCESS_DENIED);
+  dbus_message_unref (m);
+}
+
+static void
+test_deny_receive (Fixture *f,
+    gconstpointer context)
+{
+  DBusMessage *m;
+  const Config *config = context;
+
+  g_assert (config != NULL);
+  g_assert (config->bus_name != NULL);
+
+  if (f->address == NULL)
+    return;
+
+  if (!dbus_connection_add_filter (f->caller, caller_filter, f, NULL))
+    g_error ("OOM");
+
+  f->caller_filter_added = TRUE;
+
+  /* The sender sends a message to an activatable service.
+   * We set the interface name equal to the bus name to make it
+   * easier to write the necessary policy rules. */
+  m = dbus_message_new_method_call (config->bus_name, "/foo",
+                                    config->bus_name, "Call");
+  if (m == NULL)
+    g_error ("OOM");
+
+  dbus_connection_send (f->caller, m, NULL);
+  dbus_message_unref (m);
+
+  /* The fake systemd connects to the bus. */
+  f->systemd = test_connect_to_bus (f->ctx, f->address);
+  if (!dbus_connection_add_filter (f->systemd, systemd_filter, f, NULL))
+    g_error ("OOM");
+  f->systemd_filter_added = TRUE;
+  f->systemd_name = dbus_bus_get_unique_name (f->systemd);
+  take_well_known_name (f, f->systemd, "org.freedesktop.systemd1");
+
+  /* It gets its activation request. */
+  while (f->systemd_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->systemd_message;
+  f->systemd_message = NULL;
+  assert_signal (m, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+      "org.freedesktop.systemd1.Activator", "ActivationRequest", "s",
+      "org.freedesktop.systemd1");
+  dbus_message_unref (m);
+
+  /* systemd starts the activatable service. */
+
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION) && defined(HAVE_APPARMOR_2_10)
+  /* The use of 42 here is arbitrary, see setup(). */
+  if (aa_change_hat (config->bus_name, 42) != 0)
+    g_error ("Unable to change profile to ...//^%s: %s",
+             config->bus_name, g_strerror (errno));
+#endif
+
+  f->activated = test_connect_to_bus (f->ctx, f->address);
+  if (!dbus_connection_add_filter (f->activated, activated_filter,
+        f, NULL))
+    g_error ("OOM");
+  f->activated_filter_added = TRUE;
+  f->activated_name = dbus_bus_get_unique_name (f->activated);
+  take_well_known_name (f, f->activated, config->bus_name);
+
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION) && defined(HAVE_APPARMOR_2_10)
+  if (aa_change_hat (NULL, 42) != 0)
+    g_error ("Unable to change back to initial profile: %s",
+             g_strerror (errno));
+#endif
+
+  /*
+   * We re-do the message matching, and now the message is
+   * forbidden by the receive policy.
+   *
+   * In the normal case, this is because the XML policy does not allow
+   * receiving any message with interface com.example.ReceiveDenied.
+   * We can't use the recipient's bus name here because the XML policy
+   * has no syntax for preventing the owner of a name from receiving
+   * messages - that would be pointless, because the sender could just
+   * open another connection and not own the same name on that connection.
+   *
+   * In the AppArmor case, this is because the AppArmor policy does not allow
+   * receiving messages with interface com.example.ReceiveDeniedByAppArmor
+   * from a peer with the same label we have. Again, we can't use the
+   * recipient's bus name because there is no syntax for this.
+   */
+  while (f->caller_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->caller_message;
+  f->caller_message = NULL;
+  assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
+      DBUS_ERROR_ACCESS_DENIED);
+  dbus_message_unref (m);
+
+  /* The activated service never even saw it. */
+  g_assert (f->activated_message == NULL);
+}
+
+/*
+ * Test that we can set up transient services.
+ *
+ * If (flags & FLAG_EARLY_TRANSIENT_SERVICE), we assert that a service that
+ * was deployed before starting systemd (in setup()) is available.
+ *
+ * Otherwise, we assert that a service that is deployed while dbus-daemon
+ * is already running becomes available after reloading the dbus-daemon
+ * configuration.
+ */
+static void
+test_transient_services (Fixture *f,
+    gconstpointer context)
+{
+  const Config *config = context;
+  DBusMessage *m = NULL;
+  DBusMessage *send_reply = NULL;
+  DBusMessage *reply = NULL;
+  DBusPendingCall *pc;
+
+  g_assert (config != NULL);
+  g_assert (config->bus_name != NULL);
+
+  if (f->address == NULL)
+    return;
+
+  /* Connect the fake systemd to the bus. */
+  f->systemd = test_connect_to_bus (f->ctx, f->address);
+  if (!dbus_connection_add_filter (f->systemd, systemd_filter, f, NULL))
+    g_error ("OOM");
+  f->systemd_filter_added = TRUE;
+  f->systemd_name = dbus_bus_get_unique_name (f->systemd);
+  take_well_known_name (f, f->systemd, "org.freedesktop.systemd1");
+
+  if ((config->flags & FLAG_EARLY_TRANSIENT_SERVICE) == 0)
+    {
+      /* Try to activate a service that isn't there. */
+      m = dbus_message_new_method_call (config->bus_name,
+                                        "/foo", "com.example.bar", "Activate");
+
+      if (m == NULL ||
+          !dbus_connection_send_with_reply (f->caller, m, &pc,
+            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
+        g_error ("OOM");
+
+      dbus_message_unref (m);
+      m = NULL;
+
+      /* It fails. */
+
+      if (dbus_pending_call_get_completed (pc))
+        test_pending_call_store_reply (pc, &m);
+      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+            &m, NULL))
+        g_error ("OOM");
+
+      while (m == NULL)
+        test_main_context_iterate (f->ctx, TRUE);
+
+      assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
+          DBUS_ERROR_SERVICE_UNKNOWN);
+
+      dbus_message_unref (m);
+      m = NULL;
+
+      /* Now generate a transient D-Bus service file for it. The directory
+       * should have been created during dbus-daemon startup, so we don't have to
+       * recreate it. */
+      fixture_create_transient_service (f, config->bus_name);
+
+      /* To guarantee that the transient service has been picked up, we have
+       * to reload. */
+      m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+                                        DBUS_INTERFACE_DBUS, "ReloadConfig");
+
+      if (m == NULL ||
+          !dbus_connection_send_with_reply (f->caller, m, &pc,
+            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
+        g_error ("OOM");
+
+      dbus_message_unref (m);
+      m = NULL;
+
+      if (dbus_pending_call_get_completed (pc))
+        test_pending_call_store_reply (pc, &m);
+      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+            &m, NULL))
+        g_error ("OOM");
+
+      while (m == NULL)
+        test_main_context_iterate (f->ctx, TRUE);
+
+      assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
+      dbus_message_unref (m);
+      m = NULL;
+    }
+
+  /* The service is present now. */
+  m = dbus_message_new_method_call (config->bus_name,
+                                    "/foo", "com.example.bar", "Activate");
+
+  if (m == NULL ||
+      !dbus_connection_send_with_reply (f->caller, m, &pc,
+        DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
+    g_error ("OOM");
+
+  dbus_message_unref (m);
+  m = NULL;
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &reply);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+        &reply, NULL))
+    g_error ("OOM");
+
+  /* The mock systemd is told to start the service. */
+  while (f->systemd_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->systemd_message;
+  f->systemd_message = NULL;
+  assert_signal (m, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+      "org.freedesktop.systemd1.Activator", "ActivationRequest", "s",
+      "org.freedesktop.systemd1");
+  dbus_message_unref (m);
+  m = NULL;
+
+  /* The activatable service connects and gets its name. */
+  f->activated = test_connect_to_bus (f->ctx, f->address);
+  if (!dbus_connection_add_filter (f->activated, activated_filter,
+        f, NULL))
+    g_error ("OOM");
+  f->activated_filter_added = TRUE;
+  f->activated_name = dbus_bus_get_unique_name (f->activated);
+  take_well_known_name (f, f->activated, config->bus_name);
+
+  /* The message is delivered to the activatable service. */
+  while (f->activated_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->activated_message;
+  f->activated_message = NULL;
+  assert_method_call (m, f->caller_name, config->bus_name, "/foo",
+      "com.example.bar", "Activate", "");
+
+  /* The activatable service sends back a reply. */
+  send_reply = dbus_message_new_method_return (m);
+
+  if (send_reply == NULL ||
+      !dbus_connection_send (f->activated, send_reply, NULL))
+    g_error ("OOM");
+
+  dbus_message_unref (send_reply);
+  send_reply = NULL;
+  dbus_message_unref (m);
+  m = NULL;
+
+  /* The caller receives the reply. */
+  while (reply == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  assert_method_reply (reply, f->activated_name, f->caller_name, "");
+  dbus_message_unref (reply);
+  reply = NULL;
+}
+
+static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
@@ -517,6 +1010,9 @@ teardown (Fixture *f,
 
   if (f->caller != NULL)
     {
+      if (f->caller_filter_added)
+        dbus_connection_remove_filter (f->caller, caller_filter, f);
+
       dbus_connection_close (f->caller);
       dbus_connection_unref (f->caller);
       f->caller = NULL;
@@ -524,7 +1020,9 @@ teardown (Fixture *f,
 
   if (f->systemd != NULL)
     {
-      dbus_connection_remove_filter (f->systemd, systemd_filter, f);
+      if (f->systemd_filter_added)
+        dbus_connection_remove_filter (f->systemd, systemd_filter, f);
+
       dbus_connection_close (f->systemd);
       dbus_connection_unref (f->systemd);
       f->systemd = NULL;
@@ -532,28 +1030,113 @@ teardown (Fixture *f,
 
   if (f->activated != NULL)
     {
-      dbus_connection_remove_filter (f->activated, activated_filter, f);
+      if (f->activated_filter_added)
+        dbus_connection_remove_filter (f->activated, activated_filter, f);
+
       dbus_connection_close (f->activated);
       dbus_connection_unref (f->activated);
       f->activated = NULL;
     }
 
-  test_kill_pid (f->daemon_pid);
-  g_spawn_close_pid (f->daemon_pid);
-  test_main_context_unref (f->ctx);
+  if (f->daemon_pid != 0)
+    {
+      test_kill_pid (f->daemon_pid);
+      g_spawn_close_pid (f->daemon_pid);
+    }
+
+  if (f->ctx != NULL)
+    test_main_context_unref (f->ctx);
+
   g_free (f->address);
+
+  if (f->transient_service_file != NULL)
+    {
+      test_remove_if_exists (f->transient_service_file);
+      g_free (f->transient_service_file);
+    }
+
+  if (f->tmp_runtime_dir != NULL)
+    {
+      gchar *dbus1 = g_build_filename (f->tmp_runtime_dir, "dbus-1", NULL);
+      gchar *services = g_build_filename (dbus1, "services", NULL);
+
+      test_rmdir_if_exists (services);
+      test_rmdir_if_exists (dbus1);
+      test_rmdir_if_exists (f->tmp_runtime_dir);
+
+      g_free (f->tmp_runtime_dir);
+      g_free (dbus1);
+      g_free (services);
+    }
 }
+
+static const Config deny_send_tests[] =
+{
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+    { "com.example.SendDeniedByAppArmorLabel" },
+    { "com.example.SendDeniedByNonexistentAppArmorLabel" },
+    { "com.example.SendDeniedByAppArmorName" },
+#endif
+    { "com.example.SendDenied" }
+};
+
+static const Config deny_receive_tests[] =
+{
+#if defined(DBUS_TEST_APPARMOR_ACTIVATION)
+    { "com.example.ReceiveDeniedByAppArmorLabel" },
+#endif
+    { "com.example.ReceiveDenied" }
+};
+
+static const Config transient_service_later =
+{
+  "com.example.TransientActivatable1",
+  FLAG_NONE
+};
+
+static const Config transient_service_in_advance =
+{
+  "com.example.TransientActivatable1",
+  FLAG_EARLY_TRANSIENT_SERVICE
+};
 
 int
 main (int argc,
     char **argv)
 {
+  gsize i;
+
   test_init (&argc, &argv);
 
   g_test_add ("/sd-activation/activation", Fixture, NULL,
       setup, test_activation, teardown);
   g_test_add ("/sd-activation/uae", Fixture, NULL,
       setup, test_uae, teardown);
+
+  for (i = 0; i < G_N_ELEMENTS (deny_send_tests); i++)
+    {
+      gchar *name = g_strdup_printf ("/sd-activation/deny-send/%s",
+                                     deny_send_tests[i].bus_name);
+
+      g_test_add (name, Fixture, &deny_send_tests[i],
+                  setup, test_deny_send, teardown);
+      g_free (name);
+    }
+
+  for (i = 0; i < G_N_ELEMENTS (deny_receive_tests); i++)
+    {
+      gchar *name = g_strdup_printf ("/sd-activation/deny-receive/%s",
+                                     deny_receive_tests[i].bus_name);
+
+      g_test_add (name, Fixture, &deny_receive_tests[i],
+                  setup, test_deny_receive, teardown);
+      g_free (name);
+    }
+
+  g_test_add ("/sd-activation/transient-services/later", Fixture,
+      &transient_service_later, setup, test_transient_services, teardown);
+  g_test_add ("/sd-activation/transient-services/in-advance", Fixture,
+      &transient_service_in_advance, setup, test_transient_services, teardown);
 
   return g_test_run ();
 }

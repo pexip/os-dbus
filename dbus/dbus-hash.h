@@ -133,6 +133,14 @@ dbus_bool_t    _dbus_hash_table_insert_uintptr     (DBusHashTable    *table,
 DBUS_PRIVATE_EXPORT
 int            _dbus_hash_table_get_n_entries      (DBusHashTable    *table);
 
+DBUS_PRIVATE_EXPORT
+char **        _dbus_hash_table_to_array           (DBusHashTable     *table,
+                                                    char               delimiter);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t    _dbus_hash_table_from_array         (DBusHashTable     *table,
+                                                    char             **array,
+                                                    char               delimiter);
+
 /* Preallocation */
 
 /** A preallocated hash entry */
@@ -200,6 +208,12 @@ _dbus_hash_table_insert_pollable (DBusHashTable *table,
 #else
   return _dbus_hash_table_insert_int (table, key, value);
 #endif
+}
+
+static inline void
+_dbus_clear_hash_table (DBusHashTable **table_p)
+{
+  _dbus_clear_pointer_impl (DBusHashTable, table_p, _dbus_hash_table_unref);
 }
 
 /** @} */

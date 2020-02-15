@@ -203,7 +203,7 @@ dbus_bool_t   _dbus_string_append_printf         (DBusString        *str,
 DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_append_printf_valist  (DBusString        *str,
                                                   const char        *format,
-                                                  va_list            args);
+                                                  va_list            args) _DBUS_GNUC_PRINTF (2, 0);
 dbus_bool_t   _dbus_string_insert_2_aligned      (DBusString        *str,
                                                   int                insert_at,
                                                   const unsigned char octets[2]);
@@ -361,6 +361,29 @@ dbus_bool_t   _dbus_string_validate_nul          (const DBusString  *str,
                                                   int                len);
 void          _dbus_string_zero                  (DBusString        *str);
 
+static inline unsigned char *
+_dbus_string_get_udata (DBusString *str)
+{
+  return (unsigned char *) _dbus_string_get_data (str);
+}
+
+static inline unsigned char *
+_dbus_string_get_udata_len (DBusString *str, int start, int len)
+{
+  return (unsigned char *) _dbus_string_get_data_len (str, start, len);
+}
+
+static inline const unsigned char *
+_dbus_string_get_const_udata (const DBusString *str)
+{
+  return (const unsigned char *) _dbus_string_get_const_data (str);
+}
+
+static inline const unsigned char *
+_dbus_string_get_const_udata_len (const DBusString *str, int start, int len)
+{
+  return (const unsigned char *) _dbus_string_get_const_data_len (str, start, len);
+}
 
 /**
  * We allocate 1 byte for nul termination, plus 7 bytes for possible

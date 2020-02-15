@@ -7,7 +7,7 @@ set(CMAKE_LEGACY_CYGWIN_WIN32 0)
 project(dbus)
 
 # we need to be up to date
-CMAKE_MINIMUM_REQUIRED(VERSION 2.4.4 FATAL_ERROR)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.0.2 FATAL_ERROR)
 if(COMMAND cmake_policy)
     cmake_policy(SET CMP0003 NEW)
 endif(COMMAND cmake_policy)
@@ -43,10 +43,11 @@ autopackage(
 )
 
 include(Macros)
-TIMESTAMP(DBUS_BUILD_TIMESTAMP)
+string(TIMESTAMP DBUS_BUILD_TIMESTAMP "%Y%m%d%H%M" UTC)
 
 ########### basic vars ###############
 
+include(GNUInstallDirs)
 
 if (DBUSDIR)
 	set(DBUS_INSTALL_DIR "${DBUSDIR}")
@@ -61,62 +62,50 @@ else (DBUS_INSTALL_DIR)
 	set(DBUS_INSTALL_DIR "${CMAKE_INSTALL_PREFIX}")
 endif (DBUS_INSTALL_DIR)
 
-# autotools style
-if (NOT DATAROOTDIR)
-    set (DATAROOTDIR share)
-endif()
-
-if (NOT DATADIR)
-    set (DATADIR ${DATAROOTDIR})
-endif()
-
-if (NOT DOCDIR)
-    SET(DOCDIR ${DATAROOTDIR}/doc/dbus)
-endif()
-
-if (NOT DBUS_DATADIR)
-    SET(DBUS_DATADIR ${DATADIR})
-endif()
-
 set(DBUS_PREFIX ${DBUS_INSTALL_DIR})
 
 set(prefix                   ${DBUS_INSTALL_DIR})
 set(exec_prefix              ${prefix})
-set(EXPANDED_LIBDIR          ${DBUS_INSTALL_DIR}/lib)
-set(EXPANDED_INCLUDEDIR      ${DBUS_INSTALL_DIR}/include)
-set(EXPANDED_BINDIR          ${DBUS_INSTALL_DIR}/bin)
-set(EXPANDED_SYSCONFDIR      ${DBUS_INSTALL_DIR}/etc)
-set(EXPANDED_LOCALSTATEDIR   ${DBUS_INSTALL_DIR}/var)
-set(EXPANDED_DATADIR         ${DBUS_INSTALL_DIR}/${DBUS_DATADIR})
-set(DBUS_MACHINE_UUID_FILE   ${DBUS_INSTALL_DIR}/lib/dbus/machine-id)
-set(DBUS_BINDIR              ${EXPANDED_BINDIR})
-set(DBUS_DAEMONDIR           ${EXPANDED_BINDIR})
-set(DBUS_LOCALSTATEDIR       ${EXPANDED_LOCALSTATEDIR})
+set(DBUS_MACHINE_UUID_FILE   ${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/dbus/machine-id)
+set(DBUS_BINDIR              ${CMAKE_INSTALL_FULL_BINDIR})
+set(DBUS_DAEMONDIR           ${CMAKE_INSTALL_FULL_BINDIR})
+set(DBUS_LOCALSTATEDIR       ${CMAKE_INSTALL_FULL_LOCALSTATEDIR})
+set(DBUS_RUNSTATEDIR         ${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/run)
 
 # On Windows this is relative to where we put the bus setup, in
 # ${datadir}/dbus-1. For simplicity, we only do this if
 # ${sysconfdir} = ${prefix}/etc and ${datadir} = ${prefix}/share.
 #
 # On Unix, or on Windows with weird install layouts, it's the absolute path.
-if(WIN32 AND ${EXPANDED_SYSCONFDIR} STREQUAL ${prefix}/etc AND ${EXPANDED_DATADIR} STREQUAL ${prefix}/share)
+if(WIN32 AND ${CMAKE_INSTALL_FULL_SYSCONFDIR} STREQUAL ${prefix}/etc AND ${CMAKE_INSTALL_FULL_DATADIR} STREQUAL ${prefix}/share)
 set(SYSCONFDIR_FROM_PKGDATADIR ../../etc)
 set(DATADIR_FROM_PKGSYSCONFDIR ../../share)
 else()
-set(SYSCONFDIR_FROM_PKGDATADIR ${EXPANDED_SYSCONFDIR})
-set(DATADIR_FROM_PKGSYSCONFDIR ${EXPANDED_DATADIR})
+set(SYSCONFDIR_FROM_PKGDATADIR ${CMAKE_INSTALL_FULL_SYSCONFDIR})
+set(DATADIR_FROM_PKGSYSCONFDIR ${CMAKE_INSTALL_FULL_DATADIR})
 endif()
 
-set(DBUS_LIBEXECDIR          ${EXPANDED_LIBDIR})
-set(DBUS_DATADIR             ${EXPANDED_DATADIR})
+option (DBUS_RELOCATABLE "Attempt to make metadata relocatable" ON)
+
+# For simplicity, we're not relocatable if CMAKE_INSTALL_LIBDIR
+# is something more complicated (e.g. Debian multiarch);
+# we don't want to have to compute how many ../ to add
+if(CMAKE_INSTALL_LIBDIR STREQUAL "lib" OR CMAKE_INSTALL_LIBDIR STREQUAL "lib64")
+    # We know we can use ../ to get to the prefix. Do nothing.
+elseif(DBUS_RELOCATABLE)
+    # Sorry, it's too hard to make this particular build relocatable
+    message("Unusual CMAKE_INSTALL_LIBDIR: the generated package will not be relocatable.")
+    set(DBUS_RELOCATABLE OFF)
+endif()
+
+# used in the C code
+set(DBUS_LIBEXECDIR          ${CMAKE_INSTALL_FULL_LIBEXECDIR})
+set(DBUS_DATADIR             ${CMAKE_INSTALL_FULL_DATADIR})
 
 #enable building of shared library
 SET(BUILD_SHARED_LIBS ON)
 
-if(WIN32)
-    set(INSTALL_TARGETS_DEFAULT_ARGS  RUNTIME DESTINATION "bin" LIBRARY DESTINATION "lib" ARCHIVE DESTINATION "lib")
-else()
-    set(INSTALL_TARGETS_DEFAULT_ARGS  RUNTIME DESTINATION "${EXPANDED_LIBDIR}" LIBRARY DESTINATION "${EXPANDED_LIBDIR}" ARCHIVE DESTINATION "${EXPANDED_LIBDIR}")
-endif()
+set(INSTALL_TARGETS_DEFAULT_ARGS EXPORT DBus1Targets RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 if (CYGWIN)
    set (WIN32)
@@ -132,7 +121,6 @@ if (WIN32)
 endif (WIN32)
 
 if(NOT WIN32)
-	option (DBUS_ENABLE_ABSTRACT_SOCKETS "enable support for abstract sockets" ON)
 	set (CMAKE_THREAD_PREFER_PTHREAD ON)
 	include (FindThreads)
 endif(NOT WIN32)
@@ -169,44 +157,67 @@ if(VCS)
 	set(DBUS_VERBOSE_C_S 1 CACHE STRING "verbose mode" FORCE)
 endif(VCS)
 
-if(WIN32)
-	if(MSVC)
-		# controll folders in msvc projects
-		include(ProjectSourceGroup)
-		if(NOT GROUP_CODE)
-			#set(GROUP_CODE split) #cmake default
-			set(GROUP_CODE flat)
-		endif(NOT GROUP_CODE)
-		ADD_DEFINITIONS(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+if(MSVC)
+    # controll folders in msvc projects
+    include(ProjectSourceGroup)
+    if(NOT GROUP_CODE)
+        #set(GROUP_CODE split) #cmake default
+        set(GROUP_CODE flat)
+    endif(NOT GROUP_CODE)
+    ADD_DEFINITIONS(-D_CRT_SECURE_NO_DEPRECATE -D_CRT_NONSTDC_NO_DEPRECATE)
+    SET(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG}   /FIconfig.h")
+    SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /FIconfig.h")
+endif()
 
+#
+# setup warnings
+#
+if(MSVC)
+    # Use the highest warning level
+    if(WALL)
+        set(WALL 1 CACHE STRING "all warnings"  FORCE)
+        set(CMAKE_CXX_WARNING_LEVEL 4 CACHE STRING "warning level" FORCE)
+        if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
+            string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+        else()
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
+        endif()
 
-		# Use the highest warning level
-		if (WALL)
-			set(WALL 1 CACHE STRING "all warnings"  FORCE)
-			set(CMAKE_CXX_WARNING_LEVEL 4 CACHE STRING "warning level" FORCE)
+        if(CMAKE_C_FLAGS MATCHES "/W[0-4]")
+            string(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+        else()
+            set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /W4")
+        endif()
+    else()
+        set(CMAKE_CXX_WARNING_LEVEL 3 CACHE STRING "warning level" FORCE)
+    endif()
 
-			if(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-				STRING(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
-			else(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
-				SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4")
-			endif(CMAKE_CXX_FLAGS MATCHES "/W[0-4]")
+    # see https://msdn.microsoft.com/en-us/library/z78503e6.aspx
+    # 4018 'expression' : signed/unsigned mismatch
+    set(WARNINGS "4018")
+    # 4090 'operation' : different 'modifier' qualifiers
+    # 4101 'identifier' : unreferenced local variable
+    # 4127 conditional expression is constant
+    # 4244 'argument' : conversion from 'type1' to 'type2', possible loss of data
+    set(WARNINGS_DISABLED "4090 4101 4127 4244")
+    # 4002 too many actual parameters for macro 'identifier'
+    # 4003 not enough actual parameters for macro 'identifier'
+    # 4013 'function' undefined; assuming extern returning int
+    # 4028 formal parameter 'number' different from declaration
+    # 4031 second formal parameter list longer than the first list
+    # 4047 operator' : 'identifier1' differs in levels of indirection from 'identifier2'
+    # 4114 same type qualifier used more than once
+    # 4133 'type' : incompatible types - from 'type1' to 'type2'
+    set(WARNINGS_ERRORS "4002 4003 4013 4028 4031 4047 4114 4133")
+else()
+    set(WARNINGS "sign-compare")
+    set(WARNINGS_DISABLED "")
+    set(WARNINGS_ERRORS "")
+endif()
+generate_warning_cflags(WARNINGS_CFLAGS "${WARNINGS}" "${WARNINGS_DISABLED}" "${WARNINGS_ERRORS}")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${WARNINGS_CFLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${WARNINGS_CFLAGS}")
 
-			if(CMAKE_C_FLAGS MATCHES "/W[0-4]")
-				STRING(REGEX REPLACE "/W[0-4]" "/W4" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
-			else(CMAKE_C_FLAGS MATCHES "/W[0-4]")
-				SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /W4")
-			endif(CMAKE_C_FLAGS MATCHES "/W[0-4]")
-		else (WALL)
-			set(CMAKE_CXX_WARNING_LEVEL 3 CACHE STRING "warning level" FORCE)
-		endif (WALL)
-
-		SET(MSVC_W_ERROR   " /we4028 /we4013 /we4133 /we4047 /we4031 /we4002 /we4003 /we4114")
-		SET(MSVC_W_DISABLE " /wd4127 /wd4090 /wd4101 /wd4244")
-
-		SET(CMAKE_C_FLAGS_DEBUG   "${CMAKE_C_FLAGS_DEBUG}   /FIconfig.h ${MSVC_W_ERROR} ${MSVC_W_DISABLE}")
-		SET(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /FIconfig.h ${MSVC_W_ERROR} ${MSVC_W_DISABLE}")
-	endif(MSVC)
-endif(WIN32)
 
 if (UNIX AND NOT DBUS_DISABLE_ASSERT)
 	# required for backtrace
@@ -221,13 +232,6 @@ if(DBUS_WITH_GLIB)
 endif()
 
 SET(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}  -D_DEBUG")
-if(MSVC)
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  /w14018")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /w14018")
-else()
-    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wsign-compare")
-    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wsign-compare")
-endif()
 
 #########################################################################
 # Windows CE (>= 5.0.0)
@@ -359,10 +363,6 @@ if(NOT EXPAT_FOUND)
     message(FATAL_ERROR "expat not found!")
 endif(NOT EXPAT_FOUND)
 
-SET(XML_LIB "Expat")
-SET(XML_LIBRARY     ${EXPAT_LIBRARIES})
-SET(XML_INCLUDE_DIR ${EXPAT_INCLUDE_DIR})
-
 # all missing or hardcoded for now
 
 # 'hidden' ones
@@ -387,9 +387,6 @@ if(CMAKE_COMPILER_IS_GNUCC AND NOT DBUS_ENABLE_ANSI)
         endif("UNAME_OUTPUT" MATCHES "^.*i[0123]86.*$")
     endif(UNAME_EXECUTABLE)
 endif(CMAKE_COMPILER_IS_GNUCC AND NOT DBUS_ENABLE_ANSI)
-
-set (DBUS_HAVE_ATOMIC_INT ${atomic_int} CACHE STRING "Some atomic integer implementation present")
-set (DBUS_USE_ATOMIC_INT_486 ${atomic_int_486} CACHE STRING "Use atomic integer implementation for 486")
 
 if(X11_FOUND)
   option (DBUS_BUILD_X11 "Build with X11 autolaunch support " ON)
@@ -422,33 +419,22 @@ if (MSVC_IDE)
 endif (MSVC_IDE)
 
 #### Find socket directories
- if (NOT $ENV{TMPDIR} STREQUAL "")
-     set (DBUS_SESSION_SOCKET_DIR $ENV{TMPDIR})
- else (NOT $ENV{TMPDIR} STREQUAL "")
-     if (NOT $ENV{TEMP} STREQUAL "")
-         set (DBUS_SESSION_SOCKET_DIR $ENV{TEMP})
-     else (NOT $ENV{TEMP} STREQUAL "")
-         if (NOT $ENV{TMP} STREQUAL "")
-             set (DBUS_SESSION_SOCKET_DIR $ENV{TMP})
-         else (NOT $ENV{TMP} STREQUAL "")
-         if (WIN32)
-             #Should never happen, both TMP and TEMP seem always set on Windows
-             message(FATAL_ERROR "Could not determine a usable temporary directory")
-         else(WIN32)
-            set (DBUS_SESSION_SOCKET_DIR /tmp)
-         endif(WIN32)
-         endif (NOT $ENV{TMP} STREQUAL "")
-     endif (NOT $ENV{TEMP} STREQUAL "")
- endif (NOT $ENV{TMPDIR} STREQUAL "")
+if(UNIX)
+    if(NOT $ENV{TMPDIR} STREQUAL "")
+        set(DBUS_SESSION_SOCKET_DIR $ENV{TMPDIR})
+    elseif(NOT $ENV{TEMP} STREQUAL "")
+        set(DBUS_SESSION_SOCKET_DIR $ENV{TEMP})
+    elseif(NOT $ENV{TMP} STREQUAL "")
+        set(DBUS_SESSION_SOCKET_DIR $ENV{TMP})
+    else()
+        set(DBUS_SESSION_SOCKET_DIR /tmp)
+    endif()
+endif()
 
  # Not used on Windows, where there is no system bus
-set (DBUS_SYSTEM_PID_FILE ${DBUS_LOCALSTATEDIR}/run/dbus/pid)
+set (DBUS_SYSTEM_PID_FILE ${DBUS_RUNSTATEDIR}/dbus/pid)
 
-if (WIN32)
-	set (DBUS_CONSOLE_AUTH_DIR "")
-else (WIN32)
-	set (DBUS_CONSOLE_AUTH_DIR "/var/run/console/")
-endif (WIN32)
+set (DBUS_CONSOLE_AUTH_DIR "" CACHE STRING "Directory to check for pam_console/pam_foreground flag files, or empty to ignore")
 
 # This won't work on Windows. It's not meant to - the system bus is
 # meaningless on Windows anyway.
@@ -458,7 +444,7 @@ endif (WIN32)
 # and also to connect to. If this ever changes, it'll need to be split into
 # two variables, one for the listening address and one for the connecting
 # address.
-set (DBUS_SYSTEM_BUS_DEFAULT_ADDRESS "unix:path=${DBUS_LOCALSTATEDIR}/run/dbus/system_bus_socket" CACHE STRING "system bus default address")
+set (DBUS_SYSTEM_BUS_DEFAULT_ADDRESS "unix:path=${DBUS_RUNSTATEDIR}/dbus/system_bus_socket" CACHE STRING "system bus default address")
 
 if (WIN32)
   set (DBUS_SESSION_BUS_LISTEN_ADDRESS "autolaunch:" CACHE STRING "session bus default listening address")
@@ -504,12 +490,11 @@ if (DBUS_BUILD_TESTS)
     # set variables used for the .in files (substituted by configure_file) in test/data:
     set(DBUS_TEST_EXEC ${EXECUTABLE_OUTPUT_PATH}${IDE_BIN})
     set(DBUS_TEST_DATA ${CMAKE_BINARY_DIR}/test/data)
-    set(TEST_SOCKET_DIR ${DBUS_SESSION_SOCKET_DIR} )
     set(TEST_LAUNCH_HELPER_BINARY ${EXECUTABLE_OUTPUT_PATH}/dbus-daemon-launch-helper-test)
-    set(TEST_BUS_LAUNCH_BINARY ${EXECUTABLE_OUTPUT_PATH}/dbus-launch${EXEEXT})
     if (UNIX)
-        set (TEST_LISTEN "unix:tmpdir=${TEST_SOCKET_DIR}")
-    endif (UNIX)
+        set(TEST_SOCKET_DIR ${DBUS_SESSION_SOCKET_DIR})
+        set(TEST_LISTEN "unix:tmpdir=${TEST_SOCKET_DIR}")
+    endif()
     if (WIN32)
         set (TEST_LISTEN "tcp:host=localhost")
     endif (WIN32)
@@ -525,10 +510,30 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY
 
 if (WIN32)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/dbus-env.bat.cmake ${CMAKE_BINARY_DIR}/bin/dbus-env.bat )
-install_files(/bin FILES ${CMAKE_BINARY_DIR}/bin/dbus-env.bat)
+    install(FILES ${CMAKE_BINARY_DIR}/bin/dbus-env.bat DESTINATION bin)
 endif()
 
 add_definitions(-DHAVE_CONFIG_H=1)
+
+#
+# create cmake find_package related files
+#
+set(INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/DBus1)
+if(WIN32)
+   configure_file(DBus1Config.cmake.in "${CMAKE_BINARY_DIR}/DBus1Config.cmake" @ONLY)
+else()
+   configure_file(DBus1Config.pkgconfig.in "${CMAKE_BINARY_DIR}/DBus1Config.cmake" @ONLY)
+endif()
+configure_file(DBus1ConfigVersion.cmake.in "${CMAKE_BINARY_DIR}/DBus1ConfigVersion.cmake" @ONLY)
+install(FILES
+    "${CMAKE_BINARY_DIR}/DBus1Config.cmake"
+    "${CMAKE_BINARY_DIR}/DBus1ConfigVersion.cmake"
+    DESTINATION "${INSTALL_CMAKE_DIR}" COMPONENT dev
+)
+
+if(WIN32)
+    install(EXPORT DBus1Targets DESTINATION "${INSTALL_CMAKE_DIR}" COMPONENT dev)
+endif()
 
 ########### subdirs ###############
 
@@ -554,14 +559,14 @@ GET_FILENAME_COMPONENT(C_COMPILER ${CMAKE_C_COMPILER} NAME)
 GET_FILENAME_COMPONENT(CXX_COMPILER ${CMAKE_CXX_COMPILER} NAME)
 
 message("                  D-BUS ${DBUS_VERSION}                               ")
-message("                  ============                                        ")
+message("                  =============                                       ")
 message("                                                                      ")
 message("        install prefix:           ${prefix}                           ")
 message("        install exec_prefix:      ${exec_prefix}                      ")
-message("        install libdir:           ${EXPANDED_LIBDIR}                  ")
-message("        install bindir:           ${EXPANDED_BINDIR}                  ")
-message("        install sysconfdir:       ${EXPANDED_SYSCONFDIR}              ")
-message("        install datadir:          ${EXPANDED_DATADIR}                 ")
+message("        install libdir:           ${CMAKE_INSTALL_FULL_LIBDIR}        ")
+message("        install bindir:           ${CMAKE_INSTALL_FULL_BINDIR}        ")
+message("        install sysconfdir:       ${CMAKE_INSTALL_FULL_SYSCONFDIR}    ")
+message("        install datadir:          ${CMAKE_INSTALL_FULL_DATADIR}       ")
 message("        source code location:     ${DBUS_SOURCE_DIR}                  ")
 message("        build dir:                ${CMAKE_BINARY_DIR}                 ")
 message("        c compiler:               ${C_COMPILER}                       ")
@@ -592,19 +597,24 @@ message("        Building kqueue support:  ${DBUS_BUS_ENABLE_KQUEUE}           "
 message("        Building Doxygen docs:    ${DBUS_ENABLE_DOXYGEN_DOCS}         ")
 message("        Building XML docs:        ${DBUS_ENABLE_XML_DOCS}             ")
 message("        Daemon executable name:   ${DBUS_DAEMON_NAME}")
-if (WIN32)
-message("        System bus address:       ${DBUS_SYSTEM_BUS_DEFAULT_ADDRESS}  ")
+if(WIN32)
 message("        Session bus listens on:   ${DBUS_SESSION_BUS_LISTEN_ADDRESS}  ")
 message("        Session clients connect to: ${DBUS_SESSION_BUS_CONNECT_ADDRESS} ")
-else (WIN32)
-message("        System bus socket:        ${DBUS_SYSTEM_SOCKET}               ")
+else()
 message("        System bus address:       ${DBUS_SYSTEM_BUS_DEFAULT_ADDRESS}  ")
+message("        System bus socket:        ${DBUS_SYSTEM_SOCKET}               ")
 message("        System bus PID file:      ${DBUS_SYSTEM_PID_FILE}             ")
-message("        Session bus socket dir:   ${DBUS_SESSION_SOCKET_DIR}          ")
-message("        Console auth dir:         ${DBUS_CONSOLE_AUTH_DIR}            ")
 message("        System bus user:          ${DBUS_USER}                        ")
+message("        Session bus socket dir:   ${DBUS_SESSION_SOCKET_DIR}          ")
+
+if(DBUS_CONSOLE_AUTH_DIR)
+message("        pam_console auth dir:     ${DBUS_CONSOLE_AUTH_DIR}            ")
+else()
+message("        pam_console auth dir:     (none)                              ")
+endif()
+
 message("        'make check' socket dir:  ${TEST_SOCKET_DIR}                  ")
-endif (WIN32)
+endif()
 message("        Test listen address:      ${TEST_LISTEN}                      ")
 if (MSVC)
 message("        build timestamp:          ${DBUS_BUILD_TIMESTAMP}             ")
@@ -647,3 +657,33 @@ add_custom_target(help-options
     cmake -LH 
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
+
+#
+# create pkgconfig file
+#
+if(UNIX)
+    set(PLATFORM_LIBS pthread ${LIBRT})
+    include(FindPkgConfig QUIET)
+    if(PKG_CONFIG_FOUND)
+        # convert lists of link libraries into -lstdc++ -lm etc..
+        foreach(LIB ${CMAKE_C_IMPLICIT_LINK_LIBRARIES} ${PLATFORM_LIBS})
+            set(LIBDBUS_LIBS "${LIBDBUS_LIBS} -l${LIB}")
+        endforeach()
+        set(original_prefix "${CMAKE_INSTALL_PREFIX}")
+        if(DBUS_RELOCATABLE)
+            set(pkgconfig_prefix "\${pcfiledir}/../../")
+        else()
+            set(pkgconfig_prefix "\${original_prefix}")
+        endif()
+        set(exec_prefix "\${prefix}")
+        set(bindir "\${prefix}/${CMAKE_INSTALL_BINDIR}")
+        set(libdir "\${prefix}/${CMAKE_INSTALL_LIBDIR}")
+        set(includedir "\${prefix}/${CMAKE_INSTALL_INCLUDEDIR}")
+        set(sysconfdir "\${prefix}/${CMAKE_INSTALL_SYSCONFDIR}")
+        set(datadir "\${prefix}/${CMAKE_INSTALL_DATADIR}")
+        set(datarootdir "\${prefix}/${CMAKE_INSTALL_DATADIR}")
+        set(dbus_daemondir "\${prefix}/${CMAKE_INSTALL_BINDIR}")
+        configure_file(../dbus-1.pc.in ${CMAKE_BINARY_DIR}/dbus-1.pc @ONLY)
+        install(FILES ${CMAKE_BINARY_DIR}/dbus-1.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+    endif()
+endif()

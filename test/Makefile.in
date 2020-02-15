@@ -14,6 +14,9 @@
 
 @SET_MAKE@
 
+# aminclude_static.am generated automatically by Autoconf
+# from AX_AM_MACROS_STATIC on Sun Jun  9 13:09:33 BST 2019
+
 
 
 
@@ -96,110 +99,142 @@ host_triplet = @host@
 @DBUS_WITH_GLIB_TRUE@	test-utils-glib.h \
 @DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-TESTS = $(am__append_3) $(am__EXEEXT_13) $(am__EXEEXT_14)
+TESTS = $(am__append_3) $(am__EXEEXT_15) $(am__EXEEXT_16)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__append_2 = test-bus-launch-helper.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-bus-system.sh
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_3 = $(wrap_bus_tests) $(wrap_dbus_tests)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_4 = $(wrap_bus_tests) $(wrap_dbus_tests)
-noinst_PROGRAMS = $(am__EXEEXT_1) $(am__EXEEXT_8)
-testexec_PROGRAMS = $(am__EXEEXT_9)
+noinst_PROGRAMS = $(am__EXEEXT_10) $(am__EXEEXT_11)
+nobase_testexec_PROGRAMS = $(am__EXEEXT_9)
 @DBUS_WIN_TRUE@am__append_5 = manual-paths
 @DBUS_WITH_GLIB_TRUE@am__append_6 = \
 @DBUS_WITH_GLIB_TRUE@	test-corrupt \
 @DBUS_WITH_GLIB_TRUE@	test-dbus-daemon \
 @DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-eavesdrop \
 @DBUS_WITH_GLIB_TRUE@	test-fdpass \
+@DBUS_WITH_GLIB_TRUE@	test-message \
 @DBUS_WITH_GLIB_TRUE@	test-monitor \
 @DBUS_WITH_GLIB_TRUE@	test-loopback \
 @DBUS_WITH_GLIB_TRUE@	test-marshal \
 @DBUS_WITH_GLIB_TRUE@	test-refs \
 @DBUS_WITH_GLIB_TRUE@	test-relay \
+@DBUS_WITH_GLIB_TRUE@	test-server-oom \
 @DBUS_WITH_GLIB_TRUE@	test-syntax \
 @DBUS_WITH_GLIB_TRUE@	test-syslog \
 @DBUS_WITH_GLIB_TRUE@	test-uid-permissions \
+@DBUS_WITH_GLIB_TRUE@	test-variant \
 @DBUS_WITH_GLIB_TRUE@	$(NULL)
 
+
+# These binaries are used in tests but are not themselves tests
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_7 = \
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-sd-activation \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-apparmor-activation \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_8 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-sd-activation \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
+
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_9 = \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-fork.sh \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
 
+# Only runnable when installed, not from the source tree
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_10 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	integration/transient-services.sh \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-apparmor-activation.sh \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
+
+
 # Testing dbus-launch relies on special code in that binary.
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_9 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_11 = \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-launch-eval.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_10 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_12 = \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-launch-x11.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_WITH_GLIB_TRUE@am__append_11 = \
+@DBUS_WITH_GLIB_TRUE@am__append_13 = \
 @DBUS_WITH_GLIB_TRUE@	manual-authz \
+@DBUS_WITH_GLIB_TRUE@	manual-test-thread-blocking \
 @DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_12 = $(installable_tests)
-@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_13 = $(installable_tests)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_14 = $(installable_tests) $(installable_manual_tests)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_15 = $(dist_installable_test_scripts)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_16 = $(installable_test_meta) \
+@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_14 = $(installable_tests)
+@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_15 = $(installable_tests)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_16 = $(installable_helpers) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_manual_tests) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_tests)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_17 = $(dist_installed_test_scripts) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(dist_installable_test_scripts)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_18 = $(installable_test_meta) \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_test_meta_with_config)
-@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_17 = $(installable_tests) $(installable_manual_tests)
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_19 = $(installable_tests) $(installable_manual_tests)
 subdir = test
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
-	$(top_srcdir)/m4/compiler.m4 \
+	$(top_srcdir)/m4/ax_ac_append_to_file.m4 \
+	$(top_srcdir)/m4/ax_ac_print_to_file.m4 \
+	$(top_srcdir)/m4/ax_add_am_macro_static.m4 \
+	$(top_srcdir)/m4/ax_am_macros_static.m4 \
+	$(top_srcdir)/m4/ax_code_coverage.m4 \
+	$(top_srcdir)/m4/ax_file_escapes.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
 	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/tp-compiler-flag.m4 \
-	$(top_srcdir)/m4/tp-compiler-warnings.m4 \
 	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(am__dist_testexec_SCRIPTS_DIST) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am \
+	$(am__nobase_dist_testexec_SCRIPTS_DIST) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_1 = test-spawn$(EXEEXT) \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_1 = test-apparmor-activation$(EXEEXT)
+am__EXEEXT_2 = $(am__EXEEXT_1)
+@DBUS_WIN_TRUE@am__EXEEXT_3 = manual-paths$(EXEEXT)
+@DBUS_WITH_GLIB_TRUE@am__EXEEXT_4 = manual-authz$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	manual-test-thread-blocking$(EXEEXT)
+am__EXEEXT_5 = manual-backtrace$(EXEEXT) manual-dir-iter$(EXEEXT) \
+	manual-tcp$(EXEEXT) $(am__EXEEXT_3) $(am__EXEEXT_4)
+@DBUS_WITH_GLIB_TRUE@am__EXEEXT_6 = test-corrupt$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-eavesdrop$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-fdpass$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-message$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-monitor$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-loopback$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-marshal$(EXEEXT) test-refs$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-relay$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-server-oom$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-syntax$(EXEEXT) test-syslog$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-uid-permissions$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-variant$(EXEEXT)
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_7 = test-sd-activation$(EXEEXT)
+am__EXEEXT_8 = test-shell$(EXEEXT) test-printf$(EXEEXT) \
+	$(am__EXEEXT_6) $(am__EXEEXT_7)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_9 = $(am__EXEEXT_2) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_5) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_8)
+am__installdirs = "$(DESTDIR)$(testexecdir)" \
+	"$(DESTDIR)$(testexecdir)" "$(DESTDIR)$(testmetadir)"
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_10 = test-spawn$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-exit$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-names$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-segfault$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-service$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-shell-service$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-sleep-forever$(EXEEXT)
-@DBUS_WITH_GLIB_TRUE@am__EXEEXT_2 = test-corrupt$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-eavesdrop$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-fdpass$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-monitor$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-loopback$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-marshal$(EXEEXT) test-refs$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-relay$(EXEEXT) test-syntax$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-syslog$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-uid-permissions$(EXEEXT)
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_3 = test-sd-activation$(EXEEXT)
-am__EXEEXT_4 = test-shell$(EXEEXT) test-printf$(EXEEXT) \
-	$(am__EXEEXT_2) $(am__EXEEXT_3)
-@DBUS_WIN_TRUE@am__EXEEXT_5 = manual-paths$(EXEEXT)
-@DBUS_WITH_GLIB_TRUE@am__EXEEXT_6 = manual-authz$(EXEEXT)
-am__EXEEXT_7 = manual-dir-iter$(EXEEXT) manual-tcp$(EXEEXT) \
-	$(am__EXEEXT_5) $(am__EXEEXT_6)
-@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_8 = $(am__EXEEXT_4) \
-@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_7)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_9 = $(am__EXEEXT_4) \
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_7)
-am__installdirs = "$(DESTDIR)$(testexecdir)" \
-	"$(DESTDIR)$(testexecdir)" "$(DESTDIR)$(testmetadir)"
-PROGRAMS = $(noinst_PROGRAMS) $(testexec_PROGRAMS)
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_11 = $(am__EXEEXT_8) \
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_5)
+PROGRAMS = $(nobase_testexec_PROGRAMS) $(noinst_PROGRAMS)
 LTLIBRARIES = $(noinst_LTLIBRARIES)
-libdbus_testutils_la_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la \
+am__DEPENDENCIES_1 =
+libdbus_testutils_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la
 am__libdbus_testutils_la_SOURCES_DIST = test-utils.c test-utils.h \
 	test-utils-glib.c test-utils-glib.h
@@ -212,8 +247,10 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 am_manual_authz_OBJECTS = manual-authz.$(OBJEXT)
 manual_authz_OBJECTS = $(am_manual_authz_OBJECTS)
-am__DEPENDENCIES_1 =
 manual_authz_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am_manual_backtrace_OBJECTS = manual-backtrace.$(OBJEXT)
+manual_backtrace_OBJECTS = $(am_manual_backtrace_OBJECTS)
+manual_backtrace_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
 am_manual_dir_iter_OBJECTS = manual-dir-iter.$(OBJEXT)
 manual_dir_iter_OBJECTS = $(am_manual_dir_iter_OBJECTS)
 manual_dir_iter_DEPENDENCIES =  \
@@ -224,13 +261,25 @@ manual_paths_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
 am_manual_tcp_OBJECTS = manual-tcp.$(OBJEXT)
 manual_tcp_OBJECTS = $(am_manual_tcp_OBJECTS)
 manual_tcp_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
+am_manual_test_thread_blocking_OBJECTS = thread-blocking.$(OBJEXT)
+manual_test_thread_blocking_OBJECTS =  \
+	$(am_manual_test_thread_blocking_OBJECTS)
+manual_test_thread_blocking_DEPENDENCIES = libdbus-testutils.la \
+	$(am__DEPENDENCIES_1)
+am__test_apparmor_activation_SOURCES_DIST = sd-activation.c
+@DBUS_UNIX_TRUE@am_test_apparmor_activation_OBJECTS = test_apparmor_activation-sd-activation.$(OBJEXT)
+test_apparmor_activation_OBJECTS =  \
+	$(am_test_apparmor_activation_OBJECTS)
+@DBUS_UNIX_TRUE@test_apparmor_activation_DEPENDENCIES =  \
+@DBUS_UNIX_TRUE@	libdbus-testutils.la $(am__DEPENDENCIES_1) \
+@DBUS_UNIX_TRUE@	$(am__DEPENDENCIES_1)
 am_test_corrupt_OBJECTS = corrupt.$(OBJEXT)
 test_corrupt_OBJECTS = $(am_test_corrupt_OBJECTS)
 test_corrupt_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
 am_test_dbus_daemon_OBJECTS = dbus-daemon.$(OBJEXT)
 test_dbus_daemon_OBJECTS = $(am_test_dbus_daemon_OBJECTS)
 test_dbus_daemon_DEPENDENCIES = libdbus-testutils.la \
-	$(am__DEPENDENCIES_1)
+	$(am__DEPENDENCIES_1) $(am__DEPENDENCIES_1)
 am_test_dbus_daemon_eavesdrop_OBJECTS =  \
 	dbus-daemon-eavesdrop.$(OBJEXT)
 test_dbus_daemon_eavesdrop_OBJECTS =  \
@@ -250,6 +299,10 @@ test_loopback_DEPENDENCIES = libdbus-testutils.la \
 am_test_marshal_OBJECTS = marshal.$(OBJEXT)
 test_marshal_OBJECTS = $(am_test_marshal_OBJECTS)
 test_marshal_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am_test_message_OBJECTS = message.$(OBJEXT)
+test_message_OBJECTS = $(am_test_message_OBJECTS)
+test_message_DEPENDENCIES = libdbus-testutils.la \
+	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_1)
 am_test_monitor_OBJECTS = monitor.$(OBJEXT)
 test_monitor_OBJECTS = $(am_test_monitor_OBJECTS)
 test_monitor_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
@@ -275,6 +328,10 @@ test_sd_activation_OBJECTS = $(am_test_sd_activation_OBJECTS)
 test_segfault_SOURCES = test-segfault.c
 test_segfault_OBJECTS = test-segfault.$(OBJEXT)
 test_segfault_LDADD = $(LDADD)
+am_test_server_oom_OBJECTS = internals/server-oom.$(OBJEXT)
+test_server_oom_OBJECTS = $(am_test_server_oom_OBJECTS)
+test_server_oom_DEPENDENCIES = libdbus-testutils.la \
+	$(am__DEPENDENCIES_1)
 test_service_SOURCES = test-service.c
 test_service_OBJECTS = test-service.$(OBJEXT)
 test_service_DEPENDENCIES = libdbus-testutils.la
@@ -300,8 +357,13 @@ am_test_uid_permissions_OBJECTS = uid-permissions.$(OBJEXT)
 test_uid_permissions_OBJECTS = $(am_test_uid_permissions_OBJECTS)
 test_uid_permissions_DEPENDENCIES = libdbus-testutils.la \
 	$(am__DEPENDENCIES_1)
-am__dist_testexec_SCRIPTS_DIST = test-dbus-daemon-fork.sh \
-	test-dbus-launch-eval.sh test-dbus-launch-x11.sh
+am_test_variant_OBJECTS = internals/variant.$(OBJEXT)
+test_variant_OBJECTS = $(am_test_variant_OBJECTS)
+test_variant_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am__nobase_dist_testexec_SCRIPTS_DIST =  \
+	integration/transient-services.sh test-apparmor-activation.sh \
+	test-dbus-daemon-fork.sh test-dbus-launch-eval.sh \
+	test-dbus-launch-x11.sh
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -329,7 +391,7 @@ am__uninstall_files_from_dir = { \
     || { echo " ( cd '$$dir' && rm -f" $$files ")"; \
          $(am__cd) "$$dir" && rm -f $$files; }; \
   }
-SCRIPTS = $(dist_testexec_SCRIPTS)
+SCRIPTS = $(nobase_dist_testexec_SCRIPTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -349,8 +411,9 @@ am__depfiles_remade = ./$(DEPDIR)/corrupt.Po \
 	./$(DEPDIR)/dbus-daemon-eavesdrop.Po \
 	./$(DEPDIR)/dbus-daemon.Po ./$(DEPDIR)/fdpass.Po \
 	./$(DEPDIR)/loopback.Po ./$(DEPDIR)/manual-authz.Po \
-	./$(DEPDIR)/manual-dir-iter.Po ./$(DEPDIR)/manual-paths.Po \
-	./$(DEPDIR)/manual-tcp.Po ./$(DEPDIR)/marshal.Po \
+	./$(DEPDIR)/manual-backtrace.Po ./$(DEPDIR)/manual-dir-iter.Po \
+	./$(DEPDIR)/manual-paths.Po ./$(DEPDIR)/manual-tcp.Po \
+	./$(DEPDIR)/marshal.Po ./$(DEPDIR)/message.Po \
 	./$(DEPDIR)/monitor.Po ./$(DEPDIR)/relay.Po \
 	./$(DEPDIR)/sd-activation.Po ./$(DEPDIR)/shell-test.Po \
 	./$(DEPDIR)/spawn-test.Po ./$(DEPDIR)/syntax.Po \
@@ -359,8 +422,11 @@ am__depfiles_remade = ./$(DEPDIR)/corrupt.Po \
 	./$(DEPDIR)/test-shell-service.Po \
 	./$(DEPDIR)/test-sleep-forever.Po \
 	./$(DEPDIR)/test-utils-glib.Plo ./$(DEPDIR)/test-utils.Plo \
-	./$(DEPDIR)/uid-permissions.Po internals/$(DEPDIR)/printf.Po \
-	internals/$(DEPDIR)/refs.Po internals/$(DEPDIR)/syslog.Po
+	./$(DEPDIR)/test_apparmor_activation-sd-activation.Po \
+	./$(DEPDIR)/thread-blocking.Po ./$(DEPDIR)/uid-permissions.Po \
+	internals/$(DEPDIR)/printf.Po internals/$(DEPDIR)/refs.Po \
+	internals/$(DEPDIR)/server-oom.Po \
+	internals/$(DEPDIR)/syslog.Po internals/$(DEPDIR)/variant.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -381,31 +447,39 @@ am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(libdbus_testutils_la_SOURCES) $(manual_authz_SOURCES) \
-	$(manual_dir_iter_SOURCES) $(manual_paths_SOURCES) \
-	$(manual_tcp_SOURCES) $(test_corrupt_SOURCES) \
+	$(manual_backtrace_SOURCES) $(manual_dir_iter_SOURCES) \
+	$(manual_paths_SOURCES) $(manual_tcp_SOURCES) \
+	$(manual_test_thread_blocking_SOURCES) \
+	$(test_apparmor_activation_SOURCES) $(test_corrupt_SOURCES) \
 	$(test_dbus_daemon_SOURCES) \
 	$(test_dbus_daemon_eavesdrop_SOURCES) test-exit.c \
 	$(test_fdpass_SOURCES) $(test_loopback_SOURCES) \
-	$(test_marshal_SOURCES) $(test_monitor_SOURCES) test-names.c \
-	$(test_printf_SOURCES) $(test_refs_SOURCES) \
-	$(test_relay_SOURCES) $(test_sd_activation_SOURCES) \
-	test-segfault.c test-service.c $(test_shell_SOURCES) \
-	test-shell-service.c test-sleep-forever.c \
-	$(test_spawn_SOURCES) $(test_syntax_SOURCES) \
-	$(test_syslog_SOURCES) $(test_uid_permissions_SOURCES)
+	$(test_marshal_SOURCES) $(test_message_SOURCES) \
+	$(test_monitor_SOURCES) test-names.c $(test_printf_SOURCES) \
+	$(test_refs_SOURCES) $(test_relay_SOURCES) \
+	$(test_sd_activation_SOURCES) test-segfault.c \
+	$(test_server_oom_SOURCES) test-service.c \
+	$(test_shell_SOURCES) test-shell-service.c \
+	test-sleep-forever.c $(test_spawn_SOURCES) \
+	$(test_syntax_SOURCES) $(test_syslog_SOURCES) \
+	$(test_uid_permissions_SOURCES) $(test_variant_SOURCES)
 DIST_SOURCES = $(am__libdbus_testutils_la_SOURCES_DIST) \
-	$(manual_authz_SOURCES) $(manual_dir_iter_SOURCES) \
-	$(manual_paths_SOURCES) $(manual_tcp_SOURCES) \
+	$(manual_authz_SOURCES) $(manual_backtrace_SOURCES) \
+	$(manual_dir_iter_SOURCES) $(manual_paths_SOURCES) \
+	$(manual_tcp_SOURCES) $(manual_test_thread_blocking_SOURCES) \
+	$(am__test_apparmor_activation_SOURCES_DIST) \
 	$(test_corrupt_SOURCES) $(test_dbus_daemon_SOURCES) \
 	$(test_dbus_daemon_eavesdrop_SOURCES) test-exit.c \
 	$(test_fdpass_SOURCES) $(test_loopback_SOURCES) \
-	$(test_marshal_SOURCES) $(test_monitor_SOURCES) test-names.c \
-	$(test_printf_SOURCES) $(test_refs_SOURCES) \
-	$(test_relay_SOURCES) $(am__test_sd_activation_SOURCES_DIST) \
-	test-segfault.c test-service.c $(test_shell_SOURCES) \
-	test-shell-service.c test-sleep-forever.c \
-	$(test_spawn_SOURCES) $(test_syntax_SOURCES) \
-	$(test_syslog_SOURCES) $(test_uid_permissions_SOURCES)
+	$(test_marshal_SOURCES) $(test_message_SOURCES) \
+	$(test_monitor_SOURCES) test-names.c $(test_printf_SOURCES) \
+	$(test_refs_SOURCES) $(test_relay_SOURCES) \
+	$(am__test_sd_activation_SOURCES_DIST) test-segfault.c \
+	$(test_server_oom_SOURCES) test-service.c \
+	$(test_shell_SOURCES) test-shell-service.c \
+	test-sleep-forever.c $(test_spawn_SOURCES) \
+	$(test_syntax_SOURCES) $(test_syslog_SOURCES) \
+	$(test_uid_permissions_SOURCES) $(test_variant_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -419,7 +493,7 @@ am__can_run_installinfo = \
     n|no|NO) false;; \
     *) (install-info --version) >/dev/null 2>&1;; \
   esac
-DATA = $(noinst_DATA) $(testmeta_DATA)
+DATA = $(nobase_testmeta_DATA) $(noinst_DATA)
 RECURSIVE_CLEAN_TARGETS = mostlyclean-recursive clean-recursive	\
   distclean-recursive maintainer-clean-recursive
 am__recursive_targets = \
@@ -603,12 +677,12 @@ am__set_TESTS_bases = \
   bases=`for i in $$bases; do echo $$i; done | sed 's/\.log$$//'`; \
   bases=`echo $$bases`
 RECHECK_LOGS = $(TEST_LOGS)
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_10 =  \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_12 =  \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-fork.sh
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_11 = test-dbus-launch-eval.sh
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_12 = test-dbus-launch-x11.sh
-am__EXEEXT_13 = $(am__EXEEXT_10) $(am__EXEEXT_11) $(am__EXEEXT_12)
-@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_14 = $(am__EXEEXT_4)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_13 = test-dbus-launch-eval.sh
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_14 = test-dbus-launch-x11.sh
+am__EXEEXT_15 = $(am__EXEEXT_12) $(am__EXEEXT_13) $(am__EXEEXT_14)
+@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_16 = $(am__EXEEXT_8)
 TEST_SUITE_LOG = test-suite.log
 LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
 am__set_b = \
@@ -626,6 +700,7 @@ am__test_logs2 = $(am__test_logs1:@EXEEXT@.log=.log)
 TEST_LOGS = $(am__test_logs2:.sh.log=.log)
 SH_LOG_COMPILE = $(SH_LOG_COMPILER) $(AM_SH_LOG_FLAGS) $(SH_LOG_FLAGS)
 am__DIST_COMMON = $(srcdir)/Makefile.in \
+	$(top_srcdir)/aminclude_static.am \
 	$(top_srcdir)/build-aux/depcomp
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 am__relativize = \
@@ -657,6 +732,8 @@ ACLOCAL = @ACLOCAL@
 ADT_LIBS = @ADT_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+APPARMOR_2_10_CFLAGS = @APPARMOR_2_10_CFLAGS@
+APPARMOR_2_10_LIBS = @APPARMOR_2_10_LIBS@
 APPARMOR_CFLAGS = @APPARMOR_CFLAGS@
 APPARMOR_LIBS = @APPARMOR_LIBS@
 AR = @AR@
@@ -670,6 +747,11 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CFLAG_VISIBILITY = @CFLAG_VISIBILITY@
+CODE_COVERAGE_CFLAGS = @CODE_COVERAGE_CFLAGS@
+CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
+CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
+CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
+CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
@@ -679,7 +761,6 @@ CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR_FROM_PKGSYSCONFDIR = @DATADIR_FROM_PKGSYSCONFDIR@
 DBUS_BINDIR = @DBUS_BINDIR@
-DBUS_CONSOLE_AUTH_DIR = @DBUS_CONSOLE_AUTH_DIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
@@ -691,7 +772,6 @@ DBUS_LIBEXECDIR = @DBUS_LIBEXECDIR@
 DBUS_MAJOR_VERSION = @DBUS_MAJOR_VERSION@
 DBUS_MICRO_VERSION = @DBUS_MICRO_VERSION@
 DBUS_MINOR_VERSION = @DBUS_MINOR_VERSION@
-DBUS_PATH_OR_ABSTRACT = @DBUS_PATH_OR_ABSTRACT@
 DBUS_PREFIX = @DBUS_PREFIX@
 DBUS_SESSION_BUS_CONNECT_ADDRESS = @DBUS_SESSION_BUS_CONNECT_ADDRESS@
 DBUS_SESSION_BUS_LISTEN_ADDRESS = @DBUS_SESSION_BUS_LISTEN_ADDRESS@
@@ -727,9 +807,19 @@ EXPANDED_LIBDIR = @EXPANDED_LIBDIR@
 EXPANDED_LIBEXECDIR = @EXPANDED_LIBEXECDIR@
 EXPANDED_LOCALSTATEDIR = @EXPANDED_LOCALSTATEDIR@
 EXPANDED_PREFIX = @EXPANDED_PREFIX@
+EXPANDED_RUNSTATEDIR = @EXPANDED_RUNSTATEDIR@
 EXPANDED_SYSCONFDIR = @EXPANDED_SYSCONFDIR@
+EXPAT_CFLAGS = @EXPAT_CFLAGS@
+EXPAT_LIBS = @EXPAT_LIBS@
+EXTRA_CFLAGS = @EXTRA_CFLAGS@
+EXTRA_CXXFLAGS = @EXTRA_CXXFLAGS@
+EXTRA_LDFLAGS = @EXTRA_LDFLAGS@
 FGREP = @FGREP@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETTEXT_PACKAGE = @GETTEXT_PACKAGE@
+GIO_UNIX_CFLAGS = @GIO_UNIX_CFLAGS@
+GIO_UNIX_LIBS = @GIO_UNIX_LIBS@
 GLIB_CFLAGS = @GLIB_CFLAGS@
 GLIB_LIBS = @GLIB_LIBS@
 GREP = @GREP@
@@ -741,6 +831,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LAUNCHCTL = @LAUNCHCTL@
 LAUNCHD_AGENT_DIR = @LAUNCHD_AGENT_DIR@
+LCOV = @LCOV@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBDBUS_LIBS = @LIBDBUS_LIBS@
@@ -783,6 +874,7 @@ RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -799,11 +891,12 @@ THREAD_LIBS = @THREAD_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VERSION = @VERSION@
-WINDRES = @WINDRES@
+WARN_CFLAGS = @WARN_CFLAGS@
+WARN_CXXFLAGS = @WARN_CXXFLAGS@
+WARN_LDFLAGS = @WARN_LDFLAGS@
+WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
 XMKMF = @XMKMF@
 XMLTO = @XMLTO@
-XML_CFLAGS = @XML_CFLAGS@
-XML_LIBS = @XML_LIBS@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
 X_EXTRA_LIBS = @X_EXTRA_LIBS@
@@ -842,6 +935,8 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
+ifnGNUmake = @ifnGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -853,6 +948,7 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgconfig_prefix = @pkgconfig_prefix@
 pkgpyexecdir = @pkgpyexecdir@
 pkgpythondir = @pkgpythondir@
 prefix = @prefix@
@@ -871,26 +967,33 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-SUBDIRS = . name-test 
+SUBDIRS = . name-test
 DIST_SUBDIRS = name-test
-CLEANFILES = $(am__append_4) $(noinst_DATA) XDG_RUNTIME_DIR \
-	installable $(NULL)
+CLEANFILES = $(am__append_4) $(noinst_DATA) $(NULL)
 EXTRA_DIST = glib-tap-test.sh tap-test.sh.in dbus-test-runner \
 	$(in_data) $(static_data)
 AM_CPPFLAGS = \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	-I$(top_srcdir) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
 	-DDBUS_COMPILATION \
+	$(APPARMOR_CFLAGS) \
 	$(GLIB_CFLAGS) \
+	$(GIO_UNIX_CFLAGS) \
 	$(NULL)
 
 
 # improve backtraces from test stuff
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
+
 noinst_LTLIBRARIES = libdbus-testutils.la
 libdbus_testutils_la_SOURCES = test-utils.c test-utils.h $(NULL) \
 	$(am__append_1)
 libdbus_testutils_la_LIBADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la \
 	$(NULL)
@@ -925,8 +1028,14 @@ test_printf_SOURCES = internals/printf.c
 test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_refs_SOURCES = internals/refs.c
 test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+test_server_oom_SOURCES = internals/server-oom.c
+test_server_oom_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 test_syslog_SOURCES = internals/syslog.c
 test_syslog_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+test_variant_SOURCES = internals/variant.c
+test_variant_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+manual_backtrace_SOURCES = manual-backtrace.c
+manual_backtrace_LDADD = $(top_builddir)/dbus/libdbus-1.la
 manual_dir_iter_SOURCES = manual-dir-iter.c
 manual_dir_iter_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 manual_paths_SOURCES = manual-paths.c
@@ -935,46 +1044,67 @@ manual_tcp_SOURCES = manual-tcp.c
 manual_tcp_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 testexecdir = $(libexecdir)/installed-tests/dbus
 testmetadir = $(datadir)/installed-tests/dbus
-dist_testexec_SCRIPTS = $(am__append_15)
-testmeta_DATA = $(am__append_16)
+nobase_dist_testexec_SCRIPTS = $(am__append_17)
+nobase_testmeta_DATA = $(am__append_18)
+installable_helpers = $(NULL) $(am__append_7)
 installable_tests = test-shell test-printf $(NULL) $(am__append_6) \
-	$(am__append_7)
-installable_manual_tests = manual-dir-iter manual-tcp $(NULL) \
-	$(am__append_5) $(am__append_11)
-dist_installable_test_scripts = $(NULL) $(am__append_8) \
-	$(am__append_9) $(am__append_10)
+	$(am__append_8)
+installable_manual_tests = manual-backtrace manual-dir-iter manual-tcp \
+	$(NULL) $(am__append_5) $(am__append_13)
+dist_installable_test_scripts = $(NULL) $(am__append_9) \
+	$(am__append_11) $(am__append_12)
+dist_installed_test_scripts = $(NULL) $(am__append_10)
 installable_test_meta = \
 	$(dist_installable_test_scripts:=.test) \
+	$(dist_installed_test_scripts:=.test) \
 	$(installable_tests:=.test) \
 	$(NULL)
 
 installable_test_meta_with_config = \
 	$(dist_installable_test_scripts:=_with_config.test) \
+	$(dist_installed_test_scripts:=_with_config.test) \
 	$(installable_tests:=_with_config.test) \
 	$(NULL)
 
-installcheck_tests = $(dist_installable_test_scripts) $(am__append_13)
+installcheck_tests = $(dist_installable_test_scripts) $(am__append_15)
 installcheck_environment = \
+	export XDG_DATA_HOME=@abs_top_builddir@/test/XDG_DATA_HOME; \
+	export XDG_DATA_DIRS=@abs_top_builddir@/test/XDG_DATA_DIRS:$(DESTDIR)$(datadir); \
 	export XDG_RUNTIME_DIR=@abs_top_builddir@/test/XDG_RUNTIME_DIR; \
 	export DBUS_SESSION_BUS_ADDRESS=do-not-use-real-session:; \
 	export DBUS_TEST_DAEMON=$(DESTDIR)$(DBUS_DAEMONDIR)/dbus-daemon$(EXEEXT); \
 	export DBUS_TEST_DBUS_LAUNCH=$(DESTDIR)$(bindir)/dbus-launch$(EXEEXT); \
 	export DBUS_TEST_DBUS_MONITOR=$(DESTDIR)$(bindir)/dbus-monitor$(EXEEXT); \
 	export DBUS_TEST_DBUS_SEND=$(DESTDIR)$(bindir)/dbus-send$(EXEEXT); \
+	export DBUS_TEST_DBUS_UUIDGEN=$(DESTDIR)$(bindir)/dbus-uuidgen$(EXEEXT); \
+	export DBUS_TEST_EXEC=@abs_top_builddir@/test; \
 	export DBUS_TEST_HOMEDIR=@abs_top_builddir@/dbus; \
 	export DBUS_TEST_DATADIR=$(DESTDIR)$(datadir); \
+	export DBUS_TEST_UNINSTALLED=1; \
+	export HOME=@abs_top_builddir@/dbus; \
 	${NULL}
 
+
+# Tests in bus/config-parser.c rely on these specific values for XDG_* and
+# DBUS_TEST_BUILDDIR.
 AM_TESTS_ENVIRONMENT = \
+	export XDG_DATA_HOME=@abs_top_builddir@/test/XDG_DATA_HOME; \
+	export XDG_DATA_DIRS=@abs_top_builddir@/test/XDG_DATA_DIRS:@abs_top_builddir@/test/XDG_DATA_DIRS2; \
 	export XDG_RUNTIME_DIR=@abs_top_builddir@/test/XDG_RUNTIME_DIR; \
 	export DBUS_FATAL_WARNINGS=1; \
 	export DBUS_SESSION_BUS_ADDRESS=do-not-use-real-session:; \
+	export DBUS_TEST_BUILDDIR=@abs_builddir@; \
+	export DBUS_TEST_SRCDIR=@abs_srcdir@; \
 	export DBUS_TEST_DAEMON=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT); \
 	export DBUS_TEST_DBUS_LAUNCH=@abs_top_builddir@/tools/dbus-launch$(EXEEXT); \
 	export DBUS_TEST_DBUS_MONITOR=@abs_top_builddir@/tools/dbus-monitor$(EXEEXT); \
 	export DBUS_TEST_DBUS_SEND=@abs_top_builddir@/tools/dbus-send$(EXEEXT); \
+	export DBUS_TEST_DBUS_UUIDGEN=@abs_top_builddir@/tools/dbus-uuidgen$(EXEEXT); \
 	export DBUS_TEST_DATA=@abs_top_builddir@/test/data; \
+	export DBUS_TEST_EXEC=@abs_top_builddir@/test; \
 	export DBUS_TEST_HOMEDIR=@abs_top_builddir@/dbus; \
+	export DBUS_TEST_UNINSTALLED=1; \
+	export HOME=@abs_top_builddir@/dbus; \
 	$(NULL)
 
 manual_authz_SOURCES = manual-authz.c
@@ -982,6 +1112,21 @@ manual_authz_LDADD = \
     libdbus-testutils.la \
     $(GLIB_LIBS) \
     $(NULL)
+
+@DBUS_UNIX_TRUE@test_apparmor_activation_CPPFLAGS = \
+@DBUS_UNIX_TRUE@    $(AM_CPPFLAGS) \
+@DBUS_UNIX_TRUE@    -DDBUS_TEST_APPARMOR_ACTIVATION \
+@DBUS_UNIX_TRUE@    $(NULL)
+
+@DBUS_UNIX_TRUE@test_apparmor_activation_SOURCES = \
+@DBUS_UNIX_TRUE@    sd-activation.c \
+@DBUS_UNIX_TRUE@    $(NULL)
+
+@DBUS_UNIX_TRUE@test_apparmor_activation_LDADD = \
+@DBUS_UNIX_TRUE@    libdbus-testutils.la \
+@DBUS_UNIX_TRUE@    $(APPARMOR_LIBS) \
+@DBUS_UNIX_TRUE@    $(GLIB_LIBS) \
+@DBUS_UNIX_TRUE@    $(NULL)
 
 test_corrupt_SOURCES = corrupt.c
 test_corrupt_LDADD = \
@@ -1005,6 +1150,7 @@ test_dbus_daemon_SOURCES = dbus-daemon.c
 test_dbus_daemon_LDADD = \
     libdbus-testutils.la \
     $(GLIB_LIBS) \
+    $(GIO_UNIX_LIBS) \
     $(NULL)
 
 test_dbus_daemon_eavesdrop_SOURCES = dbus-daemon-eavesdrop.c
@@ -1028,6 +1174,16 @@ test_marshal_LDADD = \
     $(GLIB_LIBS) \
     $(NULL)
 
+test_message_SOURCES = \
+    message.c \
+    $(NULL)
+
+test_message_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
 test_monitor_SOURCES = \
     monitor.c \
     $(NULL)
@@ -1039,6 +1195,12 @@ test_monitor_LDADD = \
 
 test_syntax_SOURCES = syntax.c
 test_syntax_LDADD = \
+    libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+manual_test_thread_blocking_SOURCES = thread-blocking.c
+manual_test_thread_blocking_LDADD = \
     libdbus-testutils.la \
     $(GLIB_LIBS) \
     $(NULL)
@@ -1062,15 +1224,27 @@ test_fdpass_LDADD = \
     $(NULL)
 
 in_data = \
+	data/dbus-installed-tests.aaprofile.in \
+	data/systemd-activation/com.example.ReceiveDeniedByAppArmorLabel.service.in \
+	data/systemd-activation/com.example.SendDeniedByAppArmorLabel.service.in \
+	data/systemd-activation/com.example.SendDeniedByNonexistentAppArmorLabel.service.in \
+	data/systemd-activation/com.example.SystemdActivatable3.service.in \
 	data/valid-config-files-system/debug-allow-all-fail.conf.in \
 	data/valid-config-files-system/debug-allow-all-pass.conf.in \
 	data/valid-config-files/as-another-user.conf.in \
+	data/valid-config-files/count-fds.conf.in \
 	data/valid-config-files/debug-allow-all-sha1.conf.in \
 	data/valid-config-files/debug-allow-all.conf.in \
 	data/valid-config-files/finite-timeout.conf.in \
 	data/valid-config-files/forbidding.conf.in \
 	data/valid-config-files/incoming-limit.conf.in \
+	data/valid-config-files/max-completed-connections.conf.in \
+	data/valid-config-files/max-connections-per-user.conf.in \
+	data/valid-config-files/max-match-rules-per-connection.conf.in \
+	data/valid-config-files/max-names-per-connection.conf.in \
+	data/valid-config-files/max-replies-per-connection.conf.in \
 	data/valid-config-files/multi-user.conf.in \
+	data/valid-config-files/pending-fd-timeout.conf.in \
 	data/valid-config-files/systemd-activation.conf.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoExec.service.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoService.service.in \
@@ -1118,8 +1292,10 @@ static_data = \
 	data/invalid-config-files/circular-1.conf \
 	data/invalid-config-files/circular-2.conf \
 	data/invalid-config-files/circular-3.conf \
+	data/invalid-config-files/impossible-send.conf \
 	data/invalid-config-files/not-well-formed.conf \
 	data/invalid-config-files/truncated-file.conf \
+	data/invalid-config-files/send-and-receive.conf \
 	data/invalid-messages/array-of-nil.message \
 	data/invalid-messages/array-with-mixed-types.message \
 	data/invalid-messages/bad-boolean-array.message \
@@ -1140,15 +1316,20 @@ static_data = \
 	data/sha-1/bit-messages.sha1 \
 	data/sha-1/byte-hashes.sha1 \
 	data/sha-1/byte-messages.sha1 \
+	data/systemd-activation/com.example.ReceiveDenied.service \
+	data/systemd-activation/com.example.SendDenied.service \
+	data/systemd-activation/com.example.SendDeniedByAppArmorName.service \
 	data/systemd-activation/com.example.SystemdActivatable1.service \
 	data/systemd-activation/com.example.SystemdActivatable2.service \
-	data/systemd-activation/com.example.SystemdActivatable3.service \
 	data/systemd-activation/org.freedesktop.systemd1.service \
 	data/valid-config-files/basic.conf \
 	data/valid-config-files/basic.d/basic.conf \
+	data/valid-config-files/check-own-rules.conf \
 	data/valid-config-files/entities.conf \
 	data/valid-config-files/listen-unix-runtime.conf \
 	data/valid-config-files/many-rules.conf \
+	data/valid-config-files/standard-session-dirs.conf \
+	data/valid-config-files-system/many-rules.conf \
 	data/valid-config-files-system/system.d/test.conf \
 	data/valid-messages/array-of-array-of-uint32.message \
 	data/valid-messages/dict-simple.message \
@@ -1173,11 +1354,28 @@ imported_data = \
 	$(NULL)
 
 noinst_DATA = $(imported_data)
+@CODE_COVERAGE_ENABLED_TRUE@GITIGNOREFILES = $(GITIGNOREFILES) $(CODE_COVERAGE_OUTPUT_FILE) $(CODE_COVERAGE_OUTPUT_DIRECTORY)
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap = $(code_coverage_v_lcov_cap_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap_ = $(code_coverage_v_lcov_cap_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap_0 = @echo "  LCOV   --capture" $(CODE_COVERAGE_OUTPUT_FILE);
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_ign = $(code_coverage_v_lcov_ign_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_ign_ = $(code_coverage_v_lcov_ign_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_ign_0 = @echo "  LCOV   --remove /tmp/*" $(CODE_COVERAGE_IGNORE_PATTERN);
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_genhtml = $(code_coverage_v_genhtml_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_genhtml_ = $(code_coverage_v_genhtml_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_genhtml_0 = @echo "  GEN   " "$(CODE_COVERAGE_OUTPUT_DIRECTORY)";
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_quiet = $(code_coverage_quiet_$(V))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_quiet_ = $(code_coverage_quiet_$(AM_DEFAULT_VERBOSITY))
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_quiet_0 = --quiet
+
+# sanitizes the test-name: replaces with underscores: dashes and dots
+@CODE_COVERAGE_ENABLED_TRUE@code_coverage_sanitize = $(subst -,_,$(subst .,_,$(1)))
+@CODE_COVERAGE_ENABLED_TRUE@AM_DISTCHECK_CONFIGURE_FLAGS = $(AM_DISTCHECK_CONFIGURE_FLAGS) --disable-code-coverage
 all: all-recursive
 
 .SUFFIXES:
 .SUFFIXES: .c .lo .log .o .obj .sh .sh$(EXEEXT) .trs
-$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
+$(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am $(top_srcdir)/aminclude_static.am $(am__configure_deps)
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
@@ -1197,6 +1395,7 @@ Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__maybe_remake_depfiles)'; \
 	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__maybe_remake_depfiles);; \
 	esac;
+$(top_srcdir)/aminclude_static.am $(am__empty):
 
 $(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
@@ -1206,18 +1405,9 @@ $(top_srcdir)/configure: @MAINTAINER_MODE_TRUE@ $(am__configure_deps)
 $(ACLOCAL_M4): @MAINTAINER_MODE_TRUE@ $(am__aclocal_m4_deps)
 	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
 $(am__aclocal_m4_deps):
-
-clean-noinstPROGRAMS:
-	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
-	echo " rm -f" $$list; \
-	rm -f $$list || exit $$?; \
-	test -n "$(EXEEXT)" || exit 0; \
-	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
-	echo " rm -f" $$list; \
-	rm -f $$list
-install-testexecPROGRAMS: $(testexec_PROGRAMS)
+install-nobase_testexecPROGRAMS: $(nobase_testexec_PROGRAMS)
 	@$(NORMAL_INSTALL)
-	@list='$(testexec_PROGRAMS)'; test -n "$(testexecdir)" || list=; \
+	@list='$(nobase_testexec_PROGRAMS)'; test -n "$(testexecdir)" || list=; \
 	if test -n "$$list"; then \
 	  echo " $(MKDIR_P) '$(DESTDIR)$(testexecdir)'"; \
 	  $(MKDIR_P) "$(DESTDIR)$(testexecdir)" || exit 1; \
@@ -1229,7 +1419,7 @@ install-testexecPROGRAMS: $(testexec_PROGRAMS)
 	  ; then echo "$$p"; echo "$$p"; else :; fi; \
 	done | \
 	sed -e 'p;s,.*/,,;n;h' \
-	    -e 's|.*|.|' \
+	    -e 's|[^/]*$$||; s|^$$|.|' \
 	    -e 'p;x;s,.*/,,;s/$(EXEEXT)$$//;$(transform);s/$$/$(EXEEXT)/' | \
 	sed 'N;N;N;s,\n, ,g' | \
 	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1 } \
@@ -1238,26 +1428,41 @@ install-testexecPROGRAMS: $(testexec_PROGRAMS)
 	    else { print "f", $$3 "/" $$4, $$1; } } \
 	  END { for (d in files) print "f", d, files[d] }' | \
 	while read type dir files; do \
+	  case $$type in \
+	  d) echo " $(MKDIR_P) '$(DESTDIR)$(testexecdir)/$$dir'"; \
+	     $(MKDIR_P) "$(DESTDIR)$(testexecdir)/$$dir" || exit $$?;; \
+	  f) \
 	    if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
 	    test -z "$$files" || { \
 	    echo " $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files '$(DESTDIR)$(testexecdir)$$dir'"; \
 	    $(INSTALL_PROGRAM_ENV) $(LIBTOOL) $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=install $(INSTALL_PROGRAM) $$files "$(DESTDIR)$(testexecdir)$$dir" || exit $$?; \
 	    } \
+	  ;; esac \
 	; done
 
-uninstall-testexecPROGRAMS:
+uninstall-nobase_testexecPROGRAMS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(testexec_PROGRAMS)'; test -n "$(testexecdir)" || list=; \
+	@list='$(nobase_testexec_PROGRAMS)'; test -n "$(testexecdir)" || list=; \
 	files=`for p in $$list; do echo "$$p"; done | \
 	  sed -e 'h;s,^.*/,,;s/$(EXEEXT)$$//;$(transform)' \
 	      -e 's/$$/$(EXEEXT)/' \
+	      -e 'x;s,[^/]*$$,,;G;s,\n,,' \
 	`; \
 	test -n "$$list" || exit 0; \
 	echo " ( cd '$(DESTDIR)$(testexecdir)' && rm -f" $$files ")"; \
 	cd "$(DESTDIR)$(testexecdir)" && rm -f $$files
 
-clean-testexecPROGRAMS:
-	@list='$(testexec_PROGRAMS)'; test -n "$$list" || exit 0; \
+clean-nobase_testexecPROGRAMS:
+	@list='$(nobase_testexec_PROGRAMS)'; test -n "$$list" || exit 0; \
+	echo " rm -f" $$list; \
+	rm -f $$list || exit $$?; \
+	test -n "$(EXEEXT)" || exit 0; \
+	list=`for p in $$list; do echo "$$p"; done | sed 's/$(EXEEXT)$$//'`; \
+	echo " rm -f" $$list; \
+	rm -f $$list
+
+clean-noinstPROGRAMS:
+	@list='$(noinst_PROGRAMS)'; test -n "$$list" || exit 0; \
 	echo " rm -f" $$list; \
 	rm -f $$list || exit $$?; \
 	test -n "$(EXEEXT)" || exit 0; \
@@ -1283,6 +1488,10 @@ manual-authz$(EXEEXT): $(manual_authz_OBJECTS) $(manual_authz_DEPENDENCIES) $(EX
 	@rm -f manual-authz$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(manual_authz_OBJECTS) $(manual_authz_LDADD) $(LIBS)
 
+manual-backtrace$(EXEEXT): $(manual_backtrace_OBJECTS) $(manual_backtrace_DEPENDENCIES) $(EXTRA_manual_backtrace_DEPENDENCIES) 
+	@rm -f manual-backtrace$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(manual_backtrace_OBJECTS) $(manual_backtrace_LDADD) $(LIBS)
+
 manual-dir-iter$(EXEEXT): $(manual_dir_iter_OBJECTS) $(manual_dir_iter_DEPENDENCIES) $(EXTRA_manual_dir_iter_DEPENDENCIES) 
 	@rm -f manual-dir-iter$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(manual_dir_iter_OBJECTS) $(manual_dir_iter_LDADD) $(LIBS)
@@ -1294,6 +1503,14 @@ manual-paths$(EXEEXT): $(manual_paths_OBJECTS) $(manual_paths_DEPENDENCIES) $(EX
 manual-tcp$(EXEEXT): $(manual_tcp_OBJECTS) $(manual_tcp_DEPENDENCIES) $(EXTRA_manual_tcp_DEPENDENCIES) 
 	@rm -f manual-tcp$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(manual_tcp_OBJECTS) $(manual_tcp_LDADD) $(LIBS)
+
+manual-test-thread-blocking$(EXEEXT): $(manual_test_thread_blocking_OBJECTS) $(manual_test_thread_blocking_DEPENDENCIES) $(EXTRA_manual_test_thread_blocking_DEPENDENCIES) 
+	@rm -f manual-test-thread-blocking$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(manual_test_thread_blocking_OBJECTS) $(manual_test_thread_blocking_LDADD) $(LIBS)
+
+test-apparmor-activation$(EXEEXT): $(test_apparmor_activation_OBJECTS) $(test_apparmor_activation_DEPENDENCIES) $(EXTRA_test_apparmor_activation_DEPENDENCIES) 
+	@rm -f test-apparmor-activation$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_apparmor_activation_OBJECTS) $(test_apparmor_activation_LDADD) $(LIBS)
 
 test-corrupt$(EXEEXT): $(test_corrupt_OBJECTS) $(test_corrupt_DEPENDENCIES) $(EXTRA_test_corrupt_DEPENDENCIES) 
 	@rm -f test-corrupt$(EXEEXT)
@@ -1322,6 +1539,10 @@ test-loopback$(EXEEXT): $(test_loopback_OBJECTS) $(test_loopback_DEPENDENCIES) $
 test-marshal$(EXEEXT): $(test_marshal_OBJECTS) $(test_marshal_DEPENDENCIES) $(EXTRA_test_marshal_DEPENDENCIES) 
 	@rm -f test-marshal$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_marshal_OBJECTS) $(test_marshal_LDADD) $(LIBS)
+
+test-message$(EXEEXT): $(test_message_OBJECTS) $(test_message_DEPENDENCIES) $(EXTRA_test_message_DEPENDENCIES) 
+	@rm -f test-message$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_message_OBJECTS) $(test_message_LDADD) $(LIBS)
 
 test-monitor$(EXEEXT): $(test_monitor_OBJECTS) $(test_monitor_DEPENDENCIES) $(EXTRA_test_monitor_DEPENDENCIES) 
 	@rm -f test-monitor$(EXEEXT)
@@ -1360,6 +1581,12 @@ test-sd-activation$(EXEEXT): $(test_sd_activation_OBJECTS) $(test_sd_activation_
 test-segfault$(EXEEXT): $(test_segfault_OBJECTS) $(test_segfault_DEPENDENCIES) $(EXTRA_test_segfault_DEPENDENCIES) 
 	@rm -f test-segfault$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_segfault_OBJECTS) $(test_segfault_LDADD) $(LIBS)
+internals/server-oom.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-server-oom$(EXEEXT): $(test_server_oom_OBJECTS) $(test_server_oom_DEPENDENCIES) $(EXTRA_test_server_oom_DEPENDENCIES) 
+	@rm -f test-server-oom$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_server_oom_OBJECTS) $(test_server_oom_LDADD) $(LIBS)
 
 test-service$(EXEEXT): $(test_service_OBJECTS) $(test_service_DEPENDENCIES) $(EXTRA_test_service_DEPENDENCIES) 
 	@rm -f test-service$(EXEEXT)
@@ -1394,19 +1621,26 @@ test-syslog$(EXEEXT): $(test_syslog_OBJECTS) $(test_syslog_DEPENDENCIES) $(EXTRA
 test-uid-permissions$(EXEEXT): $(test_uid_permissions_OBJECTS) $(test_uid_permissions_DEPENDENCIES) $(EXTRA_test_uid_permissions_DEPENDENCIES) 
 	@rm -f test-uid-permissions$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_uid_permissions_OBJECTS) $(test_uid_permissions_LDADD) $(LIBS)
-install-dist_testexecSCRIPTS: $(dist_testexec_SCRIPTS)
+internals/variant.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-variant$(EXEEXT): $(test_variant_OBJECTS) $(test_variant_DEPENDENCIES) $(EXTRA_test_variant_DEPENDENCIES) 
+	@rm -f test-variant$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_variant_OBJECTS) $(test_variant_LDADD) $(LIBS)
+install-nobase_dist_testexecSCRIPTS: $(nobase_dist_testexec_SCRIPTS)
 	@$(NORMAL_INSTALL)
-	@list='$(dist_testexec_SCRIPTS)'; test -n "$(testexecdir)" || list=; \
+	@list='$(nobase_dist_testexec_SCRIPTS)'; test -n "$(testexecdir)" || list=; \
 	if test -n "$$list"; then \
 	  echo " $(MKDIR_P) '$(DESTDIR)$(testexecdir)'"; \
 	  $(MKDIR_P) "$(DESTDIR)$(testexecdir)" || exit 1; \
 	fi; \
+	$(am__nobase_strip_setup); \
 	for p in $$list; do \
 	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
 	  if test -f "$$d$$p"; then echo "$$d$$p"; echo "$$p"; else :; fi; \
 	done | \
 	sed -e 'p;s,.*/,,;n' \
-	    -e 'h;s|.*|.|' \
+	    -e "s|$$srcdirstrip/||" -e 'h;s|[^/]*$$||; s|^$$|.|' \
 	    -e 'p;x;s,.*/,,;$(transform)' | sed 'N;N;N;s,\n, ,g' | \
 	$(AWK) 'BEGIN { files["."] = ""; dirs["."] = 1; } \
 	  { d=$$3; if (dirs[d] != 1) { print "d", d; dirs[d] = 1 } \
@@ -1416,18 +1650,24 @@ install-dist_testexecSCRIPTS: $(dist_testexec_SCRIPTS)
 	    else { print "f", d "/" $$4, $$1 } } \
 	  END { for (d in files) print "f", d, files[d] }' | \
 	while read type dir files; do \
+	  case $$type in \
+	  d) echo " $(MKDIR_P) '$(DESTDIR)$(testexecdir)/$$dir'"; \
+	     $(MKDIR_P) "$(DESTDIR)$(testexecdir)/$$dir" || exit $$?;; \
+	  f) \
 	     if test "$$dir" = .; then dir=; else dir=/$$dir; fi; \
 	     test -z "$$files" || { \
 	       echo " $(INSTALL_SCRIPT) $$files '$(DESTDIR)$(testexecdir)$$dir'"; \
 	       $(INSTALL_SCRIPT) $$files "$(DESTDIR)$(testexecdir)$$dir" || exit $$?; \
 	     } \
+	  ;; esac \
 	; done
 
-uninstall-dist_testexecSCRIPTS:
+uninstall-nobase_dist_testexecSCRIPTS:
 	@$(NORMAL_UNINSTALL)
-	@list='$(dist_testexec_SCRIPTS)'; test -n "$(testexecdir)" || exit 0; \
-	files=`for p in $$list; do echo "$$p"; done | \
-	       sed -e 's,.*/,,;$(transform)'`; \
+	@list='$(nobase_dist_testexec_SCRIPTS)'; test -n "$(testexecdir)" || exit 0; \
+	$(am__nobase_strip_setup); \
+	files=`$(am__nobase_strip) \
+	       -e 'h;s,.*/,,;$(transform);x;s|[^/]*$$||;G;s,\n,,'`; \
 	dir='$(DESTDIR)$(testexecdir)'; $(am__uninstall_files_from_dir)
 
 mostlyclean-compile:
@@ -1443,10 +1683,12 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fdpass.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loopback.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-authz.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-backtrace.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-dir-iter.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-paths.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-tcp.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/marshal.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/message.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/monitor.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/relay.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/sd-activation.Po@am__quote@ # am--include-marker
@@ -1461,10 +1703,14 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-sleep-forever.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-utils-glib.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-utils.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_apparmor_activation-sd-activation.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/thread-blocking.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uid-permissions.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/printf.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/refs.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/server-oom.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/syslog.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/variant.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
 	@$(MKDIR_P) $(@D)
@@ -1496,31 +1742,48 @@ am--depfiles: $(am__depfiles_remade)
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LTCOMPILE) -c -o $@ $<
 
+test_apparmor_activation-sd-activation.o: sd-activation.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_apparmor_activation_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_apparmor_activation-sd-activation.o -MD -MP -MF $(DEPDIR)/test_apparmor_activation-sd-activation.Tpo -c -o test_apparmor_activation-sd-activation.o `test -f 'sd-activation.c' || echo '$(srcdir)/'`sd-activation.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_apparmor_activation-sd-activation.Tpo $(DEPDIR)/test_apparmor_activation-sd-activation.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sd-activation.c' object='test_apparmor_activation-sd-activation.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_apparmor_activation_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_apparmor_activation-sd-activation.o `test -f 'sd-activation.c' || echo '$(srcdir)/'`sd-activation.c
+
+test_apparmor_activation-sd-activation.obj: sd-activation.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_apparmor_activation_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT test_apparmor_activation-sd-activation.obj -MD -MP -MF $(DEPDIR)/test_apparmor_activation-sd-activation.Tpo -c -o test_apparmor_activation-sd-activation.obj `if test -f 'sd-activation.c'; then $(CYGPATH_W) 'sd-activation.c'; else $(CYGPATH_W) '$(srcdir)/sd-activation.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_apparmor_activation-sd-activation.Tpo $(DEPDIR)/test_apparmor_activation-sd-activation.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sd-activation.c' object='test_apparmor_activation-sd-activation.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_apparmor_activation_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_apparmor_activation-sd-activation.obj `if test -f 'sd-activation.c'; then $(CYGPATH_W) 'sd-activation.c'; else $(CYGPATH_W) '$(srcdir)/sd-activation.c'; fi`
+
 mostlyclean-libtool:
 	-rm -f *.lo
 
 clean-libtool:
 	-rm -rf .libs _libs
-install-testmetaDATA: $(testmeta_DATA)
+install-nobase_testmetaDATA: $(nobase_testmeta_DATA)
 	@$(NORMAL_INSTALL)
-	@list='$(testmeta_DATA)'; test -n "$(testmetadir)" || list=; \
+	@list='$(nobase_testmeta_DATA)'; test -n "$(testmetadir)" || list=; \
 	if test -n "$$list"; then \
 	  echo " $(MKDIR_P) '$(DESTDIR)$(testmetadir)'"; \
 	  $(MKDIR_P) "$(DESTDIR)$(testmetadir)" || exit 1; \
 	fi; \
-	for p in $$list; do \
-	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
-	  echo "$$d$$p"; \
-	done | $(am__base_list) | \
-	while read files; do \
-	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(testmetadir)'"; \
-	  $(INSTALL_DATA) $$files "$(DESTDIR)$(testmetadir)" || exit $$?; \
+	$(am__nobase_list) | while read dir files; do \
+	  xfiles=; for file in $$files; do \
+	    if test -f "$$file"; then xfiles="$$xfiles $$file"; \
+	    else xfiles="$$xfiles $(srcdir)/$$file"; fi; done; \
+	  test -z "$$xfiles" || { \
+	    test "x$$dir" = x. || { \
+	      echo " $(MKDIR_P) '$(DESTDIR)$(testmetadir)/$$dir'"; \
+	      $(MKDIR_P) "$(DESTDIR)$(testmetadir)/$$dir"; }; \
+	    echo " $(INSTALL_DATA) $$xfiles '$(DESTDIR)$(testmetadir)/$$dir'"; \
+	    $(INSTALL_DATA) $$xfiles "$(DESTDIR)$(testmetadir)/$$dir" || exit $$?; }; \
 	done
 
-uninstall-testmetaDATA:
+uninstall-nobase_testmetaDATA:
 	@$(NORMAL_UNINSTALL)
-	@list='$(testmeta_DATA)'; test -n "$(testmetadir)" || list=; \
-	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	@list='$(nobase_testmeta_DATA)'; test -n "$(testmetadir)" || list=; \
+	$(am__nobase_strip_setup); files=`$(am__nobase_strip)`; \
 	dir='$(DESTDIR)$(testmetadir)'; $(am__uninstall_files_from_dir)
 
 # This directory's subdirectories are mostly independent; you can cd
@@ -1805,6 +2068,13 @@ test-fdpass.log: test-fdpass$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-message.log: test-message$(EXEEXT)
+	@p='test-message$(EXEEXT)'; \
+	b='test-message'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-monitor.log: test-monitor$(EXEEXT)
 	@p='test-monitor$(EXEEXT)'; \
 	b='test-monitor'; \
@@ -1840,6 +2110,13 @@ test-relay.log: test-relay$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-server-oom.log: test-server-oom$(EXEEXT)
+	@p='test-server-oom$(EXEEXT)'; \
+	b='test-server-oom'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-syntax.log: test-syntax$(EXEEXT)
 	@p='test-syntax$(EXEEXT)'; \
 	b='test-syntax'; \
@@ -1857,6 +2134,13 @@ test-syslog.log: test-syslog$(EXEEXT)
 test-uid-permissions.log: test-uid-permissions$(EXEEXT)
 	@p='test-uid-permissions$(EXEEXT)'; \
 	b='test-uid-permissions'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-variant.log: test-variant$(EXEEXT)
+	@p='test-variant$(EXEEXT)'; \
+	b='test-variant'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -1990,8 +2274,8 @@ maintainer-clean-generic:
 clean: clean-recursive
 
 clean-am: clean-generic clean-libtool clean-local \
-	clean-noinstLTLIBRARIES clean-noinstPROGRAMS \
-	clean-testexecPROGRAMS mostlyclean-am
+	clean-nobase_testexecPROGRAMS clean-noinstLTLIBRARIES \
+	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-recursive
 		-rm -f ./$(DEPDIR)/corrupt.Po
@@ -2000,10 +2284,12 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/fdpass.Po
 	-rm -f ./$(DEPDIR)/loopback.Po
 	-rm -f ./$(DEPDIR)/manual-authz.Po
+	-rm -f ./$(DEPDIR)/manual-backtrace.Po
 	-rm -f ./$(DEPDIR)/manual-dir-iter.Po
 	-rm -f ./$(DEPDIR)/manual-paths.Po
 	-rm -f ./$(DEPDIR)/manual-tcp.Po
 	-rm -f ./$(DEPDIR)/marshal.Po
+	-rm -f ./$(DEPDIR)/message.Po
 	-rm -f ./$(DEPDIR)/monitor.Po
 	-rm -f ./$(DEPDIR)/relay.Po
 	-rm -f ./$(DEPDIR)/sd-activation.Po
@@ -2018,10 +2304,14 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/test-sleep-forever.Po
 	-rm -f ./$(DEPDIR)/test-utils-glib.Plo
 	-rm -f ./$(DEPDIR)/test-utils.Plo
+	-rm -f ./$(DEPDIR)/test_apparmor_activation-sd-activation.Po
+	-rm -f ./$(DEPDIR)/thread-blocking.Po
 	-rm -f ./$(DEPDIR)/uid-permissions.Po
 	-rm -f internals/$(DEPDIR)/printf.Po
 	-rm -f internals/$(DEPDIR)/refs.Po
+	-rm -f internals/$(DEPDIR)/server-oom.Po
 	-rm -f internals/$(DEPDIR)/syslog.Po
+	-rm -f internals/$(DEPDIR)/variant.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
 	distclean-tags
@@ -2038,13 +2328,14 @@ info: info-recursive
 
 info-am:
 
-install-data-am: install-data-local install-testmetaDATA
+install-data-am: install-data-local install-nobase_testmetaDATA
 
 install-dvi: install-dvi-recursive
 
 install-dvi-am:
 
-install-exec-am: install-dist_testexecSCRIPTS install-testexecPROGRAMS
+install-exec-am: install-nobase_dist_testexecSCRIPTS \
+	install-nobase_testexecPROGRAMS
 
 install-html: install-html-recursive
 
@@ -2073,10 +2364,12 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/fdpass.Po
 	-rm -f ./$(DEPDIR)/loopback.Po
 	-rm -f ./$(DEPDIR)/manual-authz.Po
+	-rm -f ./$(DEPDIR)/manual-backtrace.Po
 	-rm -f ./$(DEPDIR)/manual-dir-iter.Po
 	-rm -f ./$(DEPDIR)/manual-paths.Po
 	-rm -f ./$(DEPDIR)/manual-tcp.Po
 	-rm -f ./$(DEPDIR)/marshal.Po
+	-rm -f ./$(DEPDIR)/message.Po
 	-rm -f ./$(DEPDIR)/monitor.Po
 	-rm -f ./$(DEPDIR)/relay.Po
 	-rm -f ./$(DEPDIR)/sd-activation.Po
@@ -2091,10 +2384,14 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/test-sleep-forever.Po
 	-rm -f ./$(DEPDIR)/test-utils-glib.Plo
 	-rm -f ./$(DEPDIR)/test-utils.Plo
+	-rm -f ./$(DEPDIR)/test_apparmor_activation-sd-activation.Po
+	-rm -f ./$(DEPDIR)/thread-blocking.Po
 	-rm -f ./$(DEPDIR)/uid-permissions.Po
 	-rm -f internals/$(DEPDIR)/printf.Po
 	-rm -f internals/$(DEPDIR)/refs.Po
+	-rm -f internals/$(DEPDIR)/server-oom.Po
 	-rm -f internals/$(DEPDIR)/syslog.Po
+	-rm -f internals/$(DEPDIR)/variant.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
 
@@ -2111,30 +2408,33 @@ ps: ps-recursive
 
 ps-am:
 
-uninstall-am: uninstall-dist_testexecSCRIPTS \
-	uninstall-testexecPROGRAMS uninstall-testmetaDATA
+uninstall-am: uninstall-nobase_dist_testexecSCRIPTS \
+	uninstall-nobase_testexecPROGRAMS \
+	uninstall-nobase_testmetaDATA
 
 .MAKE: $(am__recursive_targets) check-am install-am install-strip
 
 .PHONY: $(am__recursive_targets) CTAGS GTAGS TAGS all all-am all-local \
 	am--depfiles check check-TESTS check-am clean clean-generic \
-	clean-libtool clean-local clean-noinstLTLIBRARIES \
-	clean-noinstPROGRAMS clean-testexecPROGRAMS cscopelist-am \
+	clean-libtool clean-local clean-nobase_testexecPROGRAMS \
+	clean-noinstLTLIBRARIES clean-noinstPROGRAMS cscopelist-am \
 	ctags ctags-am distclean distclean-compile distclean-generic \
 	distclean-libtool distclean-tags distdir dvi dvi-am html \
 	html-am info info-am install install-am install-data \
-	install-data-am install-data-local \
-	install-dist_testexecSCRIPTS install-dvi install-dvi-am \
+	install-data-am install-data-local install-dvi install-dvi-am \
 	install-exec install-exec-am install-html install-html-am \
-	install-info install-info-am install-man install-pdf \
-	install-pdf-am install-ps install-ps-am install-strip \
-	install-testexecPROGRAMS install-testmetaDATA installcheck \
-	installcheck-am installcheck-local installdirs installdirs-am \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-compile mostlyclean-generic mostlyclean-libtool \
-	pdf pdf-am ps ps-am recheck tags tags-am uninstall \
-	uninstall-am uninstall-dist_testexecSCRIPTS \
-	uninstall-testexecPROGRAMS uninstall-testmetaDATA
+	install-info install-info-am install-man \
+	install-nobase_dist_testexecSCRIPTS \
+	install-nobase_testexecPROGRAMS install-nobase_testmetaDATA \
+	install-pdf install-pdf-am install-ps install-ps-am \
+	install-strip installcheck installcheck-am installcheck-local \
+	installdirs installdirs-am maintainer-clean \
+	maintainer-clean-generic mostlyclean mostlyclean-compile \
+	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
+	recheck tags tags-am uninstall uninstall-am \
+	uninstall-nobase_dist_testexecSCRIPTS \
+	uninstall-nobase_testexecPROGRAMS \
+	uninstall-nobase_testmetaDATA
 
 .PRECIOUS: Makefile
 
@@ -2160,7 +2460,8 @@ installcheck-local:
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@		$(installable_tests); }
 
 all-local: copy-config-local uninstalled-config-local
-	@:
+	$(AM_V_at)$(MKDIR_P) XDG_RUNTIME_DIR
+	$(AM_V_at)chmod 0700 XDG_RUNTIME_DIR || true
 
 copy-config-local:
 	$(AM_V_at)$(MKDIR_P) data/valid-config-files/session.d
@@ -2230,6 +2531,7 @@ clean-local:
 			rm -f "$${F%.in}"; \
 		done; \
 	fi
+	rm -fr ./XDG_RUNTIME_DIR ./installable
 
 data/valid-config-files/session.conf: $(top_builddir)/bus/session.conf
 	$(AM_V_at)$(MKDIR_P) data/valid-config-files
@@ -2240,6 +2542,7 @@ data/valid-config-files-system/system.conf: $(top_builddir)/bus/system.conf
 	$(AM_V_GEN)cp $< $@
 
 $(installable_test_meta): %.test: %$(EXEEXT) Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN) ( \
 		echo '[Test]'; \
 		echo 'Type=session'; \
@@ -2248,12 +2551,115 @@ $(installable_test_meta): %.test: %$(EXEEXT) Makefile
 	) > $@.tmp && mv $@.tmp $@
 
 $(installable_test_meta_with_config): %_with_config.test: %$(EXEEXT) Makefile
+	$(AM_V_at)$(MKDIR_P) $(dir $@)
 	$(AM_V_GEN) ( \
 		echo '[Test]'; \
 		echo 'Type=session'; \
 		echo 'Output=TAP'; \
-		echo 'Exec=env DBUS_TEST_DATA=$(testexecdir)/data $(testexecdir)/$* --tap'; \
+		echo 'Exec=env DBUS_TEST_EXEC=$(testexecdir) DBUS_TEST_DATA=$(testexecdir)/data $(testexecdir)/$* --tap'; \
 	) > $@.tmp && mv $@.tmp $@
+
+# Code coverage
+#
+# Optional:
+#  - CODE_COVERAGE_DIRECTORY: Top-level directory for code coverage reporting.
+#    Multiple directories may be specified, separated by whitespace.
+#    (Default: $(top_builddir))
+#  - CODE_COVERAGE_OUTPUT_FILE: Filename and path for the .info file generated
+#    by lcov for code coverage. (Default:
+#    $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage.info)
+#  - CODE_COVERAGE_OUTPUT_DIRECTORY: Directory for generated code coverage
+#    reports to be created. (Default:
+#    $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage)
+#  - CODE_COVERAGE_BRANCH_COVERAGE: Set to 1 to enforce branch coverage,
+#    set to 0 to disable it and leave empty to stay with the default.
+#    (Default: empty)
+#  - CODE_COVERAGE_LCOV_SHOPTS_DEFAULT: Extra options shared between both lcov
+#    instances. (Default: based on )
+#  - CODE_COVERAGE_LCOV_SHOPTS: Extra options to shared between both lcov
+#    instances. (Default: )
+#  - CODE_COVERAGE_LCOV_OPTIONS_GCOVPATH: --gcov-tool pathtogcov
+#  - CODE_COVERAGE_LCOV_OPTIONS_DEFAULT: Extra options to pass to the
+#    collecting lcov instance. (Default: )
+#  - CODE_COVERAGE_LCOV_OPTIONS: Extra options to pass to the collecting lcov
+#    instance. (Default: )
+#  - CODE_COVERAGE_LCOV_RMOPTS_DEFAULT: Extra options to pass to the filtering
+#    lcov instance. (Default: empty)
+#  - CODE_COVERAGE_LCOV_RMOPTS: Extra options to pass to the filtering lcov
+#    instance. (Default: )
+#  - CODE_COVERAGE_GENHTML_OPTIONS_DEFAULT: Extra options to pass to the
+#    genhtml instance. (Default: based on )
+#  - CODE_COVERAGE_GENHTML_OPTIONS: Extra options to pass to the genhtml
+#    instance. (Default: )
+#  - CODE_COVERAGE_IGNORE_PATTERN: Extra glob pattern of files to ignore
+#
+# The generated report will be titled using the $(PACKAGE_NAME) and
+# $(PACKAGE_VERSION). In order to add the current git hash to the title,
+# use the git-version-gen script, available online.
+# Optional variables
+# run only on top dir
+@CODE_COVERAGE_ENABLED_TRUE@ ifeq ($(abs_builddir), $(abs_top_builddir))
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_DIRECTORY ?= $(top_builddir)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_OUTPUT_FILE ?= $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage.info
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_OUTPUT_DIRECTORY ?= $(PACKAGE_NAME)-$(PACKAGE_VERSION)-coverage
+
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_BRANCH_COVERAGE ?=
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_SHOPTS_DEFAULT ?= $(if $(CODE_COVERAGE_BRANCH_COVERAGE),--rc lcov_branch_coverage=$(CODE_COVERAGE_BRANCH_COVERAGE))
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_SHOPTS ?= $(CODE_COVERAGE_LCOV_SHOPTS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_OPTIONS_GCOVPATH ?= --gcov-tool "$(GCOV)"
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_OPTIONS_DEFAULT ?= $(CODE_COVERAGE_LCOV_OPTIONS_GCOVPATH)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_OPTIONS ?= $(CODE_COVERAGE_LCOV_OPTIONS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_RMOPTS_DEFAULT ?=
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_LCOV_RMOPTS ?= $(CODE_COVERAGE_LCOV_RMOPTS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_GENHTML_OPTIONS_DEFAULT ?=$(if $(CODE_COVERAGE_BRANCH_COVERAGE),--rc genhtml_branch_coverage=$(CODE_COVERAGE_BRANCH_COVERAGE))
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_GENHTML_OPTIONS ?= $(CODE_COVERAGE_GENHTML_OPTIONS_DEFAULT)
+@CODE_COVERAGE_ENABLED_TRUE@CODE_COVERAGE_IGNORE_PATTERN ?=
+
+# Use recursive makes in order to ignore errors during check
+@CODE_COVERAGE_ENABLED_TRUE@check-code-coverage:
+@CODE_COVERAGE_ENABLED_TRUE@	-$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) -k check
+@CODE_COVERAGE_ENABLED_TRUE@	$(AM_V_at)$(MAKE) $(AM_MAKEFLAGS) code-coverage-capture
+
+# Capture code coverage data
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-capture: code-coverage-capture-hook
+@CODE_COVERAGE_ENABLED_TRUE@	$(code_coverage_v_lcov_cap)$(LCOV) $(code_coverage_quiet) $(addprefix --directory ,$(CODE_COVERAGE_DIRECTORY)) --capture --output-file "$(CODE_COVERAGE_OUTPUT_FILE).tmp" --test-name "$(call code_coverage_sanitize,$(PACKAGE_NAME)-$(PACKAGE_VERSION))" --no-checksum --compat-libtool $(CODE_COVERAGE_LCOV_SHOPTS) $(CODE_COVERAGE_LCOV_OPTIONS)
+@CODE_COVERAGE_ENABLED_TRUE@	$(code_coverage_v_lcov_ign)$(LCOV) $(code_coverage_quiet) $(addprefix --directory ,$(CODE_COVERAGE_DIRECTORY)) --remove "$(CODE_COVERAGE_OUTPUT_FILE).tmp" "/tmp/*" $(CODE_COVERAGE_IGNORE_PATTERN) --output-file "$(CODE_COVERAGE_OUTPUT_FILE)" $(CODE_COVERAGE_LCOV_SHOPTS) $(CODE_COVERAGE_LCOV_RMOPTS)
+@CODE_COVERAGE_ENABLED_TRUE@	-@rm -f "$(CODE_COVERAGE_OUTPUT_FILE).tmp"
+@CODE_COVERAGE_ENABLED_TRUE@	$(code_coverage_v_genhtml)LANG=C $(GENHTML) $(code_coverage_quiet) $(addprefix --prefix ,$(CODE_COVERAGE_DIRECTORY)) --output-directory "$(CODE_COVERAGE_OUTPUT_DIRECTORY)" --title "$(PACKAGE_NAME)-$(PACKAGE_VERSION) Code Coverage" --legend --show-details "$(CODE_COVERAGE_OUTPUT_FILE)" $(CODE_COVERAGE_GENHTML_OPTIONS)
+@CODE_COVERAGE_ENABLED_TRUE@	@echo "file://$(abs_builddir)/$(CODE_COVERAGE_OUTPUT_DIRECTORY)/index.html"
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-clean:
+@CODE_COVERAGE_ENABLED_TRUE@	-$(LCOV) --directory $(top_builddir) -z
+@CODE_COVERAGE_ENABLED_TRUE@	-rm -rf "$(CODE_COVERAGE_OUTPUT_FILE)" "$(CODE_COVERAGE_OUTPUT_FILE).tmp" "$(CODE_COVERAGE_OUTPUT_DIRECTORY)"
+@CODE_COVERAGE_ENABLED_TRUE@	-find . \( -name "*.gcda" -o -name "*.gcno" -o -name "*.gcov" \) -delete
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-dist-clean:
+@CODE_COVERAGE_ENABLED_TRUE@ else # ifneq ($(abs_builddir), $(abs_top_builddir))
+@CODE_COVERAGE_ENABLED_TRUE@check-code-coverage:
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-capture: code-coverage-capture-hook
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-clean:
+
+@CODE_COVERAGE_ENABLED_TRUE@code-coverage-dist-clean:
+@CODE_COVERAGE_ENABLED_TRUE@ endif # ifeq ($(abs_builddir), $(abs_top_builddir))
+# Use recursive makes in order to ignore errors during check
+@CODE_COVERAGE_ENABLED_FALSE@check-code-coverage:
+@CODE_COVERAGE_ENABLED_FALSE@	@echo "Need to reconfigure with --enable-code-coverage"
+# Capture code coverage data
+@CODE_COVERAGE_ENABLED_FALSE@code-coverage-capture: code-coverage-capture-hook
+@CODE_COVERAGE_ENABLED_FALSE@	@echo "Need to reconfigure with --enable-code-coverage"
+
+@CODE_COVERAGE_ENABLED_FALSE@code-coverage-clean:
+
+@CODE_COVERAGE_ENABLED_FALSE@code-coverage-dist-clean:
+
+# Hook rule executed before code-coverage-capture, overridable by the user
+code-coverage-capture-hook:
+
+.PHONY: check-code-coverage code-coverage-capture code-coverage-dist-clean code-coverage-clean code-coverage-capture-hook
+
+# Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

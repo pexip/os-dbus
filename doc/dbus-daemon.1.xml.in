@@ -29,6 +29,9 @@
     <arg choice='opt'><arg choice='plain'>--print-address </arg><arg choice='opt'><replaceable>=DESCRIPTOR</replaceable></arg></arg>
     <arg choice='opt'><arg choice='plain'>--print-pid </arg><arg choice='opt'><replaceable>=DESCRIPTOR</replaceable></arg></arg>
     <arg choice='opt'>--fork </arg>
+    <arg choice='opt'>--nosyslog </arg>
+    <arg choice='opt'>--syslog </arg>
+    <arg choice='opt'>--syslog-only </arg>
     <sbr/>
 </cmdsynopsis>
 </refsynopsisdiv>
@@ -145,8 +148,10 @@ bus.</para>
   <varlistentry>
   <term><option>--address[=ADDRESS]</option></term>
   <listitem>
-<para>Set the address to listen on. This option overrides the address
-configured in the configuration file.</para>
+    <para>Set the address to listen on. This option overrides the address
+      configured in the configuration file via the
+      <literal>&lt;listen&gt;</literal> directive.
+      See the documentation of that directive for more details.</para>
   </listitem>
   </varlistentry>
   <varlistentry>
@@ -164,6 +169,36 @@ files.</para>
 
   </listitem>
   </varlistentry>
+
+  <varlistentry>
+    <term><option>--syslog</option></term>
+    <listitem>
+      <para>Force the message bus to use the system log for messages,
+        in addition to writing to standard error, even if the configuration
+        file does not specify that it should. On Unix, this uses
+        the syslog; on Windows, this uses OutputDebugString().</para>
+    </listitem>
+  </varlistentry>
+
+  <varlistentry>
+    <term><option>--syslog-only</option></term>
+    <listitem>
+      <para>Force the message bus to use the system log for messages,
+        and <emphasis>not</emphasis> duplicate them to standard error.
+        On Unix, this uses the syslog; on Windows, this uses
+        OutputDebugString().</para>
+    </listitem>
+  </varlistentry>
+
+  <varlistentry>
+    <term><option>--nosyslog</option></term>
+    <listitem>
+      <para>Force the message bus to use only standard error for messages,
+        even if the configuration file specifies that it should use
+        the system log.</para>
+    </listitem>
+  </varlistentry>
+
 </variablelist>
 </refsect1>
 
@@ -325,7 +360,9 @@ This may be useful to avoid affecting the behavior of child processes.</para>
 
 </itemizedlist>
 
-<para>If present, the bus daemon will log to syslog.</para>
+<para>If present, the bus daemon will log to syslog. The
+  --syslog, --syslog-only and --nosyslog command-line options take precedence
+  over this setting.</para>
 
 <itemizedlist remap='TP'>
 
@@ -349,6 +386,13 @@ mechanism will be authorized to connect. This option has no practical
 effect unless the ANONYMOUS mechanism has also been enabled using the
 <emphasis remap='I'>&lt;auth&gt;</emphasis> element, described below.</para>
 
+<para>Using this directive in the configuration of the well-known
+  system bus or the well-known session bus will make that bus insecure
+  and should never be done. Similarly, on custom bus types, using this
+  directive will usually make the custom bus insecure, unless its
+  configuration has been specifically designed to prevent anonymous
+  users from causing damage or escalating privileges.</para>
+
 <itemizedlist remap='TP'>
 
   <listitem><para><emphasis remap='I'>&lt;listen&gt;</emphasis></para></listitem>
@@ -360,6 +404,47 @@ effect unless the ANONYMOUS mechanism has also been enabled using the
 address is in the standard D-Bus format that contains
 a transport name plus possible parameters/options.</para>
 
+<para>On platforms other than Windows, <literal>unix</literal>-based
+  transports (<literal>unix</literal>, <literal>systemd</literal>,
+  <literal>launchd</literal>) are the default for both the well-known
+  system bus and the well-known session bus, and are strongly
+  recommended.</para>
+
+<para>
+  On Windows, <literal>unix</literal>-based transports are not available,
+  so TCP-based transports must be used.
+  Similar to remote X11, the <literal>tcp</literal> and
+  <literal>nonce-tcp</literal> transports have no integrity or
+  confidentiality protection, so they should normally only be
+  used across the local loopback interface, for example using an
+  address like <literal>tcp:host=127.0.0.1</literal> or
+  <literal>nonce-tcp:host=localhost</literal>. In particular,
+  configuring the well-known system bus or the well-known session
+  bus to listen on a non-loopback TCP address is insecure.
+</para>
+<para>
+  Developers are sometimes tempted to use remote TCP as a debugging
+  tool. However, if this functionality is left enabled in finished
+  products, the result will be dangerously insecure. Instead of
+  using remote TCP, developers should <ulink
+    url="https://lists.freedesktop.org/archives/dbus/2018-April/017447.html"
+    >relay connections via Secure Shell or a similar protocol</ulink>.
+  <!-- TODO: Ideally someone would write a more formal guide to
+       remote D-Bus debugging, and we could link to that instead -->
+</para>
+<para>
+  Remote TCP connections were historically sometimes used to share
+  a single session bus between login sessions of the same user on
+  different machines within a trusted local area network, in
+  conjunction with unencrypted remote X11, a NFS-shared home
+  directory and NIS (YP) authentication. This is insecure against
+  an attacker on the same LAN and should be considered strongly
+  deprecated; more specifically, it is insecure in the same ways
+  and for the same reasons as unencrypted remote X11 and NFSv2/NFSv3.
+  The D-Bus maintainers
+  recommend using a separate session bus per (user, machine) pair,
+  only accessible from within that machine.
+</para>
 
 <para>Example: &lt;listen&gt;unix:path=/tmp/foo&lt;/listen&gt;</para>
 
@@ -419,6 +504,10 @@ exist, then all known mechanisms are allowed.  If there are multiple
 &lt;auth&gt; elements, all the listed mechanisms are allowed.  The order in
 which mechanisms are listed is not meaningful.</para>
 
+<para>On non-Windows operating systems, allowing only the
+  <literal>EXTERNAL</literal> authentication
+  mechanism is strongly recommended. This is the default for the
+  well-known system bus and for the well-known session bus.</para>
 
 <para>Example: &lt;auth&gt;EXTERNAL&lt;/auth&gt;</para>
 
@@ -432,15 +521,22 @@ which mechanisms are listed is not meaningful.</para>
 
 </itemizedlist>
 
-<para>Adds a directory to scan for .service files. Directories are
-scanned starting with the first to appear in the config file
-(the first .service file found that provides a particular
-service will be used).</para>
+<para>
+  Adds a directory to search for .service files, which tell the
+  dbus-daemon how to start a program to provide a particular well-known
+  bus name. See the D-Bus Specification for more details about the
+  contents of .service files.
+</para>
 
-
-<para>Service files tell the bus how to automatically start a program.
-They are primarily used with the per-user-session bus,
-not the systemwide bus.</para>
+<para>
+  If a particular service is found in more than one &lt;servicedir&gt;,
+  the first directory listed in the configuration file takes precedence.
+  If two service files providing the same well-known bus name are found
+  in the same directory, it is arbitrary which one will be chosen
+  (this can only happen if at least one of the service files does not
+  have the recommended name, which is its well-known bus name followed
+  by ".service").
+</para>
 
 <itemizedlist remap='TP'>
 
@@ -449,16 +545,127 @@ not the systemwide bus.</para>
 
 </itemizedlist>
 
-<para>&lt;standard_session_servicedirs/&gt; is equivalent to specifying a series
-of &lt;servicedir/&gt; elements for each of the data directories in the "XDG
-Base Directory Specification" with the subdirectory "dbus-1/services",
-so for example "/usr/share/dbus-1/services" would be among the
-directories searched.</para>
+<para>
+  &lt;standard_session_servicedirs/&gt; requests a standard set of
+  session service directories. Its effect is similar to specifying a series
+  of &lt;servicedir/&gt; elements for each of the data directories,
+  in the order given here.
+  It is not exactly equivalent, because there is currently no way
+  to disable directory monitoring or enforce strict service file naming
+  for a &lt;servicedir/&gt;.
+</para>
 
+<para>
+  As with &lt;servicedir/&gt; elements, if a particular service is found
+  in more than one service directory, the first directory takes precedence.
+  If two service files providing the same well-known bus name are found
+  in the same directory, it is arbitrary which one will be chosen
+  (this can only happen if at least one of the service files does not
+  have the recommended name, which is its well-known bus name followed
+  by ".service").
+</para>
+
+<para>
+  On Unix, the standard session service directories are:
+  <itemizedlist>
+    <listitem>
+      <para>
+        <emphasis>$XDG_RUNTIME_DIR</emphasis>/dbus-1/services,
+        if XDG_RUNTIME_DIR is set (see the XDG Base Directory
+        Specification for details of XDG_RUNTIME_DIR):
+        this location is suitable for transient services created at runtime
+        by systemd generators (see
+        <citerefentry>
+          <refentrytitle>systemd.generator</refentrytitle>
+          <manvolnum>7</manvolnum>
+        </citerefentry>),
+        session managers or other session infrastructure.
+        It is an extension provided by the reference implementation
+        of dbus-daemon, and is not standardized in the D-Bus Specification.
+      </para>
+      <para>
+        Unlike the other standard session service directories, this directory
+        enforces strict naming for the service files: the filename must be
+        exactly the well-known bus name of the service, followed by
+        ".service".
+      </para>
+      <para>
+        Also unlike the other standard session service directories, this
+        directory is never monitored with
+        <citerefentry>
+          <refentrytitle>inotify</refentrytitle>
+          <manvolnum>7</manvolnum>
+        </citerefentry>
+        or similar APIs. Programs that create service files in this directory
+        while a dbus-daemon is running are expected to call the dbus-daemon's
+        ReloadConfig() method after they have made changes.
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        <emphasis>$XDG_DATA_HOME</emphasis>/dbus-1/services,
+        where XDG_DATA_HOME defaults to ~/.local/share
+        (see the XDG Base Directory Specification): this location is
+        specified by the D-Bus Specification, and is suitable for per-user,
+        locally-installed software.
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        <emphasis>directory</emphasis>/dbus-1/services for each
+        directory in XDG_DATA_DIRS, where XDG_DATA_DIRS defaults to
+        /usr/local/share:/usr/share
+        (see the XDG Base Directory Specification): these locations are
+        specified by the D-Bus Specification. The defaults are suitable
+        for software installed locally by a system administrator
+        (/usr/local/share) or for software installed from operating system
+        packages (/usr/share). Per-user or system-wide configuration that
+        sets the XDG_DATA_DIRS environment variable can extend this search
+        path to cover installations in other locations, for example
+        ~/.local/share/flatpak/exports/share/ and
+        /var/lib/flatpak/exports/share/ when
+        <citerefentry>
+          <refentrytitle>flatpak</refentrytitle>
+          <manvolnum>1</manvolnum>
+        </citerefentry>
+        is used.
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        <emphasis>${datadir}</emphasis>/dbus-1/services
+        for the <emphasis>${datadir}</emphasis> that was specified when
+        dbus was compiled, typically /usr/share: this location is an
+        extension provided by the reference dbus-daemon implementation,
+        and is suitable for software stacks installed alongside dbus-daemon.
+      </para>
+    </listitem>
+  </itemizedlist>
+</para>
 
 <para>The "XDG Base Directory Specification" can be found at
 <ulink url='http://freedesktop.org/wiki/Standards/basedir-spec'>http://freedesktop.org/wiki/Standards/basedir-spec</ulink> if it hasn't moved,
 otherwise try your favorite search engine.</para>
+
+<para>
+  On Windows, the standard session service directories are:
+  <itemizedlist>
+    <listitem>
+      <para>
+        <emphasis>%CommonProgramFiles%</emphasis>/dbus-1/services
+        if %CommonProgramFiles% is set: this location is suitable for
+        system-wide installed software packages
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        A share/dbus-1/services directory found in the same
+        directory hierarchy (prefix) as the dbus-daemon: this location
+        is suitable for software stacks installed alongside dbus-daemon
+      </para>
+    </listitem>
+  </itemizedlist>
+</para>
 
 
 <para>The &lt;standard_session_servicedirs/&gt; option is only relevant to the
@@ -474,9 +681,53 @@ configuration file would probably be nonsense.</para>
 </itemizedlist>
 
 <para>&lt;standard_system_servicedirs/&gt; specifies the standard system-wide
-activation directories that should be searched for service files.
-This option defaults to @EXPANDED_DATADIR@/dbus-1/system-services.</para>
+  activation directories that should be searched for service files.
+  As with session services, the first directory listed has highest
+  precedence.</para>
 
+<para>
+  On Unix, the standard session service directories are:
+  <itemizedlist>
+    <listitem>
+      <para>
+        /usr/local/share/dbus-1/system-services: this location is
+        specified by the D-Bus Specification, and is suitable for
+        software installed locally by the system administrator
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        /usr/share/dbus-1/system-services: this location is
+        specified by the D-Bus Specification, and is suitable for
+        software installed by operating system packages
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        <emphasis>${datadir}</emphasis>/dbus-1/system-services
+        for the <emphasis>${datadir}</emphasis> that was specified when
+        dbus was compiled, typically /usr/share: this location is an
+        extension provided by the reference dbus-daemon implementation,
+        and is suitable for software stacks installed alongside dbus-daemon
+      </para>
+    </listitem>
+    <listitem>
+      <para>
+        /lib/dbus-1/system-services: this location is
+        specified by the D-Bus Specification, and was intended for
+        software installed by operating system packages and used during
+        early boot (but it should be considered deprecated, because
+        the reference dbus-daemon is not designed to be available during
+        early boot)
+      </para>
+    </listitem>
+  </itemizedlist>
+</para>
+
+<para>
+  On Windows, there is no standard system bus, so there are no standard
+  system bus directories either.
+</para>
 
 <para>The &lt;standard_system_servicedirs/&gt; option is only relevant to the
 per-system bus daemon defined in
@@ -582,9 +833,13 @@ they are analogous to a firewall in that they allow expected traffic
 and prevent unexpected traffic.</para>
 
 
-<para>Currently, the system bus has a default-deny policy for sending method calls
-and owning bus names.  Everything else, in particular reply messages, receive
-checks, and signals has a default allow policy.</para>
+<para>
+  Currently, the system bus has a default-deny policy for sending method calls
+  and owning bus names, and a default-allow policy for receiving messages,
+  sending signals, and sending a single success or error reply for each
+  method call that does not have the <literal>NO_REPLY</literal> flag.
+  Sending more than the expected number of replies is not allowed.
+</para>
 
 
 <para>In general, it is best to keep system services as small, targeted programs which
@@ -638,29 +893,30 @@ statements, and works just like &lt;deny&gt; but with the inverse meaning.</para
 
 <para>The possible attributes of these elements are:</para>
 <literallayout remap='.nf'>
-   send_interface="interface_name"
-   send_member="method_or_signal_name"
-   send_error="error_name"
-   send_destination="name"
-   send_type="method_call" | "method_return" | "signal" | "error"
-   send_path="/path/name"
+   send_interface="interface_name" | "*"
+   send_member="method_or_signal_name" | "*"
+   send_error="error_name" | "*"
+   send_broadcast="true" | "false"
+   send_destination="name" | "*"
+   send_type="method_call" | "method_return" | "signal" | "error" | "*"
+   send_path="/path/name" | "*"
 
-   receive_interface="interface_name"
-   receive_member="method_or_signal_name"
-   receive_error="error_name"
-   receive_sender="name"
-   receive_type="method_call" | "method_return" | "signal" | "error"
-   receive_path="/path/name"
+   receive_interface="interface_name" | "*"
+   receive_member="method_or_signal_name" | "*"
+   receive_error="error_name" | "*"
+   receive_sender="name" | "*"
+   receive_type="method_call" | "method_return" | "signal" | "error" | "*"
+   receive_path="/path/name" | "*"
 
    send_requested_reply="true" | "false"
    receive_requested_reply="true" | "false"
 
    eavesdrop="true" | "false"
 
-   own="name"
+   own="name" | "*"
    own_prefix="name"
-   user="username"
-   group="groupname"
+   user="username" | "*"
+   group="groupname" | "*"
 </literallayout> <!-- .fi -->
 
 
@@ -678,14 +934,68 @@ statements, and works just like &lt;deny&gt; but with the inverse meaning.</para
 particular action. If it matches, the action is denied (unless later
 rules in the config file allow it).</para>
 
+<para>
+  Rules with one or more of the <literal>send_</literal>* family of attributes
+  are checked in order when a connection attempts to send a message. The last
+  rule that matches the message determines whether it may be sent.
+  The well-known session bus normally allows sending any message.
+  The well-known system bus normally allows sending any signal, selected
+  method calls to the <command>dbus-daemon</command>, and exactly one
+  reply to each previously-sent method call (either success or an error).
+  Either of these can be overridden by configuration; on the system bus,
+  services that will receive method calls must install configuration that
+  allows them to do so, usually via rules of the form
+  <literal>&lt;policy context="default"&gt;&lt;allow send_destination="&hellip;"/&gt;&lt;policy&gt;</literal>.
+</para>
+
+<para>
+  Rules with one or more of the <literal>receive_</literal>* family of
+  attributes, or with the <literal>eavesdrop</literal> attribute and no others,
+  are checked for each recipient of a message (there might be more than one
+  recipient if the message is a broadcast or a connection is eavesdropping).
+  The last rule that matches the message determines whether it may be received.
+  The well-known session bus normally allows receiving any message, including
+  eavesdropping. The well-known system bus normally allows receiving any
+  message that was not eavesdropped (any unicast message addressed to the
+  recipient, and any broadcast message).
+</para>
+
+<para>
+  The <literal>eavesdrop</literal>, <literal>min_fds</literal> and
+  <literal>max_fds</literal> attributes are modifiers that can be applied
+  to either <literal>send_</literal>* or <literal>receive_</literal>*
+  rules, and are documented below.
+</para>
+
 <para>send_destination and receive_sender rules mean that messages may not be
 sent to or received from the *owner* of the given name, not that
 they may not be sent *to that name*. That is, if a connection
 owns services A, B, C, and sending to A is denied, sending to B or C
-will not work either.</para>
+will not work either. As a special case,
+<literal>send_destination="*"</literal> matches any message
+(whether it has a destination specified or not), and
+<literal>receive_sender="*"</literal> similarly matches any message.</para>
 
-<para>The other send_* and receive_* attributes are purely textual/by-value
-matches against the given field in the message header.</para>
+<para>
+  Rules with <literal>send_broadcast="true"</literal> match signal messages
+  with no destination (broadcasts). Rules with
+  <literal>send_broadcast="false"</literal> are the inverse: they match any
+  unicast destination (unicast signals, together with all method calls, replies
+  and errors) but do not match messages with no destination (broadcasts). This
+  is not the same as <literal>send_destination="*"</literal>, which matches any
+  sent message, regardless of whether it has a destination or not.
+</para>
+
+<para>
+  The other <literal>send_</literal>* and <literal>receive_</literal>*
+  attributes are purely textual/by-value matches against the given field in
+  the message header, except that for the attributes where it is allowed,
+  <literal>*</literal> matches any message (whether it has the relevant
+  header field or not). For example, <literal>send_interface="*"</literal>
+  matches any sent message, even if it does not contain an interface header
+  field. More complex glob matching such as <literal>foo.bar.*</literal> is
+  not allowed.
+</para>
 
 <para>"Eavesdropping" occurs when an application receives a message that
 was explicitly addressed to a name the application does not own, or
@@ -720,16 +1030,44 @@ the rule matches only when the reply was not
 requested. [send|receive]_requested_reply="true" indicates that the rule applies
 always, regardless of pending reply state.</para>
 
+<para>
+  The <literal>min_fds</literal> and <literal>max_fds</literal> attributes
+  modify either <literal>send_</literal>* or <literal>receive_</literal>*
+  rules. A rule with the <literal>min_fds</literal> attribute only matches
+  messages if they have at least that many Unix file descriptors attached.
+  Conversely, a rule with the <literal>max_fds</literal> attribute only
+  matches messages if they have no more than that many file descriptors
+  attached. In practice, rules with these attributes will most commonly
+  take the form
+  <literal>&lt;allow send_destination="&hellip;" max_fds="0"/&gt;</literal>,
+  <literal>&lt;deny send_destination="&hellip;" min_fds="1"/&gt;</literal> or
+  <literal>&lt;deny receive_sender="*" min_fds="1"/&gt;</literal>.
+</para>
 
-<para>user and group denials mean that the given user or group may
-not connect to the message bus.</para>
+<para>
+  Rules with the <literal>user</literal> or <literal>group</literal>
+  attribute are checked when a new connection to the message bus is
+  established, and control whether the connection can continue.
+  Each of these attributes cannot be combined with any other
+  attribute. As a special case, both <literal>user="*"</literal> and
+  <literal>group="*"</literal> match any connection. If there are
+  no rules of this form, the default is to allow connections from the same
+  user ID that owns the <command>dbus-daemon</command> process. The well-known
+  session bus normally uses that default behaviour, while the well-known
+  system bus normally allows any connection.
+</para>
 
-
-<para>For "name", "username", "groupname", etc.
-the character "*" can be substituted, meaning "any." Complex globs
-like "foo.bar.*" aren't allowed for now because they'd be work to
-implement and maybe encourage sloppy security anyway.</para>
-
+<para>
+  Rules with the <literal>own</literal> or <literal>own_prefix</literal>
+  attribute are checked when a connection attempts to own a well-known bus
+  names. As a special case, <literal>own="*"</literal> matches any well-known
+  bus name. The well-known session bus normally allows any connection to
+  own any name, while the well-known system bus normally does not allow any
+  connection to own any name, except where allowed by further configuration.
+  System services that will own a name must install configuration that allows
+  them to do so, usually via rules of the form
+  <literal>&lt;policy user="some-system-user"&gt;&lt;allow own="&hellip;"/&gt;&lt;/policy&gt;</literal>.
+</para>
 
 <para>&lt;allow own_prefix="a.b"/&gt; allows you to own the name "a.b" or any
 name whose first dot-separated elements are "a.b": in particular,
