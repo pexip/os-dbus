@@ -18,7 +18,7 @@ _run_iteration (DBusConnection *conn)
   DBusPendingCall *dbus_pending;
   DBusMessage *method;
   DBusMessage *reply;
-  char *echo = "echo";
+  const char *echo = "echo";
 
   /* send the first message */
   method = dbus_message_new_method_call ("org.freedesktop.DBus.TestSuiteEchoService",
@@ -26,7 +26,12 @@ _run_iteration (DBusConnection *conn)
                                          "org.freedesktop.TestSuite",
                                          "Echo");
 
-  dbus_message_append_args (method, DBUS_TYPE_STRING, &echo, NULL);
+  if (!dbus_message_append_args (method, DBUS_TYPE_STRING, &echo, NULL))
+    {
+      fprintf (stderr, "Bail out! Failed to append arguments: OOM\n");
+      exit (1);
+    }
+
   dbus_connection_send_with_reply (conn, method, &echo_pending, -1);
   dbus_message_unref (method);
   
@@ -54,13 +59,13 @@ _run_iteration (DBusConnection *conn)
 
   if (reply == NULL)
     {
-      printf ("Failed: Reply is NULL ***\n");
+      printf ("Bail out! Reply is NULL ***\n");
       exit (1);
     }
 
   if (dbus_message_get_type (reply) == DBUS_MESSAGE_TYPE_ERROR)
     {
-      printf ("Failed: Reply is error: %s ***\n", dbus_message_get_error_name (reply));
+      printf ("Bail out! Reply is error: %s ***\n", dbus_message_get_error_name (reply));
       exit (1);
     } 
 
@@ -105,7 +110,7 @@ check_condvar_lock (DBusCondVar *condvar1,
     }
 }
 
-
+/* This test outputs TAP syntax: http://testanything.org/ */
 int
 main (int argc, char *argv[])
 {
@@ -116,14 +121,23 @@ main (int argc, char *argv[])
   DBusCondVar *dispatch_cond1, *io_path_cond1;
   DBusMutex *mutex2, *dispatch_mutex2, *io_path_mutex2;
   DBusCondVar *dispatch_cond2, *io_path_cond2;
+  int test_num = 0;
 
-  printf ("*** Testing late thread init\n");
+  printf ("# Testing late thread init\n");
 
   dbus_error_init (&error);
 
   conn = dbus_bus_get (DBUS_BUS_SESSION, &error);
 
-  _dbus_connection_test_get_locks (conn, &mutex1, 
+  if (conn == NULL)
+    {
+      fprintf (stderr, "Bail out! Failed to open connection to session bus: %s\n",
+               error.message);
+      dbus_error_free (&error);
+      return 1;
+    }
+
+  _dbus_connection_test_get_locks (conn, &mutex1,
                                          &dispatch_mutex1, 
                                          &io_path_mutex1,
                                          &dispatch_cond1,
@@ -140,8 +154,13 @@ main (int argc, char *argv[])
   check_mutex_lock (io_path_mutex1, io_path_mutex2, TRUE);
   check_condvar_lock (dispatch_cond1, dispatch_cond2, TRUE);
   check_condvar_lock (io_path_cond1, io_path_cond2, TRUE);
+  printf ("ok %d\n", ++test_num);
 
-  dbus_threads_init_default ();
+  if (!dbus_threads_init_default ())
+    {
+      fprintf (stderr, "Bail out! Failed to initialise threads: OOM\n");
+      return 1;
+    }
 
   _dbus_connection_test_get_locks (conn, &mutex1,
                                          &dispatch_mutex1,
@@ -161,6 +180,7 @@ main (int argc, char *argv[])
   check_mutex_lock (io_path_mutex1, io_path_mutex2, TRUE);
   check_condvar_lock (dispatch_cond1, dispatch_cond2, TRUE);
   check_condvar_lock (io_path_cond1, io_path_cond2, TRUE);
+  printf ("ok %d\n", ++test_num);
 
   method = dbus_message_new_method_call ("org.freedesktop.TestSuiteEchoService",
                                          "/org/freedesktop/TestSuite",
@@ -169,6 +189,6 @@ main (int argc, char *argv[])
   dbus_connection_send (conn, method, NULL);
   dbus_message_unref (method);
 
-  printf ("Success ***\n");
+  printf ("# Testing completed\n1..%d\n", test_num);
   exit (0);
 }

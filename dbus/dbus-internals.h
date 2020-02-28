@@ -42,7 +42,11 @@ void _dbus_warn               (const char *format,
 DBUS_PRIVATE_EXPORT
 void _dbus_warn_check_failed  (const char *format,
                                ...) _DBUS_GNUC_PRINTF (1, 2);
-
+DBUS_PRIVATE_EXPORT
+void _dbus_warn_return_if_fail (const char *function,
+                                const char *assertion,
+                                const char *file,
+                                int line);
 
 #if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)
 #define _DBUS_FUNCTION_NAME __func__
@@ -165,22 +169,17 @@ void _dbus_real_assert_not_reached (const char *explanation,
 #define _dbus_return_val_if_fail(condition, val)
 #else
 
-DBUS_PRIVATE_EXPORT
-extern const char *_dbus_return_if_fail_warning_format;
-
 #define _dbus_return_if_fail(condition) do {                                       \
    _dbus_assert ((*(const char*)_DBUS_FUNCTION_NAME) != '_');                      \
   if (!(condition)) {                                                              \
-    _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,                  \
-                             _DBUS_FUNCTION_NAME, #condition, __FILE__, __LINE__); \
+    _dbus_warn_return_if_fail (_DBUS_FUNCTION_NAME, #condition, __FILE__, __LINE__); \
     return;                                                                        \
   } } while (0)
 
 #define _dbus_return_val_if_fail(condition, val) do {                                   \
    _dbus_assert ((*(const char*)_DBUS_FUNCTION_NAME) != '_');                           \
   if (!(condition)) {                                                                   \
-    _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,                       \
-                             _DBUS_FUNCTION_NAME, #condition, __FILE__, __LINE__);      \
+    _dbus_warn_return_if_fail (_DBUS_FUNCTION_NAME, #condition, __FILE__, __LINE__); \
     return (val);                                                                       \
   } } while (0)
 
@@ -250,6 +249,8 @@ void*       _dbus_memdup                (const void  *mem,
 DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_string_array_contains (const char **array,
                                          const char  *str);
+DBUS_PRIVATE_EXPORT
+size_t      _dbus_string_array_length   (const char **array);
 char**      _dbus_dup_string_array      (const char **array);
 
 #define _DBUS_INT16_MIN	 ((dbus_int16_t) 0x8000)
@@ -300,6 +301,8 @@ void _dbus_set_error_valist (DBusError  *error,
                              const char *format,
                              va_list     args) _DBUS_GNUC_PRINTF (3, 0);
 
+typedef dbus_bool_t (* DBusTestMemoryFunction)  (void *data);
+
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
 /* Memory debugging */
 void        _dbus_set_fail_alloc_counter        (int  until_next_fail);
@@ -311,7 +314,6 @@ dbus_bool_t _dbus_disable_mem_pools             (void);
 DBUS_PRIVATE_EXPORT
 int         _dbus_get_malloc_blocks_outstanding (void);
 
-typedef dbus_bool_t (* DBusTestMemoryFunction)  (void *data);
 DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_test_oom_handling (const char             *description,
                                      DBusTestMemoryFunction  func,
@@ -325,7 +327,9 @@ dbus_bool_t _dbus_test_oom_handling (const char             *description,
  */
 #define _dbus_decrement_fail_alloc_counter() (FALSE)
 #define _dbus_disable_mem_pools()            (FALSE)
-#define _dbus_get_malloc_blocks_outstanding  (0)
+#define _dbus_get_malloc_blocks_outstanding() (0)
+
+#define _dbus_test_oom_handling(description, func, data) ((*func) (data))
 #endif /* !DBUS_ENABLE_EMBEDDED_TESTS */
 
 typedef void (* DBusShutdownFunction) (void *data);
@@ -408,6 +412,7 @@ dbus_bool_t _dbus_write_uuid_file (const DBusString *filename,
                                    const DBusGUID   *uuid,
                                    DBusError        *error);
 
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str,
                                                   DBusError  *error);
 

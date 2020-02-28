@@ -1517,9 +1517,14 @@ send_rejected (DBusAuth *auth)
                             "REJECTED"))
     goto nomem;
 
-  i = 0;
-  while (all_mechanisms[i].mechanism != NULL)
+  for (i = 0; all_mechanisms[i].mechanism != NULL; i++)
     {
+      /* skip mechanisms that aren't allowed */
+      if (auth->allowed_mechs != NULL &&
+          !_dbus_string_array_contains ((const char**)auth->allowed_mechs,
+                                        all_mechanisms[i].mechanism))
+        continue;
+
       if (!_dbus_string_append (&command,
                                 " "))
         goto nomem;
@@ -1527,8 +1532,6 @@ send_rejected (DBusAuth *auth)
       if (!_dbus_string_append (&command,
                                 all_mechanisms[i].mechanism))
         goto nomem;
-      
-      ++i;
     }
   
   if (!_dbus_string_append (&command, "\r\n"))
@@ -2867,6 +2870,45 @@ dbus_bool_t
 _dbus_auth_get_unix_fd_negotiated(DBusAuth *auth)
 {
   return auth->unix_fd_negotiated;
+}
+
+/**
+ * Queries whether the given auth mechanism is supported.
+ *
+ * @param auth the auth mechanism to query for
+ * @returns #TRUE when auth mechanism is supported
+ */
+dbus_bool_t
+_dbus_auth_is_supported_mechanism (DBusString *name)
+{
+  _dbus_assert (name != NULL);
+
+  return find_mech (name, NULL) != NULL;
+}
+
+/**
+ * Return a human-readable string containing all supported auth mechanisms.
+ *
+ * @param string to hold the supported auth mechanisms
+ * @returns #FALSE on oom
+ */
+dbus_bool_t
+_dbus_auth_dump_supported_mechanisms (DBusString *buffer)
+{
+  unsigned int i;
+  _dbus_assert (buffer != NULL);
+
+  for (i = 0; all_mechanisms[i].mechanism != NULL; i++)
+    {
+      if (i > 0)
+        {
+          if (!_dbus_string_append (buffer, ", "))
+            return FALSE;
+        }
+      if (!_dbus_string_append (buffer, all_mechanisms[i].mechanism))
+        return FALSE;
+    }
+  return TRUE;
 }
 
 /** @} */

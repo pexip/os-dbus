@@ -10,7 +10,13 @@
 <xsl:template match="/">
   <book title="D-Bus: A system for interprocess communication"
         name="dbus"
-        link="dbus-tutorial.html">
+        link="{$prefix}/api/index.html"
+        xmlns="http://www.devhelp.net/book"
+        version="2"
+        online="https://dbus.freedesktop.org/doc/"
+        author="D-Bus contributors"
+        language="c"
+        >
   <chapters>
      <sub name="Tutorial" link="{$prefix}dbus-tutorial.html"/>
      <sub name="FAQ" link="{$prefix}dbus-faq.html"/>
@@ -32,7 +38,7 @@
   <xsl:param name="link"><xsl:value-of select="$before"/>.html#<xsl:value-of select="$after"/></xsl:param>
   <xsl:if test="starts-with($name,'dbus') or starts-with($name, 'DBus')">
     <xsl:if test="starts-with($refid,'group__') and contains($refid, '_1')">
-       <function name="{$name}" link="{$prefix}api/{$link}"/>
+       <keyword xmlns="http://www.devhelp.net/book" type="function" name="{$name}" link="{$prefix}api/{$link}"/>
     </xsl:if>
   </xsl:if>
 </xsl:template>

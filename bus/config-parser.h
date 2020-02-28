@@ -73,6 +73,8 @@ DBusList**  bus_config_parser_get_conf_dirs    (BusConfigParser *parser);
 BusPolicy*  bus_config_parser_steal_policy     (BusConfigParser *parser);
 void        bus_config_parser_get_limits       (BusConfigParser *parser,
                                                 BusLimits       *limits);
+dbus_bool_t bus_config_parser_get_watched_dirs (BusConfigParser  *parser,
+                                                DBusList        **watched_dirs);
 
 DBusHashTable* bus_config_parser_steal_service_context_table (BusConfigParser *parser);
 
@@ -83,5 +85,24 @@ BusConfigParser* bus_config_load (const DBusString      *file,
                                   dbus_bool_t            is_toplevel,
                                   const BusConfigParser *parent,
                                   DBusError             *error);
+
+/*
+ * These are chosen such that if we configure a directory twice with different
+ * flags, we have to do an "and" operation on the flags - the compatible
+ * thing to do is to have no flags.
+ */
+typedef enum
+{
+  BUS_SERVICE_DIR_FLAGS_NO_WATCH = (1 << 0),
+  BUS_SERVICE_DIR_FLAGS_STRICT_NAMING = (1 << 1),
+  /* Keep this one at the end to reduce diffs when adding new entries */
+  BUS_SERVICE_DIR_FLAGS_NONE = 0
+} BusServiceDirFlags;
+
+typedef struct
+{
+  BusServiceDirFlags flags;
+  char *path;
+} BusConfigServiceDir;
 
 #endif /* BUS_CONFIG_PARSER_H */

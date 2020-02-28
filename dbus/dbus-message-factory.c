@@ -139,11 +139,11 @@ generate_trivial_inner (DBusMessageDataIter *iter,
         _dbus_assert_not_reached ("oom");
       
       {
-        DBusMessageIter iter;
+        DBusMessageIter iter2;
         const char *v_STRING = "This is an error";
         
-        dbus_message_iter_init_append (message, &iter);
-        if (!dbus_message_iter_append_basic (&iter,
+        dbus_message_iter_init_append (message, &iter2);
+        if (!dbus_message_iter_append_basic (&iter2,
                                              DBUS_TYPE_STRING,
                                              &v_STRING))
           _dbus_assert_not_reached ("oom");
@@ -362,19 +362,24 @@ message_with_nesting_levels (int levels)
   dbus_message_iter_init_append (message, &parents[i]);
   while (i < levels)
     {
-      dbus_message_iter_open_container (&parents[i], DBUS_TYPE_VARIANT,
-                                        i == (levels - 1) ?
-                                        DBUS_TYPE_INT32_AS_STRING :
-                                        DBUS_TYPE_VARIANT_AS_STRING,
-                                        &children[i]);
+      if (!dbus_message_iter_open_container (&parents[i], DBUS_TYPE_VARIANT,
+                                             i == (levels - 1) ?
+                                             DBUS_TYPE_INT32_AS_STRING :
+                                             DBUS_TYPE_VARIANT_AS_STRING,
+                                             &children[i]))
+        _dbus_assert_not_reached ("oom");
       ++i;
       parents[i] = children[i-1];
     }
   --i;
-  dbus_message_iter_append_basic (&children[i], DBUS_TYPE_INT32, &v_INT32);
+
+  if (!dbus_message_iter_append_basic (&children[i], DBUS_TYPE_INT32, &v_INT32))
+    _dbus_assert_not_reached ("oom");
+
   while (i >= 0)
     {
-      dbus_message_iter_close_container (&parents[i], &children[i]);
+      if (!dbus_message_iter_close_container (&parents[i], &children[i]))
+        _dbus_assert_not_reached ("oom");
       --i;
     }
 

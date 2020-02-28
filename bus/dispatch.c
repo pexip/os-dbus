@@ -70,6 +70,7 @@ send_one_message (DBusConnection *connection,
                                           addressed_recipient,
                                           connection,
                                           message,
+                                          NULL,
                                           &stack_error))
     {
       if (!bus_transaction_capture_error_reply (transaction, sender,
@@ -147,7 +148,7 @@ bus_dispatch_matches (BusTransaction *transaction,
       if (!bus_context_check_security_policy (context, transaction,
                                               sender, addressed_recipient,
                                               addressed_recipient,
-                                              message, error))
+                                              message, NULL, error))
         return FALSE;
 
       if (dbus_message_contains_unix_fds (message) &&
@@ -380,7 +381,8 @@ bus_dispatch (DBusConnection *connection,
         }
 
       if (!bus_context_check_security_policy (context, transaction,
-                                              connection, NULL, NULL, message, &error))
+                                              connection, NULL, NULL, message,
+                                              NULL, &error))
         {
           _dbus_verbose ("Security policy rejected message\n");
           goto out;
@@ -426,12 +428,13 @@ bus_dispatch (DBusConnection *connection,
               goto out;
             }
 
-          /* We can't do the security policy check here, since the addressed
-           * recipient service doesn't exist yet. We do it before sending the
-           * message after the service has been created.
-           */
           activation = bus_connection_get_activation (connection);
 
+          /* This will do as much of a security policy check as it can.
+           * We can't do the full security policy check here, since the
+           * addressed recipient service doesn't exist yet. We do it before
+           * sending the message after the service has been created.
+           */
           if (!bus_activation_activate_service (activation, connection, transaction, TRUE,
                                                 message, service_name, &error))
             {
@@ -644,7 +647,7 @@ warn_unexpected_real (DBusConnection *connection,
                       int             line)
 {
   if (message)
-    _dbus_warn ("%s:%d received message interface \"%s\" member \"%s\" error name \"%s\" on %p, expecting %s\n",
+    _dbus_warn ("%s:%d received message interface \"%s\" member \"%s\" error name \"%s\" on %p, expecting %s",
                 function, line,
                 dbus_message_get_interface (message) ?
                 dbus_message_get_interface (message) : "(unset)",
@@ -655,7 +658,7 @@ warn_unexpected_real (DBusConnection *connection,
                 connection,
                 expected);
   else
-    _dbus_warn ("%s:%d received no message on %p, expecting %s\n",
+    _dbus_warn ("%s:%d received no message on %p, expecting %s",
                 function, line, connection, expected);
 }
 
@@ -715,7 +718,7 @@ check_service_owner_changed_foreach (DBusConnection *connection,
       message = pop_message_waiting_for_memory (connection);
       if (message == NULL)
         {
-          _dbus_warn ("Did not receive a message on %p, expecting %s\n",
+          _dbus_warn ("Did not receive a message on %p, expecting %s",
                       connection, "NameOwnerChanged");
           goto out;
         }
@@ -751,7 +754,7 @@ check_service_owner_changed_foreach (DBusConnection *connection,
             }
           else
             {
-              _dbus_warn ("Did not get the expected arguments\n");
+              _dbus_warn ("Did not get the expected arguments");
               goto out;
             }
         }
@@ -760,13 +763,13 @@ check_service_owner_changed_foreach (DBusConnection *connection,
           || (d->expected_kind == OWNER_CHANGED   && (!old_owner[0] || !new_owner[0]))
           || (d->expected_kind == SERVICE_DELETED && (!old_owner[0] ||  new_owner[0])))
         {
-          _dbus_warn ("inconsistent NameOwnerChanged arguments\n");
+          _dbus_warn ("inconsistent NameOwnerChanged arguments");
           goto out;
         }
 
       if (strcmp (service_name, d->expected_service_name) != 0)
         {
-          _dbus_warn ("expected info on service %s, got info on %s\n",
+          _dbus_warn ("expected info on service %s, got info on %s",
                       d->expected_service_name,
                       service_name);
           goto out;
@@ -775,7 +778,7 @@ check_service_owner_changed_foreach (DBusConnection *connection,
       if (*service_name == ':' && new_owner[0]
           && strcmp (service_name, new_owner) != 0)
         {
-          _dbus_warn ("inconsistent ServiceOwnedChanged message (\"%s\" [ %s -> %s ])\n",
+          _dbus_warn ("inconsistent ServiceOwnedChanged message (\"%s\" [ %s -> %s ])",
                       service_name, old_owner, new_owner);
           goto out;
         }
@@ -987,7 +990,7 @@ check_hello_message (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Hello", serial, connection);
       goto out;
     }
@@ -996,7 +999,7 @@ check_hello_message (BusContext     *context,
 
   if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
     {
-      _dbus_warn ("Message has wrong sender %s\n",
+      _dbus_warn ("Message has wrong sender %s",
                   dbus_message_get_sender (message) ?
                   dbus_message_get_sender (message) : "(none)");
       goto out;
@@ -1046,7 +1049,7 @@ check_hello_message (BusContext     *context,
           else
             {
               _dbus_assert (dbus_error_is_set (&error));
-              _dbus_warn ("Did not get the expected single string argument to hello\n");
+              _dbus_warn ("Did not get the expected single string argument to hello");
               goto out;
             }
         }
@@ -1078,7 +1081,7 @@ check_hello_message (BusContext     *context,
           message = pop_message_waiting_for_memory (connection);
           if (message == NULL)
             {
-              _dbus_warn ("Expecting %s, got nothing\n",
+              _dbus_warn ("Expecting %s, got nothing",
                       "NameAcquired");
               goto out;
             }
@@ -1086,7 +1089,7 @@ check_hello_message (BusContext     *context,
       if (! dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
                                     "NameAcquired"))
         {
-          _dbus_warn ("Expecting %s, got smthg else\n",
+          _dbus_warn ("Expecting %s, got smthg else",
                       "NameAcquired");
           goto out;
         }
@@ -1106,7 +1109,7 @@ check_hello_message (BusContext     *context,
           else
             {
               _dbus_assert (dbus_error_is_set (&error));
-              _dbus_warn ("Did not get the expected single string argument to ServiceAcquired\n");
+              _dbus_warn ("Did not get the expected single string argument to ServiceAcquired");
               goto out;
             }
         }
@@ -1115,7 +1118,7 @@ check_hello_message (BusContext     *context,
 
       if (strcmp (acquired, name) != 0)
         {
-          _dbus_warn ("Acquired name is %s but expected %s\n",
+          _dbus_warn ("Acquired name is %s but expected %s",
                       acquired, name);
           goto out;
         }
@@ -1198,7 +1201,7 @@ check_double_hello_message (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Hello", serial, connection);
       goto out;
     }
@@ -1207,7 +1210,7 @@ check_double_hello_message (BusContext     *context,
 
   if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
     {
-      _dbus_warn ("Message has wrong sender %s\n",
+      _dbus_warn ("Message has wrong sender %s",
                   dbus_message_get_sender (message) ?
                   dbus_message_get_sender (message) : "(none)");
       goto out;
@@ -1300,7 +1303,7 @@ check_get_connection_unix_user (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "GetConnectionUnixUser", serial, connection);
       goto out;
     }
@@ -1356,7 +1359,7 @@ check_get_connection_unix_user (BusContext     *context,
           else
             {
               _dbus_assert (dbus_error_is_set (&error));
-              _dbus_warn ("Did not get the expected DBUS_TYPE_UINT32 from GetConnectionUnixUser\n");
+              _dbus_warn ("Did not get the expected DBUS_TYPE_UINT32 from GetConnectionUnixUser");
               goto out;
             }
         }
@@ -1445,7 +1448,7 @@ check_get_connection_unix_process_id (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "GetConnectionUnixProcessID", serial, connection);
       goto out;
     }
@@ -1519,7 +1522,7 @@ check_get_connection_unix_process_id (BusContext     *context,
           else
             {
               _dbus_assert (dbus_error_is_set (&error));
-              _dbus_warn ("Did not get the expected DBUS_TYPE_UINT32 from GetConnectionUnixProcessID\n");
+              _dbus_warn ("Did not get the expected DBUS_TYPE_UINT32 from GetConnectionUnixProcessID");
               goto out;
             }
         }
@@ -1535,7 +1538,7 @@ check_get_connection_unix_process_id (BusContext     *context,
           if (pid != (dbus_uint32_t) _dbus_getpid ())
             {
               _dbus_assert (dbus_error_is_set (&error));
-              _dbus_warn ("Result from GetConnectionUnixProcessID is not our own pid\n");
+              _dbus_warn ("Result from GetConnectionUnixProcessID is not our own pid");
               goto out;
             }
         }
@@ -1630,7 +1633,7 @@ check_add_match (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "AddMatch", serial, connection);
       goto out;
     }
@@ -1639,7 +1642,7 @@ check_add_match (BusContext     *context,
 
   if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
     {
-      _dbus_warn ("Message has wrong sender %s\n",
+      _dbus_warn ("Message has wrong sender %s",
                   dbus_message_get_sender (message) ?
                   dbus_message_get_sender (message) : "(none)");
       goto out;
@@ -1755,7 +1758,7 @@ check_get_all_match_rules (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "AddMatch", serial, connection);
       goto out;
     }
@@ -1764,7 +1767,7 @@ check_get_all_match_rules (BusContext     *context,
 
   if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
     {
-      _dbus_warn ("Message has wrong sender %s\n",
+      _dbus_warn ("Message has wrong sender %s",
                   dbus_message_get_sender (message) ?
                   dbus_message_get_sender (message) : "(none)");
       goto out;
@@ -1922,7 +1925,7 @@ check_nonexistent_service_no_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "StartServiceByName", serial, connection);
       goto out;
     }
@@ -1933,7 +1936,7 @@ check_nonexistent_service_no_auto_start (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -1957,7 +1960,7 @@ check_nonexistent_service_no_auto_start (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully activate %s\n",
+      _dbus_warn ("Did not expect to successfully activate %s",
                   NONEXISTENT_SERVICE_NAME);
       goto out;
     }
@@ -2015,7 +2018,7 @@ check_nonexistent_service_auto_start (BusContext     *context,
 
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -2026,7 +2029,7 @@ check_nonexistent_service_auto_start (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -2050,7 +2053,7 @@ check_nonexistent_service_auto_start (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully activate %s\n",
+      _dbus_warn ("Did not expect to successfully activate %s",
                   NONEXISTENT_SERVICE_NAME);
       goto out;
     }
@@ -2110,7 +2113,7 @@ check_base_service_activated (BusContext     *context,
             }
           else
             {
-              _dbus_warn ("Message %s doesn't have a service name: %s\n",
+              _dbus_warn ("Message %s doesn't have a service name: %s",
                           "NameOwnerChanged (creation)",
                           error.message);
               goto out;
@@ -2119,21 +2122,21 @@ check_base_service_activated (BusContext     *context,
 
       if (*base_service != ':')
         {
-          _dbus_warn ("Expected base service activation, got \"%s\" instead\n",
+          _dbus_warn ("Expected base service activation, got \"%s\" instead",
                       base_service);
           goto out;
         }
 
       if (strcmp (base_service, base_service_from_bus) != 0)
         {
-          _dbus_warn ("Expected base service activation, got \"%s\" instead with owner \"%s\"\n",
+          _dbus_warn ("Expected base service activation, got \"%s\" instead with owner \"%s\"",
                       base_service, base_service_from_bus);
           goto out;
         }
 
       if (old_owner[0])
         {
-          _dbus_warn ("Received an old_owner argument during base service activation, \"%s\"\n",
+          _dbus_warn ("Received an old_owner argument during base service activation, \"%s\"",
                       old_owner);
           goto out;
         }
@@ -2215,7 +2218,7 @@ check_service_activated (BusContext     *context,
             }
           else
             {
-              _dbus_warn ("Message %s doesn't have a service name: %s\n",
+              _dbus_warn ("Message %s doesn't have a service name: %s",
                           "NameOwnerChanged (creation)",
                           error.message);
               goto out;
@@ -2224,21 +2227,21 @@ check_service_activated (BusContext     *context,
 
       if (strcmp (service_name, activated_name) != 0)
         {
-          _dbus_warn ("Expected to see service %s created, saw %s instead\n",
+          _dbus_warn ("Expected to see service %s created, saw %s instead",
                       activated_name, service_name);
           goto out;
         }
 
       if (strcmp (base_service_name, base_service_from_bus) != 0)
         {
-          _dbus_warn ("NameOwnerChanged reports wrong base service: %s owner, expected %s instead\n",
+          _dbus_warn ("NameOwnerChanged reports wrong base service: %s owner, expected %s instead",
                       base_service_from_bus, base_service_name);
           goto out;
         }
 
       if (old_owner[0])
         {
-          _dbus_warn ("expected a %s, got a %s\n",
+          _dbus_warn ("expected a %s, got a %s",
                       "NameOwnerChanged (creation)",
                       "NameOwnerChanged (change)");
           goto out;
@@ -2264,7 +2267,7 @@ check_service_activated (BusContext     *context,
       message = pop_message_waiting_for_memory (connection);
       if (message == NULL)
         {
-          _dbus_warn ("Expected a reply to %s, got nothing\n",
+          _dbus_warn ("Expected a reply to %s, got nothing",
                       "StartServiceByName");
           goto out;
         }
@@ -2290,7 +2293,7 @@ check_service_activated (BusContext     *context,
     {
       if (!dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
         {
-          _dbus_warn ("Did not have activation result first argument to %s: %s\n",
+          _dbus_warn ("Did not have activation result first argument to %s: %s",
                       "StartServiceByName", error.message);
           goto out;
         }
@@ -2305,7 +2308,7 @@ check_service_activated (BusContext     *context,
         ; /* Good also */
       else
         {
-          _dbus_warn ("Activation result was %u, no good.\n",
+          _dbus_warn ("Activation result was %u, no good.",
                       activation_result);
           goto out;
         }
@@ -2316,7 +2319,7 @@ check_service_activated (BusContext     *context,
 
   if (!check_no_leftovers (context))
     {
-      _dbus_warn ("Messages were left over after verifying existent activation results\n");
+      _dbus_warn ("Messages were left over after verifying existent activation results");
       goto out;
     }
 
@@ -2368,7 +2371,7 @@ check_service_auto_activated (BusContext     *context,
             }
           else
             {
-              _dbus_warn ("Message %s doesn't have a service name: %s\n",
+              _dbus_warn ("Message %s doesn't have a service name: %s",
                           "NameOwnerChanged",
                           error.message);
               dbus_error_free (&error);
@@ -2378,7 +2381,7 @@ check_service_auto_activated (BusContext     *context,
 
       if (strcmp (service_name, activated_name) != 0)
         {
-          _dbus_warn ("Expected to see service %s created, saw %s instead\n",
+          _dbus_warn ("Expected to see service %s created, saw %s instead",
                       activated_name, service_name);
           goto out;
         }
@@ -2600,7 +2603,7 @@ check_send_exit_to_service (BusContext     *context,
 
       if (!check_no_leftovers (context))
         {
-          _dbus_warn ("Messages were left over after %s\n",
+          _dbus_warn ("Messages were left over after %s",
                       _DBUS_FUNCTION_NAME);
           goto out;
         }
@@ -2632,7 +2635,7 @@ check_got_error (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not get an expected error\n");
+      _dbus_warn ("Did not get an expected error");
       goto out;
     }
 
@@ -2660,7 +2663,7 @@ check_got_error (BusContext     *context,
 
   if (!error_found)
     {
-      _dbus_warn ("Expected error %s or other, got %s instead\n",
+      _dbus_warn ("Expected error %s or other, got %s instead",
                   first_error_name,
                   dbus_message_get_error_name (message));
       goto out;
@@ -2715,7 +2718,7 @@ check_got_service_info (DBusMessage *message)
             }
           else
             {
-              _dbus_warn ("unexpected arguments for NameOwnerChanged message\n");
+              _dbus_warn ("unexpected arguments for NameOwnerChanged message");
               message_kind = GOT_SOMETHING_ELSE;
             }
         }
@@ -2804,7 +2807,7 @@ check_existent_service_no_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive any messages after %s %d on %p\n",
+      _dbus_warn ("Did not receive any messages after %s %d on %p",
                   "StartServiceByName", serial, connection);
       goto out;
     }
@@ -2816,7 +2819,7 @@ check_existent_service_no_auto_start (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -2838,7 +2841,7 @@ check_existent_service_no_auto_start (BusContext     *context,
         }
       else
         {
-          _dbus_warn ("Did not expect error %s\n",
+          _dbus_warn ("Did not expect error %s",
                       dbus_message_get_error_name (message));
           goto out;
         }
@@ -2860,7 +2863,7 @@ check_existent_service_no_auto_start (BusContext     *context,
       message = dbus_connection_borrow_message (connection);
       if (message == NULL)
         {
-          _dbus_warn ("Did not receive any messages after base service creation notification\n");
+          _dbus_warn ("Did not receive any messages after base service creation notification");
           goto out;
         }
 
@@ -2872,6 +2875,7 @@ check_existent_service_no_auto_start (BusContext     *context,
       switch (message_kind)
         {
         case GOT_SOMETHING_ELSE:
+        default:
           _dbus_warn ("Unexpected message after ActivateService "
                       "(should be an error or a service announcement");
           goto out;
@@ -2931,7 +2935,7 @@ check_existent_service_no_auto_start (BusContext     *context,
           if (message == NULL)
             {
               _dbus_warn ("Failed to pop message we just put back! "
-                          "should have been a NameOwnerChanged (creation)\n");
+                          "should have been a NameOwnerChanged (creation)");
               goto out;
             }
 
@@ -2944,7 +2948,7 @@ check_existent_service_no_auto_start (BusContext     *context,
 
           if (!check_no_leftovers (context))
             {
-              _dbus_warn ("Messages were left over after successful activation\n");
+              _dbus_warn ("Messages were left over after successful activation");
               goto out;
             }
 
@@ -3026,7 +3030,7 @@ check_segfault_service_no_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "StartServiceByName", serial, connection);
       goto out;
     }
@@ -3037,7 +3041,7 @@ check_segfault_service_no_auto_start (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -3078,7 +3082,7 @@ check_segfault_service_no_auto_start (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully activate segfault service\n");
+      _dbus_warn ("Did not expect to successfully activate segfault service");
       goto out;
     }
 
@@ -3135,7 +3139,7 @@ check_segfault_service_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -3146,7 +3150,7 @@ check_segfault_service_auto_start (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -3179,7 +3183,7 @@ check_segfault_service_auto_start (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully activate segfault service\n");
+      _dbus_warn ("Did not expect to successfully activate segfault service");
       goto out;
     }
 
@@ -3242,13 +3246,13 @@ check_existent_hello_from_self (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Failed to pop message! Should have been reply from RunHelloFromSelf message\n");
+      _dbus_warn ("Failed to pop message! Should have been reply from RunHelloFromSelf message");
       return FALSE;
     }
 
   if (dbus_message_get_reply_serial (message) != serial)
     {
-      _dbus_warn ("Wrong reply serial\n");
+      _dbus_warn ("Wrong reply serial");
       dbus_message_unref (message);
       return FALSE;
     }
@@ -3295,20 +3299,20 @@ check_existent_ping (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Failed to pop message! Should have been reply from Ping message\n");
+      _dbus_warn ("Failed to pop message! Should have been reply from Ping message");
       return FALSE;
     }
 
   if (dbus_message_get_reply_serial (message) != serial)
     {
-      _dbus_warn ("Wrong reply serial\n");
+      _dbus_warn ("Wrong reply serial");
       dbus_message_unref (message);
       return FALSE;
     }
 
   if (dbus_message_get_type (message) != DBUS_MESSAGE_TYPE_METHOD_RETURN)
     {
-      _dbus_warn ("Unexpected message return during Ping\n");
+      _dbus_warn ("Unexpected message return during Ping");
       dbus_message_unref (message);
       return FALSE;
     }
@@ -3326,9 +3330,20 @@ static dbus_bool_t
 check_existent_get_machine_id (BusContext     *context,
                                DBusConnection *connection)
 {
+  DBusError error = DBUS_ERROR_INIT;
   DBusMessage *message;
   dbus_uint32_t serial;
+  DBusGUID uuid;
   const char *machine_id;
+
+  if (!_dbus_read_local_machine_uuid (&uuid, FALSE, &error))
+    {
+      /* Unable to test further: either we ran out of memory, or neither
+       * dbus nor systemd was ever correctly installed on this machine */
+      _dbus_verbose ("Machine UUID not available: %s", error.message);
+      dbus_error_free (&error);
+      return TRUE;
+    }
 
   message = dbus_message_new_method_call (EXISTENT_SERVICE_NAME,
                                           "/org/freedesktop/TestSuite",
@@ -3357,20 +3372,20 @@ check_existent_get_machine_id (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Failed to pop message! Should have been reply from GetMachineId message\n");
+      _dbus_warn ("Failed to pop message! Should have been reply from GetMachineId message");
       return FALSE;
     }
 
   if (dbus_message_get_reply_serial (message) != serial)
     {
-      _dbus_warn ("Wrong reply serial\n");
+      _dbus_warn ("Wrong reply serial");
       dbus_message_unref (message);
       return FALSE;
     }
 
   if (dbus_message_get_type (message) != DBUS_MESSAGE_TYPE_METHOD_RETURN)
     {
-      _dbus_warn ("Unexpected message return during GetMachineId\n");
+      _dbus_warn ("Unexpected message return during GetMachineId");
       dbus_message_unref (message);
       return FALSE;
     }
@@ -3378,14 +3393,14 @@ check_existent_get_machine_id (BusContext     *context,
   machine_id = NULL;
   if (!dbus_message_get_args (message, NULL, DBUS_TYPE_STRING, &machine_id, DBUS_TYPE_INVALID))
     {
-      _dbus_warn ("Did not get a machine ID in reply to GetMachineId\n");
+      _dbus_warn ("Did not get a machine ID in reply to GetMachineId");
       dbus_message_unref (message);
       return FALSE;
     }
 
   if (machine_id == NULL || strlen (machine_id) != 32)
     {
-      _dbus_warn ("Machine id looks bogus: '%s'\n", machine_id ? machine_id : "null");
+      _dbus_warn ("Machine id looks bogus: '%s'", machine_id ? machine_id : "null");
       dbus_message_unref (message);
       return FALSE;
     }
@@ -3461,7 +3476,7 @@ check_existent_service_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive any messages after auto start %d on %p\n",
+      _dbus_warn ("Did not receive any messages after auto start %d on %p",
                   serial, connection);
       goto out;
     }
@@ -3491,7 +3506,7 @@ check_existent_service_auto_start (BusContext     *context,
       if (message == NULL)
         {
           _dbus_warn ("No message after auto activation "
-                      "(should be a service announcement)\n");
+                      "(should be a service announcement)");
           dbus_connection_return_message (connection, message);
           message = NULL;
           goto out;
@@ -3509,7 +3524,7 @@ check_existent_service_auto_start (BusContext     *context,
           if (message == NULL)
             {
               _dbus_warn ("Failed to pop message we just put back! "
-                          "should have been a NameOwnerChanged (creation)\n");
+                          "should have been a NameOwnerChanged (creation)");
               goto out;
             }
 
@@ -3547,7 +3562,8 @@ check_existent_service_auto_start (BusContext     *context,
 
         case GOT_ERROR:
         case GOT_SOMETHING_ELSE:
-          _dbus_warn ("Unexpected message after auto activation\n");
+        default:
+          _dbus_warn ("Unexpected message after auto activation");
           goto out;
         }
     }
@@ -3564,13 +3580,13 @@ check_existent_service_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Failed to pop message! Should have been reply from echo message\n");
+      _dbus_warn ("Failed to pop message! Should have been reply from echo message");
       goto out;
     }
 
   if (dbus_message_get_reply_serial (message) != serial)
     {
-      _dbus_warn ("Wrong reply serial\n");
+      _dbus_warn ("Wrong reply serial");
       goto out;
     }
 
@@ -3648,7 +3664,7 @@ check_launch_service_file_missing (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -3659,7 +3675,7 @@ check_launch_service_file_missing (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -3685,7 +3701,7 @@ check_launch_service_file_missing (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully auto-start missing service\n");
+      _dbus_warn ("Did not expect to successfully auto-start missing service");
       goto out;
     }
 
@@ -3697,6 +3713,8 @@ check_launch_service_file_missing (BusContext     *context,
 
   return retval;
 }
+
+#ifndef DBUS_WIN
 
 #define SERVICE_USER_MISSING_NAME "org.freedesktop.DBus.TestSuiteNoUser"
 
@@ -3735,7 +3753,7 @@ check_launch_service_user_missing (BusContext     *context,
 
   if (!dbus_connection_get_is_connected (connection))
     {
-      _dbus_warn ("connection was disconnected\n");
+      _dbus_warn ("connection was disconnected");
       return TRUE;
     }
 
@@ -3744,7 +3762,7 @@ check_launch_service_user_missing (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -3755,7 +3773,7 @@ check_launch_service_user_missing (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -3781,7 +3799,7 @@ check_launch_service_user_missing (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully auto-start missing service\n");
+      _dbus_warn ("Did not expect to successfully auto-start missing service");
       goto out;
     }
 
@@ -3831,7 +3849,7 @@ check_launch_service_exec_missing (BusContext     *context,
 
   if (!dbus_connection_get_is_connected (connection))
     {
-      _dbus_warn ("connection was disconnected\n");
+      _dbus_warn ("connection was disconnected");
       return TRUE;
     }
 
@@ -3840,7 +3858,7 @@ check_launch_service_exec_missing (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -3851,7 +3869,7 @@ check_launch_service_exec_missing (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -3885,7 +3903,7 @@ check_launch_service_exec_missing (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully auto-start missing service\n");
+      _dbus_warn ("Did not expect to successfully auto-start missing service");
       goto out;
     }
 
@@ -3935,7 +3953,7 @@ check_launch_service_service_missing (BusContext     *context,
 
   if (!dbus_connection_get_is_connected (connection))
     {
-      _dbus_warn ("connection was disconnected\n");
+      _dbus_warn ("connection was disconnected");
       return TRUE;
     }
 
@@ -3944,7 +3962,7 @@ check_launch_service_service_missing (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -3955,7 +3973,7 @@ check_launch_service_service_missing (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -3989,7 +4007,7 @@ check_launch_service_service_missing (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully auto-start missing service\n");
+      _dbus_warn ("Did not expect to successfully auto-start missing service");
       goto out;
     }
 
@@ -4001,6 +4019,7 @@ check_launch_service_service_missing (BusContext     *context,
 
   return retval;
 }
+#endif
 
 #define SHELL_FAIL_SERVICE_NAME "org.freedesktop.DBus.TestSuiteShellEchoServiceFail"
 
@@ -4047,7 +4066,7 @@ check_shell_fail_service_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
                   "Echo message (auto activation)", serial, connection);
       goto out;
     }
@@ -4058,7 +4077,7 @@ check_shell_fail_service_auto_start (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
         {
-          _dbus_warn ("Message has wrong sender %s\n",
+          _dbus_warn ("Message has wrong sender %s",
                       dbus_message_get_sender (message) ?
                       dbus_message_get_sender (message) : "(none)");
           goto out;
@@ -4084,7 +4103,7 @@ check_shell_fail_service_auto_start (BusContext     *context,
     }
   else
     {
-      _dbus_warn ("Did not expect to successfully auto-start shell fail service\n");
+      _dbus_warn ("Did not expect to successfully auto-start shell fail service");
       goto out;
     }
 
@@ -4151,7 +4170,7 @@ check_shell_service_success_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive any messages after auto start %d on %p\n",
+      _dbus_warn ("Did not receive any messages after auto start %d on %p",
                   serial, connection);
       goto out;
     }
@@ -4181,7 +4200,7 @@ check_shell_service_success_auto_start (BusContext     *context,
       if (message == NULL)
         {
           _dbus_warn ("No message after auto activation "
-                      "(should be a service announcement)\n");
+                      "(should be a service announcement)");
           dbus_connection_return_message (connection, message);
           message = NULL;
           goto out;
@@ -4199,7 +4218,7 @@ check_shell_service_success_auto_start (BusContext     *context,
           if (message == NULL)
             {
               _dbus_warn ("Failed to pop message we just put back! "
-                          "should have been a NameOwnerChanged (creation)\n");
+                          "should have been a NameOwnerChanged (creation)");
               goto out;
             }
 
@@ -4237,7 +4256,8 @@ check_shell_service_success_auto_start (BusContext     *context,
 
         case GOT_ERROR:
         case GOT_SOMETHING_ELSE:
-          _dbus_warn ("Unexpected message after auto activation\n");
+        default:
+          _dbus_warn ("Unexpected message after auto activation");
           goto out;
         }
     }
@@ -4254,13 +4274,13 @@ check_shell_service_success_auto_start (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Failed to pop message! Should have been reply from echo message\n");
+      _dbus_warn ("Failed to pop message! Should have been reply from echo message");
       goto out;
     }
 
   if (dbus_message_get_reply_serial (message) != serial)
     {
-      _dbus_warn ("Wrong reply serial\n");
+      _dbus_warn ("Wrong reply serial");
       goto out;
     }
 
@@ -4274,7 +4294,7 @@ check_shell_service_success_auto_start (BusContext     *context,
                                        DBUS_TYPE_STRING, &argv[6],
                                        DBUS_TYPE_INVALID))
     {
-      _dbus_warn ("Error getting arguments from return\n");
+      _dbus_warn ("Error getting arguments from return");
       goto out;
     }
 
@@ -4283,42 +4303,42 @@ check_shell_service_success_auto_start (BusContext     *context,
    */
   if (strcmp("-test", argv[1]) != 0)
     {
-      _dbus_warn ("Unexpected argv[1] in shell success service test (expected: %s, got: %s)\n",
+      _dbus_warn ("Unexpected argv[1] in shell success service test (expected: %s, got: %s)",
                   "-test", argv[1]);
       goto out;
     }
 
   if (strcmp("that", argv[2]) != 0)
     {
-      _dbus_warn ("Unexpected argv[2] in shell success service test (expected: %s, got: %s)\n",
+      _dbus_warn ("Unexpected argv[2] in shell success service test (expected: %s, got: %s)",
                    "that", argv[2]);
       goto out;
     }
 
   if (strcmp("we get", argv[3]) != 0)
     {
-      _dbus_warn ("Unexpected argv[3] in shell success service test (expected: %s, got: %s)\n",
+      _dbus_warn ("Unexpected argv[3] in shell success service test (expected: %s, got: %s)",
                    "we get", argv[3]);
       goto out;
     }
 
   if (strcmp("back", argv[4]) != 0)
     {
-      _dbus_warn ("Unexpected argv[4] in shell success service test (expected: %s, got: %s)\n",
+      _dbus_warn ("Unexpected argv[4] in shell success service test (expected: %s, got: %s)",
                    "back", argv[4]);
       goto out;
     }
 
   if (strcmp("--what", argv[5]) != 0)
     {
-      _dbus_warn ("Unexpected argv[5] in shell success service test (expected: %s, got: %s)\n",
+      _dbus_warn ("Unexpected argv[5] in shell success service test (expected: %s, got: %s)",
                    "--what", argv[5]);
       goto out;
     }
 
   if (strcmp("we put in", argv[6]) != 0)
     {
-      _dbus_warn ("Unexpected argv[6] in shell success service test (expected: %s, got: %s)\n",
+      _dbus_warn ("Unexpected argv[6] in shell success service test (expected: %s, got: %s)",
                    "we put in", argv[6]);
       goto out;
     }
@@ -4359,7 +4379,7 @@ check_oom_check1_func (void *data)
 
   if (!check_no_leftovers (d->context))
     {
-      _dbus_warn ("Messages were left over, should be covered by test suite\n");
+      _dbus_warn ("Messages were left over, should be covered by test suite");
       return FALSE;
     }
 
@@ -4436,7 +4456,7 @@ check_get_services (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive a reply to %s %d on %p\n",
+      _dbus_warn ("Did not receive a reply to %s %d on %p",
 		  method, serial, connection);
       goto out;
     }
@@ -4488,7 +4508,7 @@ check_get_services (BusContext     *context,
 	  else
 	    {
 	      _dbus_assert (dbus_error_is_set (&error));
-	      _dbus_warn ("Did not get the expected DBUS_TYPE_ARRAY from %s\n", method);
+	      _dbus_warn ("Did not get the expected DBUS_TYPE_ARRAY from %s", method);
 	      goto out;
 	    }
 	} else {
@@ -4537,7 +4557,7 @@ check_list_services (BusContext     *context,
 
   if (!_dbus_string_array_contains ((const char **)services, existent))
     {
-      _dbus_warn ("Did not get the expected %s from ListActivatableNames\n", existent);
+      _dbus_warn ("Did not get the expected %s from ListActivatableNames", existent);
       dbus_free_string_array (services);
       return FALSE;
     }
@@ -4595,7 +4615,7 @@ check_list_services (BusContext     *context,
   message = pop_message_waiting_for_memory (connection);
   if (message == NULL)
     {
-      _dbus_warn ("Did not receive any messages after %s %d on %p\n",
+      _dbus_warn ("Did not receive any messages after %s %d on %p",
 		  "StartServiceByName", serial, connection);
       goto out;
     }
@@ -4607,7 +4627,7 @@ check_list_services (BusContext     *context,
     {
       if (!dbus_message_has_sender (message, DBUS_SERVICE_DBUS))
 	{
-	  _dbus_warn ("Message has wrong sender %s\n",
+	  _dbus_warn ("Message has wrong sender %s",
 		      dbus_message_get_sender (message) ?
 		      dbus_message_get_sender (message) : "(none)");
 	  goto out;
@@ -4629,7 +4649,7 @@ check_list_services (BusContext     *context,
 	}
       else
 	{
-	  _dbus_warn ("Did not expect error %s\n",
+	  _dbus_warn ("Did not expect error %s",
 		      dbus_message_get_error_name (message));
 	  goto out;
 	}
@@ -4651,7 +4671,7 @@ check_list_services (BusContext     *context,
       message = dbus_connection_borrow_message (connection);
       if (message == NULL)
 	{
-	  _dbus_warn ("Did not receive any messages after base service creation notification\n");
+	  _dbus_warn ("Did not receive any messages after base service creation notification");
 	  goto out;
 	}
 
@@ -4665,8 +4685,9 @@ check_list_services (BusContext     *context,
 	case GOT_SOMETHING_ELSE:
 	case GOT_ERROR:
 	case GOT_SERVICE_DELETED:
+	default:
 	  _dbus_warn ("Unexpected message after ActivateService "
-		      "(should be an error or a service announcement)\n");
+		      "(should be an error or a service announcement)");
 	  goto out;
 
 	case GOT_SERVICE_CREATED:
@@ -4674,7 +4695,7 @@ check_list_services (BusContext     *context,
 	  if (message == NULL)
 	    {
 	      _dbus_warn ("Failed to pop message we just put back! "
-			  "should have been a NameOwnerChanged (creation)\n");
+			  "should have been a NameOwnerChanged (creation)");
 	      goto out;
 	    }
 
@@ -4687,7 +4708,7 @@ check_list_services (BusContext     *context,
 
 	  if (!check_no_leftovers (context))
 	    {
-	      _dbus_warn ("Messages were left over after successful activation\n");
+	      _dbus_warn ("Messages were left over after successful activation");
 	      goto out;
 	    }
 
@@ -4702,7 +4723,7 @@ check_list_services (BusContext     *context,
 
   if (!_dbus_string_array_contains ((const char **)services, existent))
     {
-      _dbus_warn ("Did not get the expected %s from ListNames\n", existent);
+      _dbus_warn ("Did not get the expected %s from ListNames", existent);
       goto out;
     }
 
@@ -4741,7 +4762,7 @@ check_oom_check2_func (void *data)
 
   if (!check_no_leftovers (d->context))
     {
-      _dbus_warn ("Messages were left over, should be covered by test suite\n");
+      _dbus_warn ("Messages were left over, should be covered by test suite");
       return FALSE;
     }
 
@@ -4763,7 +4784,7 @@ check2_try_iterations (BusContext     *context,
   if (!_dbus_test_oom_handling (description, check_oom_check2_func,
                                 &d))
     {
-      _dbus_warn ("%s failed during oom\n", description);
+      _dbus_warn ("%s failed during oom", description);
       _dbus_assert_not_reached ("test failed");
     }
 }
@@ -4894,7 +4915,7 @@ bus_dispatch_test_conf (const DBusString *test_data_dir,
 
   if (!check_no_leftovers (context))
     {
-      _dbus_warn ("Messages were left over after setting up initial connections\n");
+      _dbus_warn ("Messages were left over after setting up initial connections");
       _dbus_assert_not_reached ("initial connection setup failed");
     }
 
@@ -4952,6 +4973,7 @@ bus_dispatch_test_conf (const DBusString *test_data_dir,
   return TRUE;
 }
 
+#ifndef DBUS_WIN
 static dbus_bool_t
 bus_dispatch_test_conf_fail (const DBusString *test_data_dir,
 		             const char       *filename)
@@ -5008,6 +5030,7 @@ bus_dispatch_test_conf_fail (const DBusString *test_data_dir,
 
   return TRUE;
 }
+#endif
 
 dbus_bool_t
 bus_dispatch_test (const DBusString *test_data_dir)
@@ -5068,7 +5091,7 @@ bus_dispatch_sha1_test (const DBusString *test_data_dir)
 
   if (!check_no_leftovers (context))
     {
-      _dbus_warn ("Messages were left over after setting up initial SHA-1 connection\n");
+      _dbus_warn ("Messages were left over after setting up initial SHA-1 connection");
       _dbus_assert_not_reached ("initial connection setup failed");
     }
 

@@ -1,4 +1,5 @@
 usr/bin/dbus-test-tool
+usr/lib/dbus-1.0/debug-build
 usr/lib/dbus-1.0/installed-tests
 usr/share/installed-tests/dbus
-usr/share/man/man1/dbus-test-tool.1
+usr/share/installed-tests/dbus-debug-build

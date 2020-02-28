@@ -413,6 +413,9 @@ _dbus_transport_open (DBusAddressEntry *entry,
           _DBUS_ASSERT_ERROR_IS_SET (&tmp_error);
           goto out;
           break;
+        default:
+          _dbus_assert_not_reached ("invalid transport open result");
+          break;
         }
     }
 
@@ -749,8 +752,17 @@ _dbus_transport_try_to_authenticate (DBusTransport *transport)
             case DBUS_AUTH_STATE_AUTHENTICATED:
               /* leave as maybe_authenticated */
               break;
-            default:
+
+            case DBUS_AUTH_STATE_WAITING_FOR_INPUT:
+            case DBUS_AUTH_STATE_WAITING_FOR_MEMORY:
+            case DBUS_AUTH_STATE_HAVE_BYTES_TO_SEND:
+            case DBUS_AUTH_STATE_NEED_DISCONNECT:
               maybe_authenticated = FALSE;
+              break;
+
+            case DBUS_AUTH_STATE_INVALID:
+            default:
+              _dbus_assert_not_reached ("invalid authentication state");
             }
         }
 
@@ -902,7 +914,7 @@ _dbus_transport_handle_watch (DBusTransport           *transport,
 
   if (dbus_watch_get_socket (watch) < 0)
     {
-      _dbus_warn_check_failed ("Tried to handle an invalidated watch; this watch should have been removed\n");
+      _dbus_warn_check_failed ("Tried to handle an invalidated watch; this watch should have been removed");
       return TRUE;
     }
   
@@ -1032,7 +1044,9 @@ recover_unused_bytes (DBusTransport *transport)
         }
       
       _dbus_message_loader_get_buffer (transport->loader,
-                                       &buffer);
+                                       &buffer,
+                                       NULL,
+                                       NULL);
       
       orig_len = _dbus_string_get_length (buffer);
       
@@ -1058,14 +1072,20 @@ recover_unused_bytes (DBusTransport *transport)
     {
       const DBusString *bytes;
       DBusString *buffer;
+#ifdef DBUS_ENABLE_VERBOSE_MODE
       int orig_len;
+#endif
       dbus_bool_t succeeded;
 
       _dbus_message_loader_get_buffer (transport->loader,
-                                       &buffer);
-                
+                                       &buffer,
+                                       NULL,
+                                       NULL);
+
+#ifdef DBUS_ENABLE_VERBOSE_MODE
       orig_len = _dbus_string_get_length (buffer);
-                
+#endif
+
       _dbus_auth_get_unused_bytes (transport->auth,
                                    &bytes);
 
@@ -1145,9 +1165,9 @@ _dbus_transport_queue_messages (DBusTransport *transport)
   DBusDispatchStatus status;
 
 #if 0
-  _dbus_verbose ("_dbus_transport_queue_messages()\n");
+  _dbus_verbose ("enter\n");
 #endif
-  
+
   /* Queue any messages */
   while ((status = _dbus_transport_get_dispatch_status (transport)) == DBUS_DISPATCH_DATA_REMAINS)
     {

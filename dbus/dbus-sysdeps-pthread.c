@@ -28,6 +28,7 @@
 
 #include <sys/time.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <string.h>
 
 #ifdef HAVE_ERRNO_H
@@ -72,7 +73,7 @@ struct DBusCondVar {
 #define PTHREAD_CHECK(func_name, result_or_call) do {                                  \
     int tmp = (result_or_call);                                                        \
     if (tmp != 0) {                                                                    \
-      _dbus_warn_check_failed ("pthread function %s failed with %d %s in %s\n",        \
+      _dbus_warn_check_failed ("pthread function %s failed with %d %s in %s",          \
                                func_name, tmp, strerror(tmp), _DBUS_FUNCTION_NAME);    \
     }                                                                                  \
 } while (0)
@@ -300,3 +301,20 @@ _dbus_threads_unlock_platform_specific (void)
 {
   pthread_mutex_unlock (&init_mutex);
 }
+
+#ifdef DBUS_ENABLE_VERBOSE_MODE
+/*
+ * If we can identify the current process and/or thread, print them to stderr followed by a colon.
+ */
+void
+_dbus_print_thread (void)
+{
+#ifdef __linux__
+  /* we know a pthread_t is numeric on Linux */
+  fprintf (stderr, "%lu: 0x%lx: ", _dbus_pid_for_log (), (unsigned long) pthread_self ());
+#else
+  /* in principle pthread_t isn't required to be printable */
+  fprintf (stderr, "%lu: ", _dbus_pid_for_log ());
+#endif
+}
+#endif

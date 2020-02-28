@@ -44,6 +44,7 @@ typedef struct BusOwner		BusOwner;
 typedef struct BusTransaction   BusTransaction;
 typedef struct BusMatchmaker    BusMatchmaker;
 typedef struct BusMatchRule     BusMatchRule;
+typedef struct BusActivationEntry BusActivationEntry;
 
 typedef struct
 {
@@ -72,7 +73,10 @@ typedef enum
   BUS_CONTEXT_FLAG_FORK_ALWAYS = (1 << 1),
   BUS_CONTEXT_FLAG_FORK_NEVER = (1 << 2),
   BUS_CONTEXT_FLAG_WRITE_PID_FILE = (1 << 3),
-  BUS_CONTEXT_FLAG_SYSTEMD_ACTIVATION = (1 << 4)
+  BUS_CONTEXT_FLAG_SYSTEMD_ACTIVATION = (1 << 4),
+  BUS_CONTEXT_FLAG_SYSLOG_ALWAYS = (1 << 5),
+  BUS_CONTEXT_FLAG_SYSLOG_NEVER = (1 << 6),
+  BUS_CONTEXT_FLAG_SYSLOG_ONLY = (1 << 7)
 } BusContextFlags;
 
 BusContext*       bus_context_new                                (const DBusString *config_file,
@@ -118,6 +122,7 @@ int               bus_context_get_max_match_rules_per_connection (BusContext    
 int               bus_context_get_max_replies_per_connection     (BusContext       *context);
 int               bus_context_get_reply_timeout                  (BusContext       *context);
 DBusRLimit *      bus_context_get_initial_fd_limit               (BusContext       *context);
+dbus_bool_t       bus_context_get_using_syslog                   (BusContext       *context);
 void              bus_context_log                                (BusContext       *context,
                                                                   DBusSystemLogSeverity severity,
                                                                   const char       *msg,
@@ -137,6 +142,7 @@ dbus_bool_t       bus_context_check_security_policy              (BusContext    
                                                                   DBusConnection   *addressed_recipient,
                                                                   DBusConnection   *proposed_recipient,
                                                                   DBusMessage      *message,
+                                                                  BusActivationEntry *activation_entry,
                                                                   DBusError        *error);
 void              bus_context_check_all_watches                  (BusContext       *context);
 

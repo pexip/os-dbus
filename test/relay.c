@@ -46,6 +46,7 @@
 typedef struct {
     TestMainContext *ctx;
     DBusError e;
+    gboolean skip;
 
     DBusServer *server;
 
@@ -120,13 +121,23 @@ new_conn_cb (DBusServer *server,
 
 static void
 setup (Fixture *f,
-    gconstpointer data G_GNUC_UNUSED)
+       gconstpointer address)
 {
+  test_timeout_reset (1);
+
   f->ctx = test_main_context_get ();
   dbus_error_init (&f->e);
   g_queue_init (&f->messages);
 
-  f->server = dbus_server_listen ("tcp:host=127.0.0.1", &f->e);
+  if ((g_str_has_prefix (address, "tcp:") ||
+       g_str_has_prefix (address, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    {
+      f->skip = TRUE;
+      return;
+    }
+
+  f->server = dbus_server_listen (address, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
 
@@ -141,6 +152,9 @@ test_connect (Fixture *f,
 {
   dbus_bool_t have_mem;
   char *address;
+
+  if (f->skip)
+    return;
 
   g_assert (f->left_server_conn == NULL);
   g_assert (f->right_server_conn == NULL);
@@ -203,6 +217,9 @@ test_relay (Fixture *f,
 {
   DBusMessage *incoming;
 
+  if (f->skip)
+    return;
+
   test_connect (f, data);
 
   send_one (f, "First");
@@ -234,6 +251,9 @@ test_limit (Fixture *f,
 {
   DBusMessage *incoming;
   guint i;
+
+  if (f->skip)
+    return;
 
   test_connect (f, data);
 
@@ -319,12 +339,21 @@ main (int argc,
 {
   test_init (&argc, &argv);
 
-  g_test_add ("/connect", Fixture, NULL, setup,
+  g_test_add ("/connect/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_connect, teardown);
-  g_test_add ("/relay", Fixture, NULL, setup,
+  g_test_add ("/relay/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_relay, teardown);
-  g_test_add ("/limit", Fixture, NULL, setup,
+  g_test_add ("/limit/tcp", Fixture, "tcp:host=127.0.0.1", setup,
       test_limit, teardown);
+
+#ifdef DBUS_UNIX
+  g_test_add ("/connect/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_connect, teardown);
+  g_test_add ("/relay/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_relay, teardown);
+  g_test_add ("/limit/unix", Fixture, "unix:tmpdir=/tmp", setup,
+      test_limit, teardown);
+#endif
 
   return g_test_run ();
 }

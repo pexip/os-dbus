@@ -230,13 +230,17 @@ void
 _dbus_warn (const char *format,
             ...)
 {
+  DBusSystemLogSeverity severity = DBUS_SYSTEM_LOG_WARNING;
   va_list args;
 
   if (!warn_initted)
     init_warnings ();
-  
+
+  if (fatal_warnings)
+    severity = DBUS_SYSTEM_LOG_ERROR;
+
   va_start (args, format);
-  vfprintf (stderr, format, args);
+  _dbus_logv (severity, format, args);
   va_end (args);
 
   if (fatal_warnings)
@@ -248,7 +252,7 @@ _dbus_warn (const char *format,
 
 /**
  * Prints a "critical" warning to stderr when an assertion fails;
- * differs from _dbus_warn primarily in that it prefixes the pid and
+ * differs from _dbus_warn primarily in that it
  * defaults to fatal. This should be used only when a programming
  * error has been detected. (NOT for unavoidable errors that an app
  * might handle - those should be returned as DBusError.) Calling this
@@ -258,15 +262,17 @@ void
 _dbus_warn_check_failed(const char *format,
                         ...)
 {
+  DBusSystemLogSeverity severity = DBUS_SYSTEM_LOG_WARNING;
   va_list args;
   
   if (!warn_initted)
     init_warnings ();
 
-  fprintf (stderr, "process %lu: ", _dbus_pid_for_log ());
-  
+  if (fatal_warnings_on_check_failed)
+    severity = DBUS_SYSTEM_LOG_ERROR;
+
   va_start (args, format);
-  vfprintf (stderr, format, args);
+  _dbus_logv (severity, format, args);
   va_end (args);
 
   if (fatal_warnings_on_check_failed)
@@ -280,12 +286,6 @@ _dbus_warn_check_failed(const char *format,
 
 static dbus_bool_t verbose_initted = FALSE;
 static dbus_bool_t verbose = TRUE;
-
-/** Whether to show the current thread in verbose messages */
-#define PTHREAD_IN_VERBOSE 0
-#if PTHREAD_IN_VERBOSE
-#include <pthread.h>
-#endif
 
 #ifdef DBUS_USE_OUTPUT_DEBUG_STRING
 static char module_name[1024];
@@ -394,6 +394,7 @@ _dbus_verbose_real (
   va_list args;
   static dbus_bool_t need_pid = TRUE;
   int len;
+  long sec, usec;
   
   /* things are written a bit oddly here so that
    * in the non-verbose case we just have the one
@@ -406,12 +407,10 @@ _dbus_verbose_real (
   /* Print out pid before the line */
   if (need_pid)
     {
-#if PTHREAD_IN_VERBOSE
-      fprintf (stderr, "%lu: 0x%lx: ", _dbus_pid_for_log (), pthread_self ());
-#else
-      fprintf (stderr, "%lu: ", _dbus_pid_for_log ());
-#endif
+      _dbus_print_thread ();
     }
+  _dbus_get_real_time (&sec, &usec);
+  fprintf (stderr, "%ld.%06ld ", sec, usec);
 #endif
 
   /* Only print pid again if the next line is a new line */
@@ -640,6 +639,21 @@ _dbus_string_array_contains (const char **array,
 
   return FALSE;
 }
+
+/**
+ * Returns the size of a string array
+ *
+ * @param array array to search.
+ * @returns size of array
+ */
+size_t
+_dbus_string_array_length (const char **array)
+{
+  size_t i;
+  for (i = 0; array[i]; i++) {}
+  return i;
+}
+
 
 /**
  * Generates a new UUID. If you change how this is done,
@@ -894,25 +908,8 @@ _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str,
 
   if (machine_uuid_initialized_generation != _dbus_current_generation)
     {
-      DBusError local_error = DBUS_ERROR_INIT;
-
-      if (!_dbus_read_local_machine_uuid (&machine_uuid, FALSE,
-                                          &local_error))
-        {          
-#ifndef DBUS_ENABLE_EMBEDDED_TESTS
-          /* For the test suite, we may not be installed so just continue silently
-           * here. But in a production build, we want to be nice and loud about
-           * this.
-           */
-          _dbus_warn_check_failed ("D-Bus library appears to be incorrectly set up; failed to read machine uuid: %s\n"
-                                   "See the manual page for dbus-uuidgen to correct this issue.\n",
-                                   local_error.message);
-#endif
-          
-          dbus_error_free (&local_error);
-          
-          ok = _dbus_generate_uuid (&machine_uuid, error);
-        }
+      if (!_dbus_read_local_machine_uuid (&machine_uuid, FALSE, error))
+        ok = FALSE;
     }
 
   if (ok)
@@ -930,10 +927,17 @@ _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str,
 }
 
 #ifndef DBUS_DISABLE_CHECKS
-/** String used in _dbus_return_if_fail macro */
-const char *_dbus_return_if_fail_warning_format =
-"arguments to %s() were incorrect, assertion \"%s\" failed in file %s line %d.\n"
-"This is normally a bug in some application using the D-Bus library.\n";
+void
+_dbus_warn_return_if_fail (const char *function,
+                           const char *assertion,
+                           const char *file,
+                           int line)
+{
+  _dbus_warn_check_failed (
+      "arguments to %s() were incorrect, assertion \"%s\" failed in file %s line %d.\n"
+      "This is normally a bug in some application using the D-Bus library.\n",
+      function, assertion, file, line);
+}
 #endif
 
 #ifndef DBUS_DISABLE_ASSERT
@@ -958,8 +962,8 @@ _dbus_real_assert (dbus_bool_t  condition,
 {
   if (_DBUS_UNLIKELY (!condition))
     {
-      _dbus_warn ("%lu: assertion failed \"%s\" file \"%s\" line %d function %s\n",
-                  _dbus_pid_for_log (), condition_text, file, line, func);
+      _dbus_warn ("assertion failed \"%s\" file \"%s\" line %d function %s",
+                  condition_text, file, line, func);
       _dbus_abort ();
     }
 }
@@ -979,8 +983,8 @@ _dbus_real_assert_not_reached (const char *explanation,
                                const char *file,
                                int         line)
 {
-  _dbus_warn ("File \"%s\" line %d process %lu should not have been reached: %s\n",
-              file, line, _dbus_pid_for_log (), explanation);
+  _dbus_warn ("File \"%s\" line %d should not have been reached: %s",
+              file, line, explanation);
   _dbus_abort ();
 }
 #endif /* DBUS_DISABLE_ASSERT */

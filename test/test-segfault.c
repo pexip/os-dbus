@@ -17,8 +17,9 @@
 #include <stdio.h>
 #include <windows.h>
 
-int
-exception_handler(LPEXCEPTION_POINTERS p);
+#include <dbus/dbus-macros.h>
+
+int exception_handler (LPEXCEPTION_POINTERS p) _DBUS_GNUC_NORETURN;
 
 /* Explicit Windows exception handlers needed to supress OS popups */
 int
@@ -44,7 +45,7 @@ main (int argc, char **argv)
   SetUnhandledExceptionFilter((LPTOP_LEVEL_EXCEPTION_FILTER)&exception_handler);
 #endif
 
-#if HAVE_SETRLIMIT
+#ifdef HAVE_SETRLIMIT
   /* No core dumps please, we know we crashed. */
   struct rlimit r = { 0, };
   

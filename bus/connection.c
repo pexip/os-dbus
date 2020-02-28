@@ -441,9 +441,6 @@ free_connection_data (void *data)
   if (d->policy)
     bus_client_policy_unref (d->policy);
 
-  if (d->selinux_id)
-    bus_selinux_id_unref (d->selinux_id);
-
   if (d->apparmor_confinement)
     bus_apparmor_confinement_unref (d->apparmor_confinement);
   
@@ -477,7 +474,7 @@ bus_connections_new (BusContext *context)
   if (connections->expire_timeout == NULL)
     goto failed_3;
 
-  _dbus_timeout_set_enabled (connections->expire_timeout, FALSE);
+  _dbus_timeout_disable (connections->expire_timeout);
 
   connections->pending_replies = bus_expire_list_new (bus_context_get_loop (context),
                                                       bus_context_get_reply_timeout (context),
@@ -584,7 +581,7 @@ cache_peer_loginfo_string (BusConnectionData *d,
   DBusString loginfo_buf;
   unsigned long uid;
   unsigned long pid;
-  char *windows_sid;
+  char *windows_sid = NULL, *security_label = NULL;
   dbus_bool_t prev_added;
 
   if (!_dbus_string_init (&loginfo_buf))
@@ -613,16 +610,48 @@ cache_peer_loginfo_string (BusConnectionData *d,
       _dbus_command_for_pid (pid, &loginfo_buf, MAX_LOG_COMMAND_LEN, NULL);
       if (!_dbus_string_append_byte (&loginfo_buf, '"'))
         goto oom;
+      else
+        prev_added = TRUE;
     }
 
   if (dbus_connection_get_windows_user (connection, &windows_sid))
     {
       dbus_bool_t did_append;
+
+      if (prev_added)
+        {
+          if (!_dbus_string_append_byte (&loginfo_buf, ' '))
+            goto oom;
+        }
+
       did_append = _dbus_string_append_printf (&loginfo_buf,
-                                               "sid=\"%s\" ", windows_sid);
+                                               "sid=\"%s\"", windows_sid);
       dbus_free (windows_sid);
+      windows_sid = NULL;
       if (!did_append)
         goto oom;
+      else
+        prev_added = TRUE;
+    }
+
+  if (_dbus_connection_get_linux_security_label (connection, &security_label))
+    {
+      dbus_bool_t did_append;
+
+      if (prev_added)
+        {
+          if (!_dbus_string_append_byte (&loginfo_buf, ' '))
+            goto oom;
+        }
+
+      did_append = _dbus_string_append_printf (&loginfo_buf,
+                                               "label=\"%s\"", security_label);
+      dbus_free (security_label);
+      security_label = NULL;
+      if (!did_append)
+        goto oom;
+      else
+        prev_added = TRUE;
     }
 
   if (!_dbus_string_steal_data (&loginfo_buf, &(d->cached_loginfo_string)))
@@ -633,6 +662,11 @@ cache_peer_loginfo_string (BusConnectionData *d,
   return TRUE;
 oom:
    _dbus_string_free (&loginfo_buf);
+   if (security_label != NULL)
+     dbus_free (security_label);
+   if (windows_sid != NULL)
+     dbus_free (windows_sid);
+
    return FALSE;
 }
 
@@ -653,14 +687,13 @@ check_pending_fds_cb (DBusConnection *connection)
 
   if (n_pending_unix_fds_old == 0 && n_pending_unix_fds_new > 0)
     {
-      _dbus_timeout_set_interval (d->pending_unix_fds_timeout,
+      _dbus_timeout_restart (d->pending_unix_fds_timeout,
               bus_context_get_pending_fd_timeout (d->connections->context));
-      _dbus_timeout_set_enabled (d->pending_unix_fds_timeout, TRUE);
     }
 
   if (n_pending_unix_fds_old > 0 && n_pending_unix_fds_new == 0)
     {
-      _dbus_timeout_set_enabled (d->pending_unix_fds_timeout, FALSE);
+      _dbus_timeout_disable (d->pending_unix_fds_timeout);
     }
 
 
@@ -672,24 +705,10 @@ pending_unix_fds_timeout_cb (void *data)
 {
   DBusConnection *connection = data;
   BusConnectionData *d = BUS_CONNECTION_DATA (connection);
-  unsigned long uid;
   int limit;
 
   _dbus_assert (d != NULL);
   limit = bus_context_get_pending_fd_timeout (d->connections->context);
-
-  if (dbus_connection_get_unix_user (connection, &uid) && uid == 0)
-    {
-      bus_context_log (d->connections->context, DBUS_SYSTEM_LOG_WARNING,
-                       "Connection \"%s\" (%s) has had Unix fds pending for "
-                       "too long (pending_fd_timeout=%dms); tolerating it, "
-                       "because it has uid 0",
-                       d->name != NULL ? d->name : "(null)",
-                       bus_connection_get_loginfo (connection),
-                       limit);
-      return TRUE;
-    }
-
   bus_context_log (d->connections->context, DBUS_SYSTEM_LOG_WARNING,
       "Connection \"%s\" (%s) has had Unix fds pending for too long, "
       "closing it (pending_fd_timeout=%d ms)",
@@ -706,15 +725,13 @@ bus_connections_setup_connection (BusConnections *connections,
                                   DBusConnection *connection)
 {
 
-  BusConnectionData *d;
-  dbus_bool_t retval;
+  BusConnectionData *d = NULL;
   DBusError error;
 
-  
   d = dbus_new0 (BusConnectionData, 1);
   
   if (d == NULL)
-    return FALSE;
+    goto oom;
 
   d->connections = connections;
   d->connection = connection;
@@ -728,39 +745,35 @@ bus_connections_setup_connection (BusConnections *connections,
                                  connection_data_slot,
                                  d, free_connection_data))
     {
+      /* We have to free d explicitly, because this is the only code
+       * path where it's non-NULL but dbus_connection_set_data() hasn't
+       * taken responsibility for freeing it. */
       dbus_free (d);
-      return FALSE;
+      d = NULL;
+      goto oom;
     }
 
   dbus_connection_set_route_peer_messages (connection, TRUE);
-  
-  retval = FALSE;
 
   dbus_error_init (&error);
   d->selinux_id = bus_selinux_init_connection_id (connection,
                                                   &error);
   if (dbus_error_is_set (&error))
     {
-      /* This is a bit bogus because we pretend all errors
-       * are OOM; this is done because we know that in bus.c
-       * an OOM error disconnects the connection, which is
-       * the same thing we want on any other error.
-       */
+      bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                       "Unable to set up new connection: %s", error.message);
       dbus_error_free (&error);
-      goto out;
+      goto error;
     }
 
   d->apparmor_confinement = bus_apparmor_init_connection_confinement (connection,
                                                                       &error);
   if (dbus_error_is_set (&error))
     {
-      /* This is a bit bogus because we pretend all errors
-       * are OOM; this is done because we know that in bus.c
-       * an OOM error disconnects the connection, which is
-       * the same thing we want on any other error.
-       */
+      bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                       "Unable to set up new connection: %s", error.message);
       dbus_error_free (&error);
-      goto out;
+      goto error;
     }
 
   if (!dbus_connection_set_watch_functions (connection,
@@ -769,14 +782,14 @@ bus_connections_setup_connection (BusConnections *connections,
                                             toggle_connection_watch,
                                             connection,
                                             NULL))
-    goto out;
+    goto oom;
   
   if (!dbus_connection_set_timeout_functions (connection,
                                               add_connection_timeout,
                                               remove_connection_timeout,
                                               NULL,
                                               connection, NULL))
-    goto out;
+    goto oom;
 
   /* For now we don't need to set a Windows user function because
    * there are no policies in the config file controlling what
@@ -794,18 +807,18 @@ bus_connections_setup_connection (BusConnections *connections,
 
   d->link_in_connection_list = _dbus_list_alloc_link (connection);
   if (d->link_in_connection_list == NULL)
-    goto out;
+    goto oom;
   
   /* Setup the connection with the dispatcher */
   if (!bus_dispatch_add_connection (connection))
-    goto out;
+    goto oom;
 
   if (dbus_connection_get_dispatch_status (connection) != DBUS_DISPATCH_COMPLETE)
     {
       if (!_dbus_loop_queue_dispatch (bus_context_get_loop (connections->context), connection))
         {
           bus_dispatch_remove_connection (connection);
-          goto out;
+          goto oom;
         }
     }
 
@@ -814,12 +827,12 @@ bus_connections_setup_connection (BusConnections *connections,
                                                    pending_unix_fds_timeout_cb,
                                                    connection, NULL);
   if (d->pending_unix_fds_timeout == NULL)
-    goto out;
+    goto oom;
 
-  _dbus_timeout_set_enabled (d->pending_unix_fds_timeout, FALSE);
+  _dbus_timeout_disable (d->pending_unix_fds_timeout);
   if (!_dbus_loop_add_timeout (bus_context_get_loop (connections->context),
                                d->pending_unix_fds_timeout))
-    goto out;
+    goto oom;
 
   _dbus_connection_set_pending_fds_function (connection,
           (DBusPendingFdsChangeFunction) check_pending_fds_cb,
@@ -842,13 +855,15 @@ bus_connections_setup_connection (BusConnections *connections,
    * stop accept()ing any more, to avert a DoS. See fd.o #80919 */
   bus_context_check_all_watches (d->connections->context);
   
-  retval = TRUE;
+  return TRUE;
 
- out:
-  if (!retval)
+oom:
+  bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                   "No memory to set up new connection");
+  /* fall through */
+error:
+  if (d != NULL)
     {
-      if (d->selinux_id)
-        bus_selinux_id_unref (d->selinux_id);
       d->selinux_id = NULL;
 
       if (d->apparmor_confinement)
@@ -899,7 +914,7 @@ bus_connections_setup_connection (BusConnections *connections,
       /* "d" has now been freed */
     }
   
-  return retval;
+  return FALSE;
 }
 
 void
@@ -1659,13 +1674,23 @@ bus_connection_get_name (DBusConnection *connection)
 dbus_bool_t
 bus_connections_check_limits (BusConnections  *connections,
                               DBusConnection  *requesting_completion,
+                              const char     **limit_name_out,
+                              int             *limit_out,
                               DBusError       *error)
 {
   unsigned long uid;
+  int limit;
 
-  if (connections->n_completed >=
-      bus_context_get_max_completed_connections (connections->context))
+  limit = bus_context_get_max_completed_connections (connections->context);
+
+  if (connections->n_completed >= limit)
     {
+      if (limit_name_out != NULL)
+        *limit_name_out = "max_completed_connections";
+
+      if (limit_out != NULL)
+        *limit_out = limit;
+
       dbus_set_error (error, DBUS_ERROR_LIMITS_EXCEEDED,
                       "The maximum number of active connections has been reached");
       return FALSE;
@@ -1673,9 +1698,16 @@ bus_connections_check_limits (BusConnections  *connections,
   
   if (dbus_connection_get_unix_user (requesting_completion, &uid))
     {
-      if (get_connections_for_uid (connections, uid) >=
-          bus_context_get_max_connections_per_user (connections->context))
+      limit = bus_context_get_max_connections_per_user (connections->context);
+
+      if (get_connections_for_uid (connections, uid) >= limit)
         {
+          if (limit_name_out != NULL)
+            *limit_name_out = "max_connections_per_user";
+
+          if (limit_out != NULL)
+            *limit_out = limit;
+
           dbus_set_error (error, DBUS_ERROR_LIMITS_EXCEEDED,
                           "The maximum number of active connections for UID %lu has been reached",
                           uid);
@@ -1895,6 +1927,7 @@ bus_connections_expect_reply (BusConnections  *connections,
   DBusList *link;
   CancelPendingReplyData *cprd;
   int count;
+  int limit;
 
   _dbus_assert (will_get_reply != NULL);
   _dbus_assert (will_send_reply != NULL);
@@ -1925,10 +1958,19 @@ bus_connections_expect_reply (BusConnections  *connections,
       if (pending->will_get_reply == will_get_reply)
         ++count;
     }
-  
-  if (count >=
-      bus_context_get_max_replies_per_connection (connections->context))
+
+  limit = bus_context_get_max_replies_per_connection (connections->context);
+
+  if (count >= limit)
     {
+      bus_context_log (connections->context, DBUS_SYSTEM_LOG_WARNING,
+                       "The maximum number of pending replies for "
+                       "\"%s\" (%s) has been reached "
+                       "(max_replies_per_connection=%d)",
+                       bus_connection_get_name (will_get_reply),
+                       bus_connection_get_loginfo (will_get_reply),
+                       limit);
+
       dbus_set_error (error, DBUS_ERROR_LIMITS_EXCEEDED,
 		      "The maximum number of pending replies per connection has been reached");
       return FALSE;
@@ -2330,7 +2372,8 @@ bus_transaction_send_from_driver (BusTransaction *transaction,
    */
   if (!bus_context_check_security_policy (bus_transaction_get_context (transaction),
                                           transaction,
-                                          NULL, connection, connection, message, &error))
+                                          NULL, connection, connection,
+                                          message, NULL, &error))
     {
       if (!bus_transaction_capture_error_reply (transaction, connection,
                                                 &error, message))

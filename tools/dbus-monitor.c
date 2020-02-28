@@ -21,7 +21,7 @@
 
 #include <config.h>
 
-#include "dbus/dbus-internals.h"        /* just for the macros */
+#include "dbus/dbus-internals.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -240,6 +240,10 @@ binary_filter_func (DBusConnection *connection,
           }
         break;
 
+      case BINARY_MODE_NOT:
+        _dbus_assert_not_reached ("wrong filter function");
+        break;
+
       case BINARY_MODE_RAW:
       default:
         /* nothing special, just the raw message stream */
@@ -261,6 +265,8 @@ binary_filter_func (DBusConnection *connection,
 
   return DBUS_HANDLER_RESULT_HANDLED;
 }
+
+static void usage (char *name, int ecode) _DBUS_GNUC_NORETURN;
 
 static void
 usage (char *name, int ecode)
@@ -472,8 +478,10 @@ main (int argc, char *argv[])
             case DBUS_BUS_SESSION:
               where = "session bus";
               break;
+            case DBUS_BUS_STARTER:
             default:
-              where = "";
+              /* We don't set type to anything else */
+              _dbus_assert_not_reached ("impossible bus type");
             }
         }
       fprintf (stderr, "Failed to open connection to %s: %s\n",
@@ -547,6 +555,8 @@ main (int argc, char *argv[])
     {
       case BINARY_MODE_NOT:
       case BINARY_MODE_RAW:
+      default:
+        /* no special header needed */
         break;
 
       case BINARY_MODE_PCAP:

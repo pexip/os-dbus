@@ -434,50 +434,6 @@ set_or_delete_string_field (DBusMessage *message,
                                          &value);
 }
 
-#if 0
-/* Probably we don't need to use this */
-/**
- * Sets the signature of the message, i.e. the arguments in the
- * message payload. The signature includes only "in" arguments for
- * #DBUS_MESSAGE_TYPE_METHOD_CALL and only "out" arguments for
- * #DBUS_MESSAGE_TYPE_METHOD_RETURN, so is slightly different from
- * what you might expect (it does not include the signature of the
- * entire C++-style method).
- *
- * The signature is a string made up of type codes such as
- * #DBUS_TYPE_INT32. The string is terminated with nul (nul is also
- * the value of #DBUS_TYPE_INVALID). The macros such as
- * #DBUS_TYPE_INT32 evaluate to integers; to assemble a signature you
- * may find it useful to use the string forms, such as
- * #DBUS_TYPE_INT32_AS_STRING.
- *
- * An "unset" or #NULL signature is considered the same as an empty
- * signature. In fact dbus_message_get_signature() will never return
- * #NULL.
- *
- * @param message the message
- * @param signature the type signature or #NULL to unset
- * @returns #FALSE if no memory
- */
-static dbus_bool_t
-_dbus_message_set_signature (DBusMessage *message,
-                             const char  *signature)
-{
-  _dbus_return_val_if_fail (message != NULL, FALSE);
-  _dbus_return_val_if_fail (!message->locked, FALSE);
-  _dbus_return_val_if_fail (signature == NULL ||
-                            _dbus_check_is_valid_signature (signature));
-  /* can't delete the signature if you have a message body */
-  _dbus_return_val_if_fail (_dbus_string_get_length (&message->body) == 0 ||
-                            signature != NULL);
-
-  return set_or_delete_string_field (message,
-                                     DBUS_HEADER_FIELD_SIGNATURE,
-                                     DBUS_TYPE_SIGNATURE,
-                                     signature);
-}
-#endif
-
 /* Message Cache
  *
  * We cache some DBusMessage to reduce the overhead of allocating
@@ -636,7 +592,7 @@ close_unix_fds(int *fds, unsigned *n_fds)
     {
       if (!_dbus_close(fds[i], &e))
         {
-          _dbus_warn("Failed to close file descriptor: %s\n", e.message);
+          _dbus_warn("Failed to close file descriptor: %s", e.message);
           dbus_error_free(&e);
         }
     }
@@ -753,6 +709,38 @@ dbus_message_cache_or_finalize (DBusMessage *message)
     dbus_message_finalize (message);
 }
 
+/*
+ * Arrange for iter to be something that _dbus_message_iter_check() would
+ * reject as not a valid iterator.
+ */
+static void
+_dbus_message_real_iter_zero (DBusMessageRealIter *iter)
+{
+  _dbus_assert (iter != NULL);
+  _DBUS_ZERO (*iter);
+  /* NULL is not, strictly speaking, guaranteed to be all-bits-zero */
+  iter->message = NULL;
+}
+
+/**
+ * Initialize iter as if with #DBUS_MESSAGE_ITER_INIT_CLOSED. The only valid
+ * operation for such an iterator is
+ * dbus_message_iter_abandon_container_if_open(), which does nothing.
+ */
+void
+dbus_message_iter_init_closed (DBusMessageIter *iter)
+{
+  _dbus_return_if_fail (iter != NULL);
+  _dbus_message_real_iter_zero ((DBusMessageRealIter *) iter);
+}
+
+static dbus_bool_t
+_dbus_message_real_iter_is_zeroed (DBusMessageRealIter *iter)
+{
+  return (iter != NULL && iter->message == NULL && iter->changed_stamp == 0 &&
+          iter->iter_type == 0 && iter->sig_refcount == 0);
+}
+
 #if defined(DBUS_ENABLE_CHECKS) || defined(DBUS_ENABLE_ASSERT)
 static dbus_bool_t
 _dbus_message_iter_check (DBusMessageRealIter *iter)
@@ -761,7 +749,14 @@ _dbus_message_iter_check (DBusMessageRealIter *iter)
 
   if (iter == NULL)
     {
-      _dbus_warn_check_failed ("dbus message iterator is NULL\n");
+      _dbus_warn_check_failed ("dbus message iterator is NULL");
+      return FALSE;
+    }
+
+  if (iter->message == NULL || iter->iter_type == 0)
+    {
+      _dbus_warn_check_failed ("dbus message iterator has already been "
+                               "closed, or is uninitialized or corrupt");
       return FALSE;
     }
 
@@ -771,7 +766,7 @@ _dbus_message_iter_check (DBusMessageRealIter *iter)
     {
       if (iter->u.reader.byte_order != byte_order)
         {
-          _dbus_warn_check_failed ("dbus message changed byte order since iterator was created\n");
+          _dbus_warn_check_failed ("dbus message changed byte order since iterator was created");
           return FALSE;
         }
       /* because we swap the message into compiler order when you init an iter */
@@ -781,7 +776,7 @@ _dbus_message_iter_check (DBusMessageRealIter *iter)
     {
       if (iter->u.writer.byte_order != byte_order)
         {
-          _dbus_warn_check_failed ("dbus message changed byte order since append iterator was created\n");
+          _dbus_warn_check_failed ("dbus message changed byte order since append iterator was created");
           return FALSE;
         }
       /* because we swap the message into compiler order when you init an iter */
@@ -789,13 +784,13 @@ _dbus_message_iter_check (DBusMessageRealIter *iter)
     }
   else
     {
-      _dbus_warn_check_failed ("dbus message iterator looks uninitialized or corrupted\n");
+      _dbus_warn_check_failed ("dbus message iterator looks uninitialized or corrupted");
       return FALSE;
     }
 
   if (iter->changed_stamp != iter->message->changed_stamp)
     {
-      _dbus_warn_check_failed ("dbus message iterator invalid because the message has been modified (or perhaps the iterator is just uninitialized)\n");
+      _dbus_warn_check_failed ("dbus message iterator invalid because the message has been modified (or perhaps the iterator is just uninitialized)");
       return FALSE;
     }
 
@@ -995,7 +990,7 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
 #ifndef DBUS_DISABLE_CHECKS
           else
             {
-              _dbus_warn ("you can't read arrays of container types (struct, variant, array) with %s for now\n",
+              _dbus_warn ("you can't read arrays of container types (struct, variant, array) with %s for now",
                           _DBUS_FUNCTION_NAME);
               goto out;
             }
@@ -1004,7 +999,7 @@ _dbus_message_iter_get_args_valist (DBusMessageIter *iter,
 #ifndef DBUS_DISABLE_CHECKS
       else
         {
-          _dbus_warn ("you can only read arrays and basic types with %s for now\n",
+          _dbus_warn ("you can only read arrays and basic types with %s for now",
                       _DBUS_FUNCTION_NAME);
           goto out;
         }
@@ -1932,7 +1927,7 @@ dbus_message_append_args_valist (DBusMessage *message,
             }
           else
             {
-              _dbus_warn ("arrays of %s can't be appended with %s for now\n",
+              _dbus_warn ("arrays of %s can't be appended with %s for now",
                           _dbus_type_to_string (element_type),
                           _DBUS_FUNCTION_NAME);
               dbus_message_iter_abandon_container (&iter, &array);
@@ -1945,7 +1940,7 @@ dbus_message_append_args_valist (DBusMessage *message,
 #ifndef DBUS_DISABLE_CHECKS
       else
         {
-          _dbus_warn ("type %s isn't supported yet in %s\n",
+          _dbus_warn ("type %s isn't supported yet in %s",
                       _dbus_type_to_string (type), _DBUS_FUNCTION_NAME);
           goto failed;
         }
@@ -2582,6 +2577,9 @@ _dbus_message_iter_open_signature (DBusMessageRealIter *real)
 
   real->sig_refcount = 1;
 
+  /* If this assertion failed, then str would be neither stored in u.writer
+   * nor freed by this function, resulting in a memory leak. */
+  _dbus_assert (real->u.writer.type_str == NULL);
   _dbus_type_writer_add_types (&real->u.writer,
                                str, _dbus_string_get_length (str));
   return TRUE;
@@ -2669,7 +2667,7 @@ _dbus_message_iter_append_check (DBusMessageRealIter *iter)
 
   if (iter->message->locked)
     {
-      _dbus_warn_check_failed ("dbus append iterator can't be used: message is locked (has already been sent)\n");
+      _dbus_warn_check_failed ("dbus append iterator can't be used: message is locked (has already been sent)");
       return FALSE;
     }
 
@@ -2746,6 +2744,8 @@ dbus_message_iter_append_basic (DBusMessageIter *iter,
 #ifndef DBUS_DISABLE_CHECKS
   switch (type)
     {
+      DBusString str;
+      DBusValidity signature_validity;
       const char * const *string_p;
       const dbus_bool_t *bool_p;
 
@@ -2761,7 +2761,15 @@ dbus_message_iter_append_basic (DBusMessageIter *iter,
 
       case DBUS_TYPE_SIGNATURE:
         string_p = value;
-        _dbus_return_val_if_fail (_dbus_check_is_valid_signature (*string_p), FALSE);
+        _dbus_string_init_const (&str, *string_p);
+        signature_validity = _dbus_validate_signature_with_reason (&str,
+                                                                   0,
+                                                                   _dbus_string_get_length (&str));
+
+        if (signature_validity == DBUS_VALIDITY_UNKNOWN_OOM_ERROR)
+          return FALSE;
+
+        _dbus_return_val_if_fail (signature_validity == DBUS_VALID, FALSE);
         break;
 
       case DBUS_TYPE_BOOLEAN:
@@ -2909,8 +2917,8 @@ dbus_message_iter_append_fixed_array (DBusMessageIter *iter,
 }
 
 /**
- * Appends a container-typed value to the message; you are required to
- * append the contents of the container using the returned
+ * Appends a container-typed value to the message. On success, you are
+ * required to append the contents of the container using the returned
  * sub-iterator, and then call
  * dbus_message_iter_close_container(). Container types are for
  * example struct, variant, and array. For variants, the
@@ -2922,6 +2930,12 @@ dbus_message_iter_append_fixed_array (DBusMessageIter *iter,
  *
  * @todo If this fails due to lack of memory, the message is hosed and
  * you have to start over building the whole message.
+ *
+ * If this function fails, the sub-iterator remains invalid, and must
+ * not be closed with dbus_message_iter_close_container() or abandoned
+ * with dbus_message_iter_abandon_container(). However, after this
+ * function has either succeeded or failed, it is valid to call
+ * dbus_message_iter_abandon_container_if_open().
  *
  * @param iter the append iterator
  * @param type the type of the value
@@ -2938,12 +2952,17 @@ dbus_message_iter_open_container (DBusMessageIter *iter,
   DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
   DBusMessageRealIter *real_sub = (DBusMessageRealIter *)sub;
   DBusString contained_str;
+  DBusValidity contained_signature_validity;
   dbus_bool_t ret;
+
+  _dbus_return_val_if_fail (sub != NULL, FALSE);
+  /* Do our best to make sure the sub-iterator doesn't contain something
+   * valid-looking on failure */
+  _dbus_message_real_iter_zero (real_sub);
 
   _dbus_return_val_if_fail (_dbus_message_iter_append_check (real), FALSE);
   _dbus_return_val_if_fail (real->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER, FALSE);
   _dbus_return_val_if_fail (dbus_type_is_container (type), FALSE);
-  _dbus_return_val_if_fail (sub != NULL, FALSE);
   _dbus_return_val_if_fail ((type == DBUS_TYPE_STRUCT &&
                              contained_signature == NULL) ||
                             (type == DBUS_TYPE_DICT_ENTRY &&
@@ -2957,9 +2976,25 @@ dbus_message_iter_open_container (DBusMessageIter *iter,
    * dict entries are invalid signatures standalone (they must be in
    * an array)
    */
+  if (contained_signature != NULL)
+    {
+      _dbus_string_init_const (&contained_str, contained_signature);
+      contained_signature_validity = _dbus_validate_signature_with_reason (&contained_str,
+          0,
+          _dbus_string_get_length (&contained_str));
+
+      if (contained_signature_validity == DBUS_VALIDITY_UNKNOWN_OOM_ERROR)
+        return FALSE;
+    }
+  else
+    {
+      /* just some placeholder value */
+      contained_signature_validity = DBUS_VALID_BUT_INCOMPLETE;
+    }
+
   _dbus_return_val_if_fail ((type == DBUS_TYPE_ARRAY && contained_signature && *contained_signature == DBUS_DICT_ENTRY_BEGIN_CHAR) ||
-                            (contained_signature == NULL ||
-                             _dbus_check_is_valid_signature (contained_signature)),
+                            contained_signature == NULL ||
+                            contained_signature_validity == DBUS_VALID,
                             FALSE);
 
   if (!_dbus_message_iter_open_signature (real))
@@ -2998,6 +3033,12 @@ dbus_message_iter_open_container (DBusMessageIter *iter,
  * container is written, and may free resources created by
  * dbus_message_iter_open_container().
  *
+ * Even if this function fails due to lack of memory, the sub-iterator sub
+ * has been closed and invalidated. It must not be closed again with this
+ * function, or abandoned with dbus_message_iter_abandon_container().
+ * However, it remains valid to call
+ * dbus_message_iter_abandon_container_if_open().
+ *
  * @todo If this fails due to lack of memory, the message is hosed and
  * you have to start over building the whole message.
  *
@@ -3020,6 +3061,7 @@ dbus_message_iter_close_container (DBusMessageIter *iter,
 
   ret = _dbus_type_writer_unrecurse (&real->u.writer,
                                      &real_sub->u.writer);
+  _dbus_message_real_iter_zero (real_sub);
 
   if (!_dbus_message_iter_close_signature (real))
     ret = FALSE;
@@ -3043,9 +3085,9 @@ dbus_message_iter_abandon_container (DBusMessageIter *iter,
                                      DBusMessageIter *sub)
 {
   DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
-#ifndef DBUS_DISABLE_CHECKS
   DBusMessageRealIter *real_sub = (DBusMessageRealIter *)sub;
 
+#ifndef DBUS_DISABLE_CHECKS
   _dbus_return_if_fail (_dbus_message_iter_append_check (real));
   _dbus_return_if_fail (real->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
   _dbus_return_if_fail (_dbus_message_iter_append_check (real_sub));
@@ -3053,6 +3095,97 @@ dbus_message_iter_abandon_container (DBusMessageIter *iter,
 #endif
 
   _dbus_message_iter_abandon_signature (real);
+  _dbus_message_real_iter_zero (real_sub);
+}
+
+/**
+ * Abandons creation of a contained-typed value and frees resources created
+ * by dbus_message_iter_open_container().  Once this returns, the message
+ * is hosed and you have to start over building the whole message.
+ *
+ * Unlike dbus_message_iter_abandon_container(), it is valid to call this
+ * function on an iterator that was initialized with
+ * #DBUS_MESSAGE_ITER_INIT_CLOSED, or an iterator that was already closed
+ * or abandoned. However, it is not valid to call this function on
+ * uninitialized memory. This is intended to be used in error cleanup
+ * code paths, similar to this pattern:
+ *
+ *       DBusMessageIter outer = DBUS_MESSAGE_ITER_INIT_CLOSED;
+ *       DBusMessageIter inner = DBUS_MESSAGE_ITER_INIT_CLOSED;
+ *       dbus_bool_t result = FALSE;
+ *
+ *       if (!dbus_message_iter_open_container (iter, ..., &outer))
+ *         goto out;
+ *
+ *       if (!dbus_message_iter_open_container (&outer, ..., &inner))
+ *         goto out;
+ *
+ *       if (!dbus_message_iter_append_basic (&inner, ...))
+ *         goto out;
+ *
+ *       if (!dbus_message_iter_close_container (&outer, ..., &inner))
+ *         goto out;
+ *
+ *       if (!dbus_message_iter_close_container (iter, ..., &outer))
+ *         goto out;
+ *
+ *       result = TRUE;
+ *
+ *     out:
+ *       dbus_message_iter_abandon_container_if_open (&outer, &inner);
+ *       dbus_message_iter_abandon_container_if_open (iter, &outer);
+ *       return result;
+ *
+ * @param iter the append iterator
+ * @param sub sub-iterator to close
+ */
+void
+dbus_message_iter_abandon_container_if_open (DBusMessageIter *iter,
+                                             DBusMessageIter *sub)
+{
+  DBusMessageRealIter *real = (DBusMessageRealIter *)iter;
+  DBusMessageRealIter *real_sub = (DBusMessageRealIter *)sub;
+
+  /* If both the parent and the child are zeroed out, then either we didn't
+   * even get as far as successfully recursing into the parent, or we already
+   * closed both the child and the parent. For example, in the code sample
+   * in the doc-comment above, this happens for
+   * abandon_container_if_open (&outer, &inner) if the first open_container
+   * call failed, or if we reached result = TRUE and fell through. */
+  if (_dbus_message_real_iter_is_zeroed (real) &&
+      _dbus_message_real_iter_is_zeroed (real_sub))
+    return;
+
+#ifndef DBUS_DISABLE_CHECKS
+  /* If the child is not zeroed out, but the parent is, then something has
+   * gone horribly wrong (in practice that would probably mean both are
+   * uninitialized or corrupt, and the parent happens to have ended up
+   * all-bytes-zero). */
+  _dbus_return_if_fail (_dbus_message_iter_append_check (real));
+  _dbus_return_if_fail (real->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
+#endif
+
+  /* If the parent is not zeroed out, but the child is, then either we did
+   * not successfully open the child, or we already closed the child. This
+   * means we do not own a reference to the parent's signature, so it would
+   * be wrong to release it; so we must not call abandon_signature() here.
+   * In the code sample in the doc-comment above, this happens for
+   * abandon_container_if_open (&outer, &inner) if the second open_container
+   * call failed, or if the second close_container call failed. */
+  if (_dbus_message_real_iter_is_zeroed (real_sub))
+    return;
+
+#ifndef DBUS_DISABLE_CHECKS
+  _dbus_return_if_fail (_dbus_message_iter_append_check (real_sub));
+  _dbus_return_if_fail (real_sub->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
+#endif
+
+  /* If neither the parent nor the child is zeroed out, then we genuinely
+   * have an open container; close it. In the code sample in the doc-comment,
+   * this happens for abandon_container_if_open (&outer, &inner) if the
+   * append_basic call failed. */
+  _dbus_message_iter_abandon_signature (real);
+  _dbus_message_real_iter_zero (real_sub);
 }
 
 /**
@@ -4051,13 +4184,99 @@ _dbus_message_loader_unref (DBusMessageLoader *loader)
  */
 void
 _dbus_message_loader_get_buffer (DBusMessageLoader  *loader,
-                                 DBusString        **buffer)
+                                 DBusString        **buffer,
+                                 int                *max_to_read,
+                                 dbus_bool_t        *may_read_fds)
 {
   _dbus_assert (!loader->buffer_outstanding);
 
   *buffer = &loader->data;
 
   loader->buffer_outstanding = TRUE;
+
+  if (max_to_read != NULL)
+    {
+#ifdef HAVE_UNIX_FD_PASSING
+      int offset = 0;
+      int remain;
+      int byte_order;
+      int fields_array_len;
+      int header_len;
+      int body_len;
+#endif
+
+      *max_to_read = DBUS_MAXIMUM_MESSAGE_LENGTH;
+      *may_read_fds = TRUE;
+
+#ifdef HAVE_UNIX_FD_PASSING
+      /* If we aren't holding onto any fds, we can read as much as we want
+       * (fast path). */
+      if (loader->n_unix_fds == 0)
+        return;
+
+      /* Slow path: we have a message with some fds in it. We don't want
+       * to start on the next message until this one is out of the way;
+       * otherwise a legitimate sender can keep us processing messages
+       * containing fds, until we disconnect it for having had fds pending
+       * for too long, a limit that is in place to stop malicious senders
+       * from setting up recursive fd-passing that takes up our quota and
+       * will never go away. */
+
+      remain = _dbus_string_get_length (&loader->data);
+
+      while (remain > 0)
+        {
+          DBusValidity validity = DBUS_VALIDITY_UNKNOWN;
+          int needed;
+
+          /* If 0 < remain < DBUS_MINIMUM_HEADER_SIZE, then we've had at
+           * least the first byte of a message, but we don't know how
+           * much more to read. Only read the rest of the
+           * DBUS_MINIMUM_HEADER_SIZE for now; then we'll know. */
+          if (remain < DBUS_MINIMUM_HEADER_SIZE)
+            {
+              *max_to_read = DBUS_MINIMUM_HEADER_SIZE - remain;
+              *may_read_fds = FALSE;
+              return;
+            }
+
+          if (!_dbus_header_have_message_untrusted (loader->max_message_size,
+                                                    &validity,
+                                                    &byte_order,
+                                                    &fields_array_len,
+                                                    &header_len,
+                                                    &body_len,
+                                                    &loader->data,
+                                                    offset,
+                                                    remain))
+            {
+              /* If a message in the buffer is invalid, we're going to
+               * disconnect the sender anyway, so reading an arbitrary amount
+               * is fine. */
+              if (validity != DBUS_VALID)
+                return;
+
+              /* We have a partial message, with the
+               * DBUS_MINIMUM_HEADER_SIZE-byte fixed part of the header (which
+               * lets us work out how much more we need), but no more. Read
+               * the rest of the message. */
+              needed = header_len + body_len;
+              _dbus_assert (needed > remain);
+              *max_to_read = needed - remain;
+              *may_read_fds = FALSE;
+              return;
+            }
+
+          /* Skip over entire messages until we have less than a message
+           * remaining. */
+          needed = header_len + body_len;
+          _dbus_assert (needed > DBUS_MINIMUM_HEADER_SIZE);
+          _dbus_assert (remain >= needed);
+          remain -= needed;
+          offset += needed;
+        }
+#endif
+    }
 }
 
 /**
@@ -4079,6 +4298,7 @@ _dbus_message_loader_return_buffer (DBusMessageLoader  *loader,
   loader->buffer_outstanding = FALSE;
 }
 
+#ifdef HAVE_UNIX_FD_PASSING
 /**
  * Gets the buffer to use for reading unix fds from the network.
  *
@@ -4094,7 +4314,6 @@ _dbus_message_loader_get_unix_fds(DBusMessageLoader  *loader,
                                   int               **fds,
                                   unsigned           *max_n_fds)
 {
-#ifdef HAVE_UNIX_FD_PASSING
   _dbus_assert (!loader->unix_fds_outstanding);
 
   /* Allocate space where we can put the fds we read. We allocate
@@ -4122,10 +4341,6 @@ _dbus_message_loader_get_unix_fds(DBusMessageLoader  *loader,
 
   loader->unix_fds_outstanding = TRUE;
   return TRUE;
-#else
-  _dbus_assert_not_reached("Platform doesn't support unix fd passing");
-  return FALSE;
-#endif
 }
 
 /**
@@ -4143,7 +4358,6 @@ _dbus_message_loader_return_unix_fds(DBusMessageLoader  *loader,
                                      int                *fds,
                                      unsigned            n_fds)
 {
-#ifdef HAVE_UNIX_FD_PASSING
   _dbus_assert(loader->unix_fds_outstanding);
   _dbus_assert(loader->unix_fds + loader->n_unix_fds == fds);
   _dbus_assert(loader->n_unix_fds + n_fds <= loader->n_unix_fds_allocated);
@@ -4153,10 +4367,8 @@ _dbus_message_loader_return_unix_fds(DBusMessageLoader  *loader,
 
   if (n_fds && loader->unix_fds_change)
     loader->unix_fds_change (loader->unix_fds_change_data);
-#else
-  _dbus_assert_not_reached("Platform doesn't support unix fd passing");
-#endif
 }
+#endif
 
 /*
  * FIXME when we move the header out of the buffer, that memmoves all
@@ -4886,7 +5098,7 @@ dbus_message_demarshal (const char *str,
   if (loader == NULL)
     return NULL;
 
-  _dbus_message_loader_get_buffer (loader, &buffer);
+  _dbus_message_loader_get_buffer (loader, &buffer, NULL, NULL);
 
   if (!_dbus_string_append_len (buffer, str, len))
     goto fail_oom;
@@ -5016,6 +5228,248 @@ dbus_message_get_allow_interactive_authorization (DBusMessage *message)
 
   return _dbus_header_get_flag (&message->header,
                                 DBUS_HEADER_FLAG_ALLOW_INTERACTIVE_AUTHORIZATION);
+}
+
+/**
+ * An opaque data structure containing the serialized form of any single
+ * D-Bus message item, whose signature is a single complete type.
+ *
+ * (Implementation detail: It's serialized as a single variant.)
+ */
+struct DBusVariant
+{
+  DBusString data;
+};
+
+/**
+ * Copy a single D-Bus message item from reader into a
+ * newly-allocated #DBusVariant.
+ *
+ * For example, if a message contains three string arguments, and reader points
+ * to the second string, the resulting DBusVariant will have signature
+ * #DBUS_TYPE_STRING_AS_STRING and contain only that second string.
+ *
+ * @param reader An iterator over message items, pointing to one item to copy
+ * @returns The variant, or #NULL if out of memory
+ */
+DBusVariant *
+_dbus_variant_read (DBusMessageIter *reader)
+{
+  DBusVariant *self = NULL;
+  /* Points to the single item we will read from the reader */
+  DBusMessageRealIter *real_reader = (DBusMessageRealIter *) reader;
+  /* The position in self at which we will write a single variant
+   * (it is position 0) */
+  DBusTypeWriter items_writer;
+  /* The position in self at which we will write a copy of reader
+   * (it is inside the variant) */
+  DBusTypeWriter variant_writer;
+  /* 'v' */
+  DBusString variant_signature;
+  /* Whatever is the signature of the item we will copy from the reader */
+  DBusString contained_signature;
+  /* TRUE if self->data needs to be freed */
+  dbus_bool_t data_inited = FALSE;
+  /* The type of the item we will read from the reader */
+  int type;
+  /* The string, start position within that string, and length of the signature
+   * of the single complete type of the item reader points to */
+  const DBusString *sig;
+  int start, len;
+
+  _dbus_assert (_dbus_message_iter_check (real_reader));
+  _dbus_assert (real_reader->iter_type == DBUS_MESSAGE_ITER_TYPE_READER);
+  _dbus_string_init_const (&variant_signature, DBUS_TYPE_VARIANT_AS_STRING);
+  type = dbus_message_iter_get_arg_type (reader);
+  _dbus_type_reader_get_signature (&real_reader->u.reader, &sig, &start, &len);
+
+  if (!_dbus_string_init (&contained_signature))
+    return NULL;
+
+  if (!_dbus_string_copy_len (sig, start, len, &contained_signature, 0))
+    goto oom;
+
+  self = dbus_new0 (DBusVariant, 1);
+
+  if (self == NULL)
+    goto oom;
+
+  if (!_dbus_string_init (&self->data))
+    goto oom;
+
+  data_inited = TRUE;
+
+  _dbus_type_writer_init_values_only (&items_writer, DBUS_COMPILER_BYTE_ORDER,
+                                      &variant_signature, 0, &self->data, 0);
+
+  if (!_dbus_type_writer_recurse (&items_writer, DBUS_TYPE_VARIANT,
+                                  &contained_signature, 0, &variant_writer))
+    goto oom;
+
+  if (type == DBUS_TYPE_ARRAY)
+    {
+      /* Points to each item in turn inside the array we are copying */
+      DBusMessageIter array_reader;
+      /* Same as array_reader */
+      DBusMessageRealIter *real_array_reader = (DBusMessageRealIter *) &array_reader;
+      /* The position inside the copied array at which we will write
+       * the copy of array_reader */
+      DBusTypeWriter array_writer;
+
+      dbus_message_iter_recurse (reader, &array_reader);
+
+      if (!_dbus_type_writer_recurse (&variant_writer, type,
+                                      &contained_signature, 1, &array_writer))
+        goto oom;
+
+      if (!_dbus_type_writer_write_reader (&array_writer,
+                                           &real_array_reader->u.reader))
+        goto oom;
+
+      if (!_dbus_type_writer_unrecurse (&variant_writer, &array_writer))
+        goto oom;
+    }
+  else if (type == DBUS_TYPE_DICT_ENTRY || type == DBUS_TYPE_VARIANT ||
+           type == DBUS_TYPE_STRUCT)
+    {
+      /* Points to each item in turn inside the container we are copying */
+      DBusMessageIter inner_reader;
+      /* Same as inner_reader */
+      DBusMessageRealIter *real_inner_reader = (DBusMessageRealIter *) &inner_reader;
+      /* The position inside the copied container at which we will write the
+       * copy of inner_reader */
+      DBusTypeWriter inner_writer;
+
+      dbus_message_iter_recurse (reader, &inner_reader);
+
+      if (!_dbus_type_writer_recurse (&variant_writer, type, NULL, 0,
+                                      &inner_writer))
+        goto oom;
+
+      if (!_dbus_type_writer_write_reader (&inner_writer,
+                                           &real_inner_reader->u.reader))
+        goto oom;
+
+      if (!_dbus_type_writer_unrecurse (&variant_writer, &inner_writer))
+        goto oom;
+    }
+  else
+    {
+      DBusBasicValue value;
+
+      /* We eliminated all the container types above */
+      _dbus_assert (dbus_type_is_basic (type));
+
+      dbus_message_iter_get_basic (reader, &value);
+
+      if (!_dbus_type_writer_write_basic (&variant_writer, type, &value))
+        goto oom;
+    }
+
+  _dbus_string_free (&contained_signature);
+  return self;
+
+oom:
+  if (self != NULL)
+    {
+      if (data_inited)
+        _dbus_string_free (&self->data);
+
+      dbus_free (self);
+    }
+
+  _dbus_string_free (&contained_signature);
+  return NULL;
+}
+
+/**
+ * Return the signature of the item stored in self. It is a single complete
+ * type.
+ *
+ * @param self the variant
+ */
+const char *
+_dbus_variant_get_signature (DBusVariant *self)
+{
+  unsigned char len;
+  const char *ret;
+
+  _dbus_assert (self != NULL);
+
+  /* Here we make use of the fact that the serialization of a variant starts
+   * with the 1-byte length, then that many bytes of signature, then \0. */
+  len = _dbus_string_get_byte (&self->data, 0);
+  ret = _dbus_string_get_const_data_len (&self->data, 1, len);
+  _dbus_assert (strlen (ret) == len);
+  return ret;
+}
+
+/**
+ * Copy the single D-Bus message item from self into writer.
+ *
+ * For example, if writer points into the body of an empty message and self has
+ * signature #DBUS_TYPE_STRING_AS_STRING, then the message will
+ * have signature #DBUS_TYPE_STRING_AS_STRING after this function returns
+ *
+ * @param self the variant
+ * @param writer the place to write the contents of the variant
+ * @returns #TRUE on success, #FALSE if out of memory
+ */
+dbus_bool_t
+_dbus_variant_write (DBusVariant *self,
+                     DBusMessageIter *writer)
+{
+  /* 'v' */
+  DBusString variant_signature;
+  /* Points to the single item in self */
+  DBusTypeReader variant_reader;
+  /* Points to the single item (of whatever type) inside the variant */
+  DBusTypeReader reader;
+  /* The position at which we will copy reader */
+  DBusMessageRealIter *real_writer = (DBusMessageRealIter *) writer;
+  dbus_bool_t ret;
+
+  _dbus_assert (self != NULL);
+  _dbus_assert (_dbus_message_iter_append_check (real_writer));
+  _dbus_assert (real_writer->iter_type == DBUS_MESSAGE_ITER_TYPE_WRITER);
+
+  _dbus_string_init_const (&variant_signature, DBUS_TYPE_VARIANT_AS_STRING);
+  _dbus_type_reader_init (&reader, DBUS_COMPILER_BYTE_ORDER,
+                          &variant_signature, 0, &self->data, 0);
+  _dbus_type_reader_recurse (&reader, &variant_reader);
+
+  if (!_dbus_message_iter_open_signature (real_writer))
+    return FALSE;
+
+  ret = _dbus_type_writer_write_reader (&real_writer->u.writer,
+                                        &variant_reader);
+
+  if (!_dbus_message_iter_close_signature (real_writer))
+    return FALSE;
+
+  return ret;
+}
+
+int
+_dbus_variant_get_length (DBusVariant *self)
+{
+  _dbus_assert (self != NULL);
+  return _dbus_string_get_length (&self->data);
+}
+
+const DBusString *
+_dbus_variant_peek (DBusVariant *self)
+{
+  _dbus_assert (self != NULL);
+  return &self->data;
+}
+
+void
+_dbus_variant_free (DBusVariant *self)
+{
+  _dbus_assert (self != NULL);
+  _dbus_string_free (&self->data);
+  dbus_free (self);
 }
 
 /** @} */

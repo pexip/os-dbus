@@ -26,7 +26,7 @@ fi
 if [ "$1" = configure ]; then
     adduser --system \
             --quiet \
-            --home "$MESSAGEHOME" \
+            --home /nonexistent \
             --no-create-home \
             --disabled-password \
             --group "$MESSAGEUSER"
@@ -69,19 +69,17 @@ if [ "$1" = configure ] && [ -n "$2" ]; then
             /usr/share/update-notifier/notify-reboot-required || true
     fi
 
-    # Create a symlink from the old bus setup to the new locations, so that
-    # dbus-daemon (<< 1.9.18) can reload successfully even though dbus
-    # does not support re-exec'ing itself. These are deliberately not
-    # conffiles so that they won't interfere with us removing the old
-    # conffile or moving it out of the way.
-    #
-    # Keep this until upgrades from versions << 1.9.18 are no longer
-    # supported (it can be removed after Debian 9 is released). It is not
-    # conditional on the version in $2, because we could conceivably
-    # have upgraded 1.8.x -> 1.10.0-1 -> 1.10.0-4 without an intervening
-    # reboot.
-    ln -fns /usr/share/dbus-1/session.conf /etc/dbus-1/session.conf
-    ln -fns /usr/share/dbus-1/system.conf /etc/dbus-1/system.conf
+    # Clean up old compatibility symlinks that were used to upgrade from
+    # Debian 8 to Debian 9. This can be dropped after Debian 10 is released.
+    for bus in system session; do
+        conf="/etc/dbus-1/${bus}.conf"
+        exp_target="/usr/share/dbus-1/${bus}.conf"
+        target="$(readlink -f "${conf}")" || continue
+
+        if [ -h "${conf}" ] && [ "_${target}" = "_${exp_target}" ]; then
+            rm -f "${conf}"
+        fi
+    done
 fi
 
 #DEBHELPER#

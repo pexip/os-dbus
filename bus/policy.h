@@ -39,6 +39,13 @@ typedef enum
   BUS_POLICY_RULE_GROUP
 } BusPolicyRuleType;
 
+typedef enum
+{
+  BUS_POLICY_TRISTATE_ANY = 0,
+  BUS_POLICY_TRISTATE_FALSE,
+  BUS_POLICY_TRISTATE_TRUE
+} BusPolicyTristate;
+
 /** determines whether the rule affects a connection, or some global item */
 #define BUS_POLICY_RULE_IS_PER_CLIENT(rule) (!((rule)->type == BUS_POLICY_RULE_USER || \
                                                (rule)->type == BUS_POLICY_RULE_GROUP))
@@ -63,9 +70,12 @@ struct BusPolicyRule
       char *member;
       char *error;
       char *destination;
+      unsigned int max_fds;
+      unsigned int min_fds;
       unsigned int eavesdrop : 1;
       unsigned int requested_reply : 1;
       unsigned int log : 1;
+      unsigned int broadcast : 2; /**< really a BusPolicyTristate */
     } send;
 
     struct
@@ -78,6 +88,8 @@ struct BusPolicyRule
       char *member;
       char *error;
       char *origin;
+      unsigned int max_fds;
+      unsigned int min_fds;
       unsigned int eavesdrop : 1;
       unsigned int requested_reply : 1;
     } receive;

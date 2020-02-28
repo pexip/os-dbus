@@ -40,6 +40,7 @@
 typedef struct {
     TestMainContext *ctx;
     DBusError e;
+    gboolean skip;
 
     DBusServer *server;
     DBusConnection *server_conn;
@@ -97,6 +98,14 @@ setup (Fixture *f,
   dbus_error_init (&f->e);
   g_queue_init (&f->server_messages);
 
+  if ((g_str_has_prefix (addr, "tcp:") ||
+       g_str_has_prefix (addr, "nonce-tcp:")) &&
+      !test_check_tcp_works ())
+    {
+      f->skip = TRUE;
+      return;
+    }
+
   f->server = dbus_server_listen (addr, &f->e);
   assert_no_error (&f->e);
   g_assert (f->server != NULL);
@@ -124,6 +133,9 @@ setup_runtime (Fixture *f,
 
   setup (f, addr);
 
+  if (f->skip)
+    return;
+
   listening_at = dbus_server_get_address (f->server);
   g_test_message ("listening at %s", listening_at);
   g_assert (g_str_has_prefix (listening_at, "unix:path="));
@@ -146,6 +158,9 @@ setup_no_runtime (Fixture *f,
 
   setup (f, addr);
 
+  if (f->skip)
+    return;
+
   listening_at = dbus_server_get_address (f->server);
   g_test_message ("listening at %s", listening_at);
   /* we have fallen back to something in /tmp, either abstract or not */
@@ -158,12 +173,99 @@ setup_no_runtime (Fixture *f,
 
 static void
 test_connect (Fixture *f,
-    gconstpointer addr G_GNUC_UNUSED)
+    gconstpointer addr)
 {
+  const char *listening_address = addr;
+  char *address;
+  DBusAddressEntry **entries;
+  int n_entries;
+  dbus_bool_t ok;
+
+  if (f->skip)
+    return;
+
   g_assert (f->server_conn == NULL);
 
-  f->client_conn = dbus_connection_open_private (
-      dbus_server_get_address (f->server), &f->e);
+  address = dbus_server_get_address (f->server);
+  g_test_message ("listening at %s", address);
+
+  ok = dbus_parse_address (address, &entries, &n_entries, &f->e);
+  assert_no_error (&f->e);
+  g_assert_true (ok);
+  g_assert_cmpint (n_entries, ==, 1);
+
+  g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "guid"), !=,
+                   NULL);
+
+  if (g_strcmp0 (listening_address, "tcp:host=127.0.0.1") == 0)
+    {
+      g_assert_cmpstr (dbus_address_entry_get_method (entries[0]), ==, "tcp");
+      g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "host"), ==,
+                       "127.0.0.1");
+      g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "port"), !=,
+                       NULL);
+      g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "noncefile"),
+                       ==, NULL);
+    }
+  else if (g_strcmp0 (listening_address, "nonce-tcp:host=127.0.0.1") == 0)
+    {
+      g_assert_cmpstr (dbus_address_entry_get_method (entries[0]), ==,
+                       "nonce-tcp");
+      g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "host"), ==,
+                       "127.0.0.1");
+      g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "port"), !=,
+                       NULL);
+      g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "noncefile"),
+                       !=, NULL);
+    }
+#ifdef DBUS_UNIX
+  else if (g_strcmp0 (listening_address, "unix:tmpdir=/tmp") == 0)
+    {
+      g_assert_cmpstr (dbus_address_entry_get_method (entries[0]), ==, "unix");
+
+      if (dbus_address_entry_get_value (entries[0], "abstract") != NULL)
+        {
+          const char *abstract = dbus_address_entry_get_value (entries[0],
+                                                               "abstract");
+
+          g_assert_true (g_str_has_prefix (abstract, "/tmp/dbus-"));
+          g_assert_cmpstr (dbus_address_entry_get_value (entries[0], "path"),
+                                                         ==, NULL);
+        }
+      else
+        {
+          const char *path = dbus_address_entry_get_value (entries[0],
+                                                           "path");
+
+          g_assert_nonnull (path);
+          g_assert_true (g_str_has_prefix (path, "/tmp/dbus-"));
+        }
+    }
+  else if (g_strcmp0 (listening_address, "unix:dir=/tmp") == 0)
+    {
+      const char *path = dbus_address_entry_get_value (entries[0],
+                                                       "path");
+
+      g_assert_cmpstr (dbus_address_entry_get_method (entries[0]), ==, "unix");
+      g_assert_nonnull (path);
+      g_assert_true (g_str_has_prefix (path, "/tmp/dbus-"));
+    }
+  else if (g_strcmp0 (listening_address,
+                      "unix:runtime=yes;unix:tmpdir=/tmp") == 0)
+    {
+      g_assert_cmpstr (dbus_address_entry_get_method (entries[0]), ==, "unix");
+      /* No particular statement about the path here: for that see
+       * setup_runtime() and setup_no_runtime() */
+    }
+#endif
+  else
+    {
+      g_assert_not_reached ();
+    }
+
+  dbus_address_entries_free (entries);
+
+  f->client_conn = dbus_connection_open_private (address, &f->e);
   assert_no_error (&f->e);
   g_assert (f->client_conn != NULL);
   test_connection_setup (f->ctx, f->client_conn);
@@ -173,6 +275,8 @@ test_connect (Fixture *f,
       test_progress ('.');
       test_main_context_iterate (f->ctx, TRUE);
     }
+
+  dbus_free (address);
 }
 
 static void
@@ -180,13 +284,17 @@ test_bad_guid (Fixture *f,
     gconstpointer addr G_GNUC_UNUSED)
 {
   DBusMessage *incoming;
-  gchar *address = g_strdup (dbus_server_get_address (f->server));
+  char *address;
   gchar *guid;
+
+  if (f->skip)
+    return;
 
   g_test_bug ("39720");
 
   g_assert (f->server_conn == NULL);
 
+  address = dbus_server_get_address (f->server);
   g_assert (strstr (address, "guid=") != NULL);
   guid = strstr (address, "guid=");
   g_assert_cmpuint (strlen (guid), >=, 5 + 32);
@@ -230,9 +338,8 @@ test_bad_guid (Fixture *f,
   g_assert_cmpstr (dbus_message_get_signature (incoming), ==, "");
   g_assert_cmpstr (dbus_message_get_path (incoming), ==, DBUS_PATH_LOCAL);
 
-  dbus_message_unref (incoming);
-
-  g_free (address);
+  dbus_clear_message (&incoming);
+  dbus_free (address);
 }
 
 static void
@@ -242,6 +349,9 @@ test_message (Fixture *f,
   dbus_bool_t have_mem;
   dbus_uint32_t serial;
   DBusMessage *outgoing, *incoming;
+
+  if (f->skip)
+    return;
 
   test_connect (f, addr);
 
@@ -274,9 +384,8 @@ test_message (Fixture *f,
   g_assert_cmpstr (dbus_message_get_path (incoming), ==, "/com/example/Hello");
   g_assert_cmpuint (dbus_message_get_serial (incoming), ==, serial);
 
-  dbus_message_unref (incoming);
-
-  dbus_message_unref (outgoing);
+  dbus_clear_message (&incoming);
+  dbus_clear_message (&outgoing);
 }
 
 static void
@@ -284,26 +393,18 @@ teardown (Fixture *f,
     gconstpointer addr G_GNUC_UNUSED)
 {
   if (f->client_conn != NULL)
-    {
-      dbus_connection_close (f->client_conn);
-      dbus_connection_unref (f->client_conn);
-      f->client_conn = NULL;
-    }
+    dbus_connection_close (f->client_conn);
 
   if (f->server_conn != NULL)
-    {
-      dbus_connection_close (f->server_conn);
-      dbus_connection_unref (f->server_conn);
-      f->server_conn = NULL;
-    }
+    dbus_connection_close (f->server_conn);
+
+  dbus_clear_connection (&f->client_conn);
+  dbus_clear_connection (&f->server_conn);
 
   if (f->server != NULL)
-    {
-      dbus_server_disconnect (f->server);
-      dbus_server_unref (f->server);
-      f->server = NULL;
-    }
+    dbus_server_disconnect (f->server);
 
+  dbus_clear_server (&f->server);
   test_main_context_unref (f->ctx);
 }
 
@@ -332,10 +433,10 @@ teardown_runtime (Fixture *f,
 
   /* the socket may exist */
   path = g_strdup_printf ("%s/bus", f->tmp_runtime_dir);
-  g_assert (g_remove (path) == 0 || errno == ENOENT);
+  test_remove_if_exists (path);
   g_free (path);
   /* there shouldn't be anything else in there */
-  g_assert_cmpint (g_rmdir (f->tmp_runtime_dir), ==, 0);
+  test_rmdir_must_exist (f->tmp_runtime_dir);
 
   /* we're relying on being single-threaded for this to be safe */
   if (f->saved_runtime_dir != NULL)
@@ -363,10 +464,17 @@ main (int argc,
   g_test_add ("/message/nonce-tcp", Fixture, "nonce-tcp:host=127.0.0.1", setup,
       test_message, teardown);
 
+  g_test_add ("/message/bad-guid/tcp", Fixture, "tcp:host=127.0.0.1", setup,
+      test_bad_guid, teardown);
+
 #ifdef DBUS_UNIX
-  g_test_add ("/connect/unix", Fixture, "unix:tmpdir=/tmp", setup,
+  g_test_add ("/connect/unix/tmpdir", Fixture, "unix:tmpdir=/tmp", setup,
       test_connect, teardown);
-  g_test_add ("/message/unix", Fixture, "unix:tmpdir=/tmp", setup,
+  g_test_add ("/message/unix/tmpdir", Fixture, "unix:tmpdir=/tmp", setup,
+      test_message, teardown);
+  g_test_add ("/connect/unix/dir", Fixture, "unix:dir=/tmp", setup,
+      test_connect, teardown);
+  g_test_add ("/message/unix/dir", Fixture, "unix:dir=/tmp", setup,
       test_message, teardown);
 
   g_test_add ("/connect/unix/runtime", Fixture,
@@ -375,10 +483,10 @@ main (int argc,
   g_test_add ("/connect/unix/no-runtime", Fixture,
       "unix:runtime=yes;unix:tmpdir=/tmp", setup_no_runtime, test_connect,
       teardown_no_runtime);
-#endif
 
-  g_test_add ("/message/bad-guid", Fixture, "tcp:host=127.0.0.1", setup,
+  g_test_add ("/message/bad-guid/unix", Fixture, "unix:tmpdir=/tmp", setup,
       test_bad_guid, teardown);
+#endif
 
   return g_test_run ();
 }

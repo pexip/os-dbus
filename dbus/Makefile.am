@@ -2,6 +2,7 @@
 dbusdatadir=$(datadir)/dbus-1
 
 AM_CPPFLAGS = \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	-I$(top_builddir) \
 	-I$(top_srcdir) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
@@ -11,9 +12,12 @@ AM_CPPFLAGS = \
 	-DDBUS_MACHINE_UUID_FILE=\""$(localstatedir)/lib/dbus/machine-id"\" \
 	-DDBUS_SYSTEM_CONFIG_FILE=\""$(dbusdatadir)/system.conf"\" \
 	-DDBUS_SESSION_CONFIG_FILE=\""$(dbusdatadir)/session.conf"\" \
+	-DDBUS_RUNSTATEDIR=\""$(runstatedir)"\" \
 	$(NULL)
 
-AM_CFLAGS =
+AM_CFLAGS = \
+	$(CODE_COVERAGE_CFLAGS) \
+	$(NULL)
 
 if HAVE_VISIBILITY
 if !DBUS_WIN
@@ -33,30 +37,18 @@ dbusarchincludedir=$(libdir)/dbus-1.0/include/dbus
 
 lib_LTLIBRARIES=libdbus-1.la
 
+# Initialize to empty so that we can append later
+nodist_libdbus_1_la_SOURCES =
+
 #
 # Deal with W32 .def and version-info.rc stuff
 #
 if DBUS_WIN
 
-SUFFIXES = rc
+SUFFIXES = .rc
 
-.rc.o:
-	$(WINDRES) $< -o $@
-
-dbus_res = versioninfo.o
-dbus_res_ldflag = -Wl,$(dbus_res)
-no_undefined = -no-undefined
-export_symbols =
-
-EXTRA_libdbus_1_la_DEPENDENCIES = $(dbus_res)
-intllibs =
-
-else
-dbus_res =
-dbus_res_ldflag =
-no_undefined =
-
-intllibs = @LTLIBINTL@
+.rc.lo:
+	$(LIBTOOL) $(AM_V_lt) --tag=RC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(RC) $< -o $@
 
 endif
 
@@ -67,7 +59,12 @@ endif
 if DBUS_WIN
 DBUS_LIB_arch_sources = 			\
 	dbus-server-win.c 			\
-	dbus-server-win.h
+	dbus-server-win.h			\
+	$(NULL)
+
+nodist_libdbus_1_la_SOURCES += \
+	versioninfo.rc \
+	$(NULL)
 
 if DBUS_WINCE
 wince_source = dbus-sysdeps-wince-glue.h dbus-sysdeps-wince-glue.c
@@ -268,6 +265,10 @@ DBUS_UTIL_SOURCES=				\
 	dbus-test.c				\
 	dbus-test.h
 
+if DBUS_ENABLE_EMBEDDED_TESTS
+DBUS_UTIL_SOURCES += dbus-spawn-test.c
+endif
+
 libdbus_1_la_SOURCES=				\
 	$(DBUS_LIB_SOURCES)			\
 	$(DBUS_SHARED_SOURCES)
@@ -302,6 +303,10 @@ libdbus_1_la_LDFLAGS = \
 libdbus_internal_la_LIBADD=$(LIBDBUS_LIBS) libdbus-1.la
 
 if DBUS_WIN
+AM_CXXFLAGS = \
+	$(CODE_COVERAGE_CXXFLAGS) \
+	$(NULL)
+
 # This must be a separate convenience library, otherwise libtool notices
 # that libdbus-1 might contain C++, links it with g++ and links in libstdc++,
 # even on Unix where in fact it doesn't contain any C++. For Windows, where
@@ -323,6 +328,8 @@ test_dbus_SOURCES=				\
 
 test_dbus_LDADD = libdbus-internal.la
 
-## mop up the gcov files
+# Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
+include $(top_srcdir)/aminclude_static.am
+
 clean-local:
-	/bin/rm *.bb *.bbg *.da *.gcov .libs/*.da .libs/*.bbg || true
+	$(AM_V_at)rm -fr ./.dbus-keyrings

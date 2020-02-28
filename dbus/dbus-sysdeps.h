@@ -48,6 +48,32 @@
 #include <string.h>
 #include <stdarg.h>
 
+#if !defined(BROKEN_POLL) && (defined(__APPLE__) || defined(__INTERIX))
+  /* Following libcurl's example, we blacklist poll() on Darwin
+   * (macOS, iOS, etc.) and Interix due to a history of implementation
+   * issues.
+   * https://github.com/curl/curl/blob/master/m4/curl-functions.m4
+   *
+   * On unspecified older macOS versions, poll() failed if given a
+   * device node to poll.
+   *
+   * On macOS < 10.9, poll() with nfds=0 failed instead of waiting for
+   * the timeout and then succeeding.
+   *
+   * On macOS >= 10.12, poll() with nfds=0 succeeded immediately
+   * instead of waiting for the timeout, resulting in busy-looping.
+   *
+   * On Interix, poll() apparently only works for files in /proc.
+   *
+   * The "legacy" build flavour in our CI machinery defines BROKEN_POLL
+   * on whatever platform is in use (normally Linux) to force use of the
+   * same select()-based poll() emulation that we use for macOS, Interix,
+   * and any platform that lacks a real poll(), so that we can test it
+   * more regularly.
+   */
+# define BROKEN_POLL
+#endif
+
 /* AIX sys/poll.h does #define events reqevents, and other
  * wonderousness, so must include sys/poll before declaring
  * DBusPollFD
@@ -92,6 +118,7 @@ typedef struct DBusPipe DBusPipe;
  * @{
  */
 
+DBUS_PRIVATE_EXPORT
 void _dbus_abort (void) _DBUS_GNUC_NORETURN;
 
 dbus_bool_t _dbus_check_setuid (void);
@@ -198,7 +225,7 @@ int _dbus_read_socket_with_unix_fds      (DBusSocket        fd,
                                           DBusString       *buffer,
                                           int               count,
                                           int              *fds,
-                                          int              *n_fds);
+                                          unsigned int     *n_fds);
 DBUS_PRIVATE_EXPORT
 int _dbus_write_socket_with_unix_fds     (DBusSocket        fd,
                                           const DBusString *buffer,
@@ -284,16 +311,6 @@ struct DBusAtomic
   volatile dbus_int32_t value; /**< Value of the atomic integer. */
 #endif
 };
-
-/* The value we get from autofoo is in the form of a cpp expression;
- * convert that to a conventional defined/undef switch. (We can't get
- * the conventional defined/undef because of multiarch builds only running
- * ./configure once, on Darwin.) */
-#if DBUS_HAVE_ATOMIC_INT_COND
-#   define DBUS_HAVE_ATOMIC_INT 1
-#else
-#   undef DBUS_HAVE_ATOMIC_INT
-#endif
 
 DBUS_PRIVATE_EXPORT
 dbus_int32_t _dbus_atomic_inc (DBusAtomic *atomic);
@@ -437,9 +454,11 @@ dbus_bool_t _dbus_path_is_absolute    (const DBusString *filename);
 
 dbus_bool_t _dbus_get_standard_session_servicedirs (DBusList **dirs);
 dbus_bool_t _dbus_get_standard_system_servicedirs (DBusList **dirs);
+dbus_bool_t _dbus_set_up_transient_session_servicedirs (DBusList  **dirs,
+                                                        DBusError  *error);
 
-dbus_bool_t _dbus_append_system_config_file  (DBusString *str);
-dbus_bool_t _dbus_append_session_config_file (DBusString *str);
+dbus_bool_t _dbus_get_system_config_file  (DBusString *str);
+dbus_bool_t _dbus_get_session_config_file (DBusString *str);
 
 /** Opaque type for reading a directory listing */
 typedef struct DBusDirIter DBusDirIter;
@@ -495,8 +514,12 @@ void _dbus_exit (int code) _DBUS_GNUC_NORETURN;
 
 DBUS_PRIVATE_EXPORT
 int _dbus_printf_string_upper_bound (const char *format,
-                                     va_list args);
+                                     va_list args) _DBUS_GNUC_PRINTF (1, 0);
 
+#ifdef DBUS_ENABLE_VERBOSE_MODE
+DBUS_PRIVATE_EXPORT
+void _dbus_print_thread (void);
+#endif
 
 /**
  * Portable struct with stat() results
@@ -522,6 +545,7 @@ dbus_bool_t _dbus_socketpair (DBusSocket       *fd1,
                               dbus_bool_t       blocking,
                               DBusError        *error);
 
+DBUS_PRIVATE_EXPORT
 void        _dbus_print_backtrace  (void);
 
 dbus_bool_t _dbus_become_daemon   (const DBusString *pidfile,
@@ -543,26 +567,33 @@ dbus_bool_t _dbus_command_for_pid (unsigned long  pid,
                                    int            max_len,
                                    DBusError     *error);
 
-/** A UNIX signal handler */
-typedef void (* DBusSignalHandler) (int sig);
-
-void _dbus_set_signal_handler (int               sig,
-                               DBusSignalHandler handler);
-
 dbus_bool_t _dbus_user_at_console (const char *username,
                                    DBusError  *error);
 
-void _dbus_init_system_log (dbus_bool_t is_daemon);
+typedef enum {
+  DBUS_LOG_FLAGS_STDERR = (1 << 0),
+  DBUS_LOG_FLAGS_SYSTEM_LOG = (1 << 1)
+} DBusLogFlags;
+
+DBUS_PRIVATE_EXPORT
+void _dbus_init_system_log (const char   *tag,
+                            DBusLogFlags  flags);
 
 typedef enum {
   DBUS_SYSTEM_LOG_INFO,
   DBUS_SYSTEM_LOG_WARNING,
   DBUS_SYSTEM_LOG_SECURITY,
-  DBUS_SYSTEM_LOG_FATAL
+  DBUS_SYSTEM_LOG_ERROR
 } DBusSystemLogSeverity;
 
-void _dbus_system_log (DBusSystemLogSeverity severity, const char *msg, ...) _DBUS_GNUC_PRINTF (2, 3);
-void _dbus_system_logv (DBusSystemLogSeverity severity, const char *msg, va_list args);
+DBUS_PRIVATE_EXPORT
+void _dbus_log  (DBusSystemLogSeverity  severity,
+                 const char            *msg,
+                 ...) _DBUS_GNUC_PRINTF (2, 3);
+DBUS_PRIVATE_EXPORT
+void _dbus_logv (DBusSystemLogSeverity  severity,
+                 const char            *msg,
+                 va_list args) _DBUS_GNUC_PRINTF (2, 0);
 
 /* Define DBUS_VA_COPY() to do the right thing for copying va_list variables.
  * config.h may have already defined DBUS_VA_COPY as va_copy or __va_copy.
@@ -612,6 +643,7 @@ dbus_bool_t _dbus_lookup_session_address (dbus_bool_t *supported,
  */
 typedef union DBusGUID DBusGUID;
 
+DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_read_local_machine_uuid   (DBusGUID         *machine_id,
                                              dbus_bool_t       create_if_not_found,
                                              DBusError        *error);
@@ -650,21 +682,10 @@ dbus_pid_t    _dbus_getpid (void);
 DBUS_PRIVATE_EXPORT
 dbus_uid_t    _dbus_getuid (void);
 
-dbus_bool_t _dbus_change_to_daemon_user (const char *user,
-                                         DBusError  *error);
-
 DBUS_PRIVATE_EXPORT
 void _dbus_flush_caches (void);
 
-/*
- * replaces the term DBUS_PREFIX in configure_time_path by the
- * current dbus installation directory. On unix this function is a noop
- *
- * @param configure_time_path
- * @return real path
- */
-const char *
-_dbus_replace_install_prefix (const char *configure_time_path);
+dbus_bool_t _dbus_replace_install_prefix (DBusString *path);
 
 /* Do not set this too high: it is a denial-of-service risk.
  * See <https://bugs.freedesktop.org/show_bug.cgi?id=82820>
@@ -677,8 +698,7 @@ _dbus_replace_install_prefix (const char *configure_time_path);
 typedef struct DBusRLimit DBusRLimit;
 
 DBusRLimit     *_dbus_rlimit_save_fd_limit                 (DBusError    *error);
-dbus_bool_t     _dbus_rlimit_raise_fd_limit_if_privileged  (unsigned int  desired,
-                                                            DBusError    *error);
+dbus_bool_t     _dbus_rlimit_raise_fd_limit                (DBusError    *error);
 dbus_bool_t     _dbus_rlimit_restore_fd_limit              (DBusRLimit   *saved,
                                                             DBusError    *error);
 void            _dbus_rlimit_free                          (DBusRLimit   *lim);

@@ -89,23 +89,26 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 @DBUS_XML_DOCS_ENABLED_TRUE@am__append_1 = $(XMLTO_HTML)
-@DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_HAVE_XSLTPROC_TRUE@am__append_2 = dbus.devhelp
+@DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_HAVE_XSLTPROC_TRUE@am__append_2 = dbus.devhelp2
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_DUCKTYPE_DOCS_ENABLED_TRUE@am__append_3 = $(YELP_HTML)
 subdir = doc
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
-	$(top_srcdir)/m4/compiler.m4 \
+	$(top_srcdir)/m4/ax_ac_append_to_file.m4 \
+	$(top_srcdir)/m4/ax_ac_print_to_file.m4 \
+	$(top_srcdir)/m4/ax_add_am_macro_static.m4 \
+	$(top_srcdir)/m4/ax_am_macros_static.m4 \
+	$(top_srcdir)/m4/ax_code_coverage.m4 \
+	$(top_srcdir)/m4/ax_file_escapes.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
 	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/tp-compiler-flag.m4 \
-	$(top_srcdir)/m4/tp-compiler-warnings.m4 \
 	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
-DIST_COMMON = $(srcdir)/Makefile.am $(dist_doc_DATA) $(dist_html_DATA) \
-	$(am__DIST_COMMON)
+DIST_COMMON = $(srcdir)/Makefile.am $(dist_doc_DATA) $(dist_dtd_DATA) \
+	$(dist_html_DATA) $(am__DIST_COMMON)
 mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES = dbus-cleanup-sockets.1.xml dbus-daemon.1.xml \
@@ -161,10 +164,12 @@ am__uninstall_files_from_dir = { \
   }
 man1dir = $(mandir)/man1
 am__installdirs = "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(docdir)" \
-	"$(DESTDIR)$(htmldir)" "$(DESTDIR)$(htmldir)"
+	"$(DESTDIR)$(dtddir)" "$(DESTDIR)$(htmldir)" \
+	"$(DESTDIR)$(htmldir)"
 NROFF = nroff
 MANS = $(man1_MANS)
-DATA = $(dist_doc_DATA) $(dist_html_DATA) $(html_DATA)
+DATA = $(dist_doc_DATA) $(dist_dtd_DATA) $(dist_html_DATA) \
+	$(html_DATA)
 am__tagged_files = $(HEADERS) $(SOURCES) $(TAGS_FILES) $(LISP)
 am__DIST_COMMON = $(srcdir)/Makefile.in \
 	$(srcdir)/dbus-cleanup-sockets.1.xml.in \
@@ -179,6 +184,8 @@ ACLOCAL = @ACLOCAL@
 ADT_LIBS = @ADT_LIBS@
 AMTAR = @AMTAR@
 AM_DEFAULT_VERBOSITY = @AM_DEFAULT_VERBOSITY@
+APPARMOR_2_10_CFLAGS = @APPARMOR_2_10_CFLAGS@
+APPARMOR_2_10_LIBS = @APPARMOR_2_10_LIBS@
 APPARMOR_CFLAGS = @APPARMOR_CFLAGS@
 APPARMOR_LIBS = @APPARMOR_LIBS@
 AR = @AR@
@@ -192,6 +199,11 @@ CC = @CC@
 CCDEPMODE = @CCDEPMODE@
 CFLAGS = @CFLAGS@
 CFLAG_VISIBILITY = @CFLAG_VISIBILITY@
+CODE_COVERAGE_CFLAGS = @CODE_COVERAGE_CFLAGS@
+CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
+CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
+CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
+CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
 CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CXX = @CXX@
@@ -201,7 +213,6 @@ CXXFLAGS = @CXXFLAGS@
 CYGPATH_W = @CYGPATH_W@
 DATADIR_FROM_PKGSYSCONFDIR = @DATADIR_FROM_PKGSYSCONFDIR@
 DBUS_BINDIR = @DBUS_BINDIR@
-DBUS_CONSOLE_AUTH_DIR = @DBUS_CONSOLE_AUTH_DIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
@@ -213,7 +224,6 @@ DBUS_LIBEXECDIR = @DBUS_LIBEXECDIR@
 DBUS_MAJOR_VERSION = @DBUS_MAJOR_VERSION@
 DBUS_MICRO_VERSION = @DBUS_MICRO_VERSION@
 DBUS_MINOR_VERSION = @DBUS_MINOR_VERSION@
-DBUS_PATH_OR_ABSTRACT = @DBUS_PATH_OR_ABSTRACT@
 DBUS_PREFIX = @DBUS_PREFIX@
 DBUS_SESSION_BUS_CONNECT_ADDRESS = @DBUS_SESSION_BUS_CONNECT_ADDRESS@
 DBUS_SESSION_BUS_LISTEN_ADDRESS = @DBUS_SESSION_BUS_LISTEN_ADDRESS@
@@ -249,9 +259,19 @@ EXPANDED_LIBDIR = @EXPANDED_LIBDIR@
 EXPANDED_LIBEXECDIR = @EXPANDED_LIBEXECDIR@
 EXPANDED_LOCALSTATEDIR = @EXPANDED_LOCALSTATEDIR@
 EXPANDED_PREFIX = @EXPANDED_PREFIX@
+EXPANDED_RUNSTATEDIR = @EXPANDED_RUNSTATEDIR@
 EXPANDED_SYSCONFDIR = @EXPANDED_SYSCONFDIR@
+EXPAT_CFLAGS = @EXPAT_CFLAGS@
+EXPAT_LIBS = @EXPAT_LIBS@
+EXTRA_CFLAGS = @EXTRA_CFLAGS@
+EXTRA_CXXFLAGS = @EXTRA_CXXFLAGS@
+EXTRA_LDFLAGS = @EXTRA_LDFLAGS@
 FGREP = @FGREP@
+GCOV = @GCOV@
+GENHTML = @GENHTML@
 GETTEXT_PACKAGE = @GETTEXT_PACKAGE@
+GIO_UNIX_CFLAGS = @GIO_UNIX_CFLAGS@
+GIO_UNIX_LIBS = @GIO_UNIX_LIBS@
 GLIB_CFLAGS = @GLIB_CFLAGS@
 GLIB_LIBS = @GLIB_LIBS@
 GREP = @GREP@
@@ -263,6 +283,7 @@ INSTALL_SCRIPT = @INSTALL_SCRIPT@
 INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
 LAUNCHCTL = @LAUNCHCTL@
 LAUNCHD_AGENT_DIR = @LAUNCHD_AGENT_DIR@
+LCOV = @LCOV@
 LD = @LD@
 LDFLAGS = @LDFLAGS@
 LIBDBUS_LIBS = @LIBDBUS_LIBS@
@@ -305,6 +326,7 @@ RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
 SED = @SED@
+SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
 SET_MAKE = @SET_MAKE@
 SHELL = @SHELL@
@@ -321,11 +343,12 @@ THREAD_LIBS = @THREAD_LIBS@
 VALGRIND_CFLAGS = @VALGRIND_CFLAGS@
 VALGRIND_LIBS = @VALGRIND_LIBS@
 VERSION = @VERSION@
-WINDRES = @WINDRES@
+WARN_CFLAGS = @WARN_CFLAGS@
+WARN_CXXFLAGS = @WARN_CXXFLAGS@
+WARN_LDFLAGS = @WARN_LDFLAGS@
+WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
 XMKMF = @XMKMF@
 XMLTO = @XMLTO@
-XML_CFLAGS = @XML_CFLAGS@
-XML_LIBS = @XML_LIBS@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
 X_EXTRA_LIBS = @X_EXTRA_LIBS@
@@ -364,6 +387,8 @@ host_cpu = @host_cpu@
 host_os = @host_os@
 host_vendor = @host_vendor@
 htmldir = @htmldir@
+ifGNUmake = @ifGNUmake@
+ifnGNUmake = @ifnGNUmake@
 includedir = @includedir@
 infodir = @infodir@
 install_sh = @install_sh@
@@ -375,6 +400,7 @@ mandir = @mandir@
 mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
+pkgconfig_prefix = @pkgconfig_prefix@
 pkgpyexecdir = @pkgpyexecdir@
 pkgpythondir = @pkgpythondir@
 prefix = @prefix@
@@ -409,7 +435,8 @@ man_pages = \
 MAN_XML_FILES = $(patsubst %.1,%.1.xml,$(man_pages))
 @DBUS_XML_DOCS_ENABLED_TRUE@man1_MANS = $(man_pages)
 MAN_HTML_FILES = $(patsubst %.1,%.1.html,$(man_pages))
-DTDS = \
+dtddir = $(datadir)/xml/dbus-1
+dist_dtd_DATA = \
 	busconfig.dtd \
 	introspect.dtd
 
@@ -423,8 +450,7 @@ STATIC_DOCS = \
 	dbus-tutorial.xml \
 	dbus-api-design.duck \
 	dcop-howto.txt \
-	introspect.xsl \
-	$(DTDS)
+	introspect.xsl
 
 EXTRA_DIST = \
 	file-boilerplate.c \
@@ -470,7 +496,7 @@ XMLTO_HTML = \
 
 @DBUS_CAN_UPLOAD_DOCS_TRUE@BONUS_FILES = \
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(top_srcdir)/README \
-@DBUS_CAN_UPLOAD_DOCS_TRUE@	$(top_srcdir)/HACKING \
+@DBUS_CAN_UPLOAD_DOCS_TRUE@	$(top_srcdir)/CONTRIBUTING.md \
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(top_srcdir)/AUTHORS \
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(top_srcdir)/NEWS \
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(top_srcdir)/COPYING \
@@ -606,6 +632,27 @@ uninstall-dist_docDATA:
 	@list='$(dist_doc_DATA)'; test -n "$(docdir)" || list=; \
 	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
 	dir='$(DESTDIR)$(docdir)'; $(am__uninstall_files_from_dir)
+install-dist_dtdDATA: $(dist_dtd_DATA)
+	@$(NORMAL_INSTALL)
+	@list='$(dist_dtd_DATA)'; test -n "$(dtddir)" || list=; \
+	if test -n "$$list"; then \
+	  echo " $(MKDIR_P) '$(DESTDIR)$(dtddir)'"; \
+	  $(MKDIR_P) "$(DESTDIR)$(dtddir)" || exit 1; \
+	fi; \
+	for p in $$list; do \
+	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
+	  echo "$$d$$p"; \
+	done | $(am__base_list) | \
+	while read files; do \
+	  echo " $(INSTALL_DATA) $$files '$(DESTDIR)$(dtddir)'"; \
+	  $(INSTALL_DATA) $$files "$(DESTDIR)$(dtddir)" || exit $$?; \
+	done
+
+uninstall-dist_dtdDATA:
+	@$(NORMAL_UNINSTALL)
+	@list='$(dist_dtd_DATA)'; test -n "$(dtddir)" || list=; \
+	files=`for p in $$list; do echo $$p; done | sed -e 's|^.*/||'`; \
+	dir='$(DESTDIR)$(dtddir)'; $(am__uninstall_files_from_dir)
 install-dist_htmlDATA: $(dist_html_DATA)
 	@$(NORMAL_INSTALL)
 	@list='$(dist_html_DATA)'; test -n "$(htmldir)" || list=; \
@@ -693,7 +740,7 @@ check: check-am
 @DBUS_DOXYGEN_DOCS_ENABLED_FALSE@all-local:
 all-am: Makefile $(MANS) $(DATA) all-local
 installdirs:
-	for dir in "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(docdir)" "$(DESTDIR)$(htmldir)" "$(DESTDIR)$(htmldir)"; do \
+	for dir in "$(DESTDIR)$(man1dir)" "$(DESTDIR)$(docdir)" "$(DESTDIR)$(dtddir)" "$(DESTDIR)$(htmldir)" "$(DESTDIR)$(htmldir)"; do \
 	  test -z "$$dir" || $(MKDIR_P) "$$dir"; \
 	done
 install: install-am
@@ -750,7 +797,8 @@ info: info-am
 info-am:
 
 install-data-am: install-data-local install-dist_docDATA \
-	install-dist_htmlDATA install-htmlDATA install-man
+	install-dist_dtdDATA install-dist_htmlDATA install-htmlDATA \
+	install-man
 
 install-dvi: install-dvi-am
 
@@ -794,8 +842,9 @@ ps: ps-am
 
 ps-am:
 
-uninstall-am: uninstall-dist_docDATA uninstall-dist_htmlDATA \
-	uninstall-htmlDATA uninstall-local uninstall-man
+uninstall-am: uninstall-dist_docDATA uninstall-dist_dtdDATA \
+	uninstall-dist_htmlDATA uninstall-htmlDATA uninstall-local \
+	uninstall-man
 
 uninstall-man: uninstall-man1
 
@@ -806,16 +855,17 @@ uninstall-man: uninstall-man1
 	distclean-generic distclean-libtool distdir dvi dvi-am html \
 	html-am info info-am install install-am install-data \
 	install-data-am install-data-local install-dist_docDATA \
-	install-dist_htmlDATA install-dvi install-dvi-am install-exec \
-	install-exec-am install-html install-html-am install-htmlDATA \
-	install-info install-info-am install-man install-man1 \
-	install-pdf install-pdf-am install-ps install-ps-am \
-	install-strip installcheck installcheck-am installdirs \
-	maintainer-clean maintainer-clean-generic mostlyclean \
-	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
-	tags-am uninstall uninstall-am uninstall-dist_docDATA \
-	uninstall-dist_htmlDATA uninstall-htmlDATA uninstall-local \
-	uninstall-man uninstall-man1
+	install-dist_dtdDATA install-dist_htmlDATA install-dvi \
+	install-dvi-am install-exec install-exec-am install-html \
+	install-html-am install-htmlDATA install-info install-info-am \
+	install-man install-man1 install-pdf install-pdf-am install-ps \
+	install-ps-am install-strip installcheck installcheck-am \
+	installdirs maintainer-clean maintainer-clean-generic \
+	mostlyclean mostlyclean-generic mostlyclean-libtool pdf pdf-am \
+	ps ps-am tags-am uninstall uninstall-am uninstall-dist_docDATA \
+	uninstall-dist_dtdDATA uninstall-dist_htmlDATA \
+	uninstall-htmlDATA uninstall-local uninstall-man \
+	uninstall-man1
 
 .PRECIOUS: Makefile
 
@@ -832,7 +882,7 @@ uninstall-man: uninstall-man1
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@	$(AM_V_GEN)cd $(top_builddir) && doxygen Doxyfile
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@	@touch $@
 
-@DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_HAVE_XSLTPROC_TRUE@dbus.devhelp: $(srcdir)/doxygen_to_devhelp.xsl doxygen.stamp
+@DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_HAVE_XSLTPROC_TRUE@dbus.devhelp2: $(srcdir)/doxygen_to_devhelp.xsl doxygen.stamp
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_HAVE_XSLTPROC_TRUE@	$(XSLTPROC) -o $@ $< api/xml/index.xml
 
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@@DBUS_DUCKTYPE_DOCS_ENABLED_TRUE@%.page: %.duck
@@ -866,10 +916,11 @@ uninstall-man: uninstall-man1
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(apidir) || \
 @DBUS_DOXYGEN_DOCS_ENABLED_TRUE@		rmdir $(DESTDIR)$(apidir)
 
-@DBUS_CAN_UPLOAD_DOCS_TRUE@dbus-docs: $(STATIC_DOCS) $(MAN_XML_FILES) $(dist_doc_DATA) $(dist_html_DATA) $(MAN_HTML_FILES) $(BONUS_FILES) doxygen.stamp $(XMLTO_HTML) $(YELP_HTML)
+@DBUS_CAN_UPLOAD_DOCS_TRUE@dbus-docs: $(STATIC_DOCS) $(dist_dtd_DATA) $(MAN_XML_FILES) $(dist_doc_DATA) $(dist_html_DATA) $(MAN_HTML_FILES) $(BONUS_FILES) doxygen.stamp $(XMLTO_HTML) $(YELP_HTML)
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_at)rm -rf $@ $@.tmp
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_GEN)$(MKDIR_P) $@.tmp/api
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_at)cd $(srcdir) && cp $(STATIC_DOCS) @abs_builddir@/$@.tmp
+@DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_at)cd $(srcdir) && cp $(dist_dtd_DATA) @abs_builddir@/$@.tmp
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_at)cd $(srcdir) && cp $(dist_doc_DATA) @abs_builddir@/$@.tmp
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_at)cd $(srcdir) && cp $(STATIC_HTML) @abs_builddir@/$@.tmp
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	$(AM_V_at)cp $(XMLTO_HTML) @abs_builddir@/$@.tmp
@@ -892,11 +943,10 @@ uninstall-man: uninstall-man1
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	scp dbus-docs.tar.gz $(DOC_SERVER):$(DOC_WWW_DIR)/
 @DBUS_CAN_UPLOAD_DOCS_TRUE@	rsync -rpvzP --chmod=Dg+s,ug+rwX,o=rX \
 @DBUS_CAN_UPLOAD_DOCS_TRUE@		dbus-docs/ $(DOC_SERVER):$(DOC_WWW_DIR)/doc/
-@DBUS_CAN_UPLOAD_DOCS_TRUE@	cd $(srcdir) && scp -p $(DTDS) $(SPECIFICATION_SERVER):$(SPECIFICATION_PATH)/
+@DBUS_CAN_UPLOAD_DOCS_TRUE@	cd $(srcdir) && scp -p $(dist_dtd_DATA) $(SPECIFICATION_SERVER):$(SPECIFICATION_PATH)/
 @DBUS_CAN_UPLOAD_DOCS_FALSE@maintainer-upload-docs:
 @DBUS_CAN_UPLOAD_DOCS_FALSE@	@echo "Can't upload documentation! Re-run configure with"
 @DBUS_CAN_UPLOAD_DOCS_FALSE@	@echo "  --enable-doxygen-docs --enable-xml-docs --enable-ducktype-docs"
-@DBUS_CAN_UPLOAD_DOCS_FALSE@	@echo "and ensure that man2html is installed."
 @DBUS_CAN_UPLOAD_DOCS_FALSE@	@false
 
 clean-local:

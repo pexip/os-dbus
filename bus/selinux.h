@@ -33,8 +33,7 @@ void        bus_selinux_shutdown (void);
 
 dbus_bool_t bus_selinux_enabled  (void);
 
-void bus_selinux_id_ref    (BusSELinuxID *sid);
-void bus_selinux_id_unref  (BusSELinuxID *sid);
+BusSELinuxID *bus_selinux_get_self (void);
 
 DBusHashTable* bus_selinux_id_table_new    (void);
 BusSELinuxID*  bus_selinux_id_table_lookup (DBusHashTable    *service_table,
@@ -61,6 +60,7 @@ dbus_bool_t bus_selinux_allows_send            (DBusConnection *sender,
 						const char     *member,
 						const char     *error_name,
 						const char     *destination,
+						BusActivationEntry *activation_entry,
 						DBusError      *error);
 
 BusSELinuxID* bus_selinux_init_connection_id (DBusConnection *connection,

@@ -2,11 +2,17 @@ From: Simon McVittie <smcv@debian.org>
 Date: Wed, 21 Oct 2015 11:17:02 +0100
 Subject: session.conf, system.conf: include legacy files as *.dpkg-bak
 
-The Debian maintainer scripts will delete the legacy files if they
-have not been modified, or move them to *.dpkg-bak if they were
-modified. This allows the plain session.conf and system.conf names
-to be replaced with symbolic links, which is enough to let the
-old dbus-daemon reload its configuration during upgrades in most cases.
+The Debian maintainer scripts used while upgrading from jessie to stretch
+delete the legacy files if they have not been modified, or move them to
+*.dpkg-bak if they were modified. This allows the plain session.conf and
+system.conf names to be replaced with symbolic links, which is enough
+to let the old dbus-daemon reload its configuration during upgrades in
+most cases.
+
+This patch also avoids circular inclusion of the configuration file
+via those symlinks before they are cleaned up by dbus.postinst.
+
+This change can be removed after Debian 10 is released.
 
 Origin: vendor, Debian
 Forwarded: not-needed, Debian-specific
@@ -32,10 +38,10 @@ index affa7f1..bd50585 100644
    <!-- Config files are placed here that among other things, 
         further restrict the above policy for specific services. -->
 diff --git a/bus/system.conf.in b/bus/system.conf.in
-index 014f67e..692746c 100644
+index f139b55..e1025aa 100644
 --- a/bus/system.conf.in
 +++ b/bus/system.conf.in
-@@ -97,8 +97,9 @@
+@@ -99,8 +99,9 @@
             send_interface="org.freedesktop.DBus.Debug.Stats"/>
    </policy>
  
@@ -45,5 +51,5 @@ index 014f67e..692746c 100644
 +       if any -->
 +  <include ignore_missing="yes">@SYSCONFDIR_FROM_PKGDATADIR@/dbus-1/system.conf.dpkg-bak</include>
  
-   <!-- Config files are placed here that among other things, punch 
-        holes in the above policy for specific services. -->
+   <!-- The defaults for these limits are hard-coded in dbus-daemon.
+        Some clarifications:

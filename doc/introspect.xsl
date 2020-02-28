@@ -80,6 +80,12 @@
                       
                       <span class="type"><xsl:value-of select="@type"/></span><xsl:text> </xsl:text>
                       <span class="symbol"><xsl:value-of select="@name"/></span><xsl:text> </xsl:text>
+
+                      <xsl:if test="annotation">
+                        <ul>
+                          <xsl:apply-templates select="annotation"/>
+                        </ul>
+                      </xsl:if>
                     </li>
                   </xsl:for-each>
                 </ul>
@@ -97,7 +103,7 @@
 
 <xsl:template match="annotation"> 
   <li>
-    <span class="keyword">annotation</span>
+    <span class="keyword">annotation</span><xsl:text> </xsl:text>
     <code><xsl:value-of select="@name"/></code><xsl:text> = </xsl:text>
     <code><xsl:value-of select="@value"/></code>
   </li>

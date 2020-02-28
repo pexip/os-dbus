@@ -680,6 +680,7 @@ dbus_server_listen (const char     *address,
     }
   else
     {
+      dbus_error_free (&first_connect_error);
       _DBUS_ASSERT_ERROR_IS_CLEAR (error);
       return server;
     }
@@ -704,9 +705,8 @@ dbus_server_ref (DBusServer *server)
   if (_DBUS_UNLIKELY (old_refcount <= 0))
     {
       _dbus_atomic_dec (&server->refcount);
-      _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,
-                               _DBUS_FUNCTION_NAME, "old_refcount > 0",
-                               __FILE__, __LINE__);
+      _dbus_warn_return_if_fail (_DBUS_FUNCTION_NAME, "old_refcount > 0",
+                                 __FILE__, __LINE__);
       return NULL;
     }
 #endif
@@ -746,9 +746,8 @@ dbus_server_unref (DBusServer *server)
        * Bug: https://bugs.freedesktop.org/show_bug.cgi?id=68303
        */
       _dbus_atomic_inc (&server->refcount);
-      _dbus_warn_check_failed (_dbus_return_if_fail_warning_format,
-                               _DBUS_FUNCTION_NAME, "old_refcount > 0",
-                               __FILE__, __LINE__);
+      _dbus_warn_return_if_fail (_DBUS_FUNCTION_NAME, "old_refcount > 0",
+                                 __FILE__, __LINE__);
       return;
     }
 #endif
@@ -763,6 +762,20 @@ dbus_server_unref (DBusServer *server)
       _dbus_assert (server->vtable->finalize != NULL);
       
       (* server->vtable->finalize) (server);
+    }
+}
+
+void
+_dbus_server_disconnect_unlocked (DBusServer *server)
+{
+  _dbus_assert (server->vtable->disconnect != NULL);
+
+  if (!server->disconnected)
+    {
+      /* this has to be first so recursive calls to disconnect don't happen */
+      server->disconnected = TRUE;
+
+      (* server->vtable->disconnect) (server);
     }
 }
 
@@ -782,15 +795,7 @@ dbus_server_disconnect (DBusServer *server)
   dbus_server_ref (server);
   SERVER_LOCK (server);
 
-  _dbus_assert (server->vtable->disconnect != NULL);
-
-  if (!server->disconnected)
-    {
-      /* this has to be first so recursive calls to disconnect don't happen */
-      server->disconnected = TRUE;
-      
-      (* server->vtable->disconnect) (server);
-    }
+  _dbus_server_disconnect_unlocked (server);
 
   SERVER_UNLOCK (server);
   dbus_server_unref (server);
@@ -962,7 +967,7 @@ dbus_server_set_watch_functions (DBusServer              *server,
     }
   else
     {
-      _dbus_warn_check_failed ("Re-entrant call to %s\n", _DBUS_FUNCTION_NAME);
+      _dbus_warn_check_failed ("Re-entrant call to %s", _DBUS_FUNCTION_NAME);
       result = FALSE;
     }
   server->watches = watches;
@@ -1015,7 +1020,7 @@ dbus_server_set_timeout_functions (DBusServer                *server,
     }
   else
     {
-      _dbus_warn_check_failed ("Re-entrant call to %s\n", _DBUS_FUNCTION_NAME);
+      _dbus_warn_check_failed ("Re-entrant call to %s", _DBUS_FUNCTION_NAME);
       result = FALSE;
     }
   server->timeouts = timeouts;
@@ -1213,7 +1218,7 @@ _dbus_server_test (void)
       server = dbus_server_listen (valid_addresses[i], &error);
       if (server == NULL)
         {
-          _dbus_warn ("server listen error: %s: %s\n", error.name, error.message);
+          _dbus_warn ("server listen error: %s: %s", error.name, error.message);
           dbus_error_free (&error);
           _dbus_assert_not_reached ("Failed to listen for valid address.");
         }
@@ -1225,7 +1230,7 @@ _dbus_server_test (void)
 
       if (strstr (address, id) == NULL)
         {
-          _dbus_warn ("server id '%s' is not in the server address '%s'\n",
+          _dbus_warn ("server id '%s' is not in the server address '%s'",
                       id, address);
           _dbus_assert_not_reached ("bad server id or address");
         }

@@ -35,6 +35,8 @@
 
 static dbus_bool_t ignore_errors = FALSE;
 
+static void usage (int ecode) _DBUS_GNUC_NORETURN;
+
 static void
 usage (int ecode)
 {
@@ -177,6 +179,17 @@ dbus_test_tool_spam (int argc, char **argv)
     {
       const char *arg = argv[i];
 
+      if (payload != NULL &&
+          (strstr (arg, "--payload=") == arg ||
+           strcmp (arg, "--stdin") == 0 ||
+           strcmp (arg, "--message-stdin") == 0 ||
+           strcmp (arg, "--random-size") == 0))
+        {
+          fprintf (stderr, "At most one of --payload, --stdin, --message-stdin "
+                           "and --random-size may be specified\n\n");
+          usage (2);
+        }
+
       if (strcmp (arg, "--system") == 0)
         {
           type = DBUS_BUS_SYSTEM;
@@ -245,7 +258,7 @@ dbus_test_tool_spam (int argc, char **argv)
               n_random_sizes++;
             }
 
-          random_sizes = dbus_new0 (int, n_random_sizes);
+          random_sizes = dbus_new0 (unsigned int, n_random_sizes);
 
           if (random_sizes == NULL)
             tool_oom ("allocating array of message lengths");
