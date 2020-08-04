@@ -1,3 +1,21 @@
+dbus (1.12.20-0+deb10u1pexip1) pexip; urgency=medium
+
+  * New upstream release
+
+ -- Steve McIntyre <steve.mcintyre@pexip.com>  Tue, 04 Aug 2020 15:00:35 +0100
+
+dbus (1.12.20-0+deb10u1) buster; urgency=medium
+
+  * New upstream stable release
+    - CVE-2020-12049: Prevent a denial of service attack in which a local
+      user can make the system dbus-daemon run out of file descriptors
+    - Prevent use-after-free if two usernames share a uid
+    - d/p/dbus-daemon-test-Don-t-test-fd-limits-if-in-an-unprivileg.patch:
+      Drop patch, applied upstream.
+  * d/gbp.conf: Configure for debian/buster
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 05 Jul 2020 17:10:45 +0100
+
 dbus (1.12.16-1pexip2) pexip; urgency=medium
 
   * Rebuild in buster environment
@@ -9,6 +27,7 @@ dbus (1.12.16-1pexip1) pexip; urgency=medium
   * Migrate to Buster
 
  -- Vincent Sanders <vince@pexip.com>  Fri, 28 Feb 2020 11:20:00 +0000
+
 
 dbus (1.12.16-1) unstable; urgency=medium
 
