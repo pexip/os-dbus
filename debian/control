@@ -11,31 +11,32 @@ Uploaders:
 Build-Depends:
  autoconf-archive (>= 20150224),
  automake,
- debhelper (>= 11.1~),
+ debhelper-compat (= 12),
  dh-exec,
- libapparmor-dev [linux-any] <!pkg.dbus.minimal>,
- libaudit-dev [linux-any] <!pkg.dbus.minimal>,
- libcap-ng-dev [linux-any] <!pkg.dbus.minimal>,
+ libapparmor-dev [linux-any],
+ libaudit-dev [linux-any],
+ libcap-ng-dev [linux-any],
  libexpat-dev,
- libglib2.0-dev <!pkg.dbus.minimal>,
+ libglib2.0-dev <!nocheck> <!noinsttest>,
  libnss-wrapper <!nocheck>,
- libselinux1-dev [linux-any] <!pkg.dbus.minimal>,
- libsystemd-dev [linux-any] <!pkg.dbus.minimal>,
- libx11-dev <!pkg.dbus.minimal>,
- python3 <!nocheck !pkg.dbus.minimal>,
- python3-dbus <!nocheck !pkg.dbus.minimal>,
- python3-gi <!nocheck !pkg.dbus.minimal>,
- valgrind [amd64 arm64 armhf i386 mips64 mips64el mips mipsel powerpc ppc64 ppc64el s390x] <!pkg.dbus.minimal>,
- xmlto <!nodoc !pkg.dbus.minimal>,
+ libselinux1-dev [linux-any],
+ libsystemd-dev [linux-any],
+ libx11-dev,
+ pkg-config,
+ python3 <!nocheck> <!noinsttest>,
+ python3-dbus <!nocheck> <!noinsttest>,
+ python3-gi <!nocheck> <!noinsttest>,
+ valgrind [amd64 arm64 armhf i386 mips64 mips64el mips mipsel powerpc ppc64 ppc64el s390x],
+ xmlto <!nodoc>,
 Build-Depends-Indep:
  doxygen <!nodoc>,
  ducktype <!nodoc>,
  xsltproc <!nodoc>,
  yelp-tools <!nodoc>,
-Standards-Version: 4.2.1
+Standards-Version: 4.5.1
 Vcs-Git: https://salsa.debian.org/utopia-team/dbus.git
 Vcs-Browser: https://salsa.debian.org/utopia-team/dbus
-Homepage: http://dbus.freedesktop.org/
+Homepage: https://dbus.freedesktop.org/
 Rules-Requires-Root: no
 
 Package: dbus
@@ -43,7 +44,13 @@ Architecture: any
 Priority: standard
 Provides:
  dbus-bin (= ${binary:Version}),
+ dbus-daemon (= ${binary:Version}),
+ dbus-session-bus-common (= ${binary:Version}),
  dbus-system-bus (= ${binary:Version}),
+ dbus-system-bus-common (= ${binary:Version}),
+ default-dbus-system-bus,
+Pre-Depends:
+ ${misc:Pre-Depends},
 Depends:
  adduser,
  ${misc:Depends},
@@ -70,10 +77,12 @@ Description: simple interprocess messaging system (daemon and utilities)
  longer contained in this package.
 
 Package: dbus-1-doc
-Build-Profiles: <!nodoc !pkg.dbus.minimal>
+Build-Profiles: <!nodoc>
 Section: doc
 Architecture: all
 Multi-Arch: foreign
+Pre-Depends:
+ ${misc:Pre-Depends},
 Depends:
  ${misc:Depends},
 Suggests:
@@ -89,7 +98,7 @@ Description: simple interprocess messaging system (documentation)
  See the dbus description for more information about D-Bus in general.
 
 Package: dbus-tests
-Build-Profiles: <!pkg.dbus.minimal>
+Build-Profiles: <!noinsttest>
 Section: misc
 Architecture: any
 Pre-Depends:
@@ -120,6 +129,8 @@ Build-Profiles: <!noudeb>
 Section: debian-installer
 Package-Type: udeb
 Architecture: any
+Pre-Depends:
+ ${misc:Pre-Depends},
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
@@ -131,7 +142,6 @@ Description: simple interprocess messaging system (minimal runtime)
  suitable for use as a system bus.
 
 Package: dbus-user-session
-Build-Profiles: <!pkg.dbus.minimal>
 Architecture: linux-any
 Multi-Arch: foreign
 Provides:
@@ -174,12 +184,13 @@ Description: simple interprocess messaging system (systemd --user integration)
  See the dbus package description for more information about D-Bus in general.
 
 Package: dbus-x11
-Build-Profiles: <!pkg.dbus.minimal>
 Architecture: any
 Section: x11
 Provides:
  dbus-session-bus,
  default-dbus-session-bus [!linux-any],
+Pre-Depends:
+ ${misc:Pre-Depends},
 Depends:
  dbus,
  ${misc:Depends},
@@ -228,6 +239,8 @@ Build-Profiles: <!noudeb>
 Section: debian-installer
 Package-Type: udeb
 Architecture: any
+Pre-Depends:
+ ${misc:Pre-Depends},
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},

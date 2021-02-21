@@ -1,14 +1,113 @@
-dbus (1.12.20-0+deb10u1) buster; urgency=medium
+dbus (1.12.20-2) unstable; urgency=medium
 
+  * Add Provides for the split binary packages added in experimental.
+    Actually splitting up dbus seems too risky for this stage in the
+    release process, but if we add them as virtual packages in Debian 11,
+    then switching dependencies during the Debian 12 cycle won't require
+    alternative dependencies or a flag-day transition.
+  * dbus-tests: Silence Lintian warnings for breakout-link
+  * Remove unnecessary Readme.txt from sha1 test data.
+    This causes Lintian warnings because it isn't UTF-8, and it isn't
+    actually useful.
+  * Standards-Version: 4.5.1 (no changes required)
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 21 Feb 2021 14:02:17 +0000
+
+dbus (1.12.20-1) unstable; urgency=medium
+
+  [ Mark Hindley ]
+  * Fix system-bus autopkgtest detection of systemd as PID1.
+    The test attempts to detect whether systemd is available by testing for
+    /run/systemd. However, this path can exist on non-systemd systems.
+    Look for /run/systemd/system instead. (Closes: #962466)
+
+  [ Simon McVittie ]
+  * New upstream stable release
+    - Prevent use-after-free if two usernames share a uid
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 02 Jul 2020 14:19:21 +0100
+
+dbus (1.12.18-1) unstable; urgency=medium
+
+  [ Simon McVittie ]
   * New upstream stable release
     - CVE-2020-12049: Prevent a denial of service attack in which a local
       user can make the system dbus-daemon run out of file descriptors
-    - Prevent use-after-free if two usernames share a uid
     - d/p/dbus-daemon-test-Don-t-test-fd-limits-if-in-an-unprivileg.patch:
       Drop patch, applied upstream.
-  * d/gbp.conf: Configure for debian/buster
+  * Switch to debhelper-compat 12
+    - Don't restart systemd units on upgrade.
+      Previously, this was handled by the dh_installinit override.
+    - Add ${misc:Pre-Depends} to all binary packages.
+      This is required for dbus for dh_installsystemd under dh compat
+      level 12, and is harmless for the others.
+  * dbus: Remove an unused Lintian override.
+    Lintian used to warn twice for the statically-enabled dbus.service unit,
+    but now only warns once.
+  * dbus-tests: Silence package-contains-documentation-outside-usr-share-doc
+    Lintian tag.
+    The tests contain some READMEs that describe what is in their directory.
+  * d/tests: Remove compatibility with deprecated ADTTMP.
+    autopkgtest has supported AUTOPKGTEST_TMP long enough to use it
+    unconditionally.
+  * Introduce noinsttest build profile.
+    This disables dbus-tests, and when combined with nocheck it disables
+    the circular GLib dependency.
+  * Remove non-standard pkg.dbus.minimal build profile.
+    It was not a "safe" build profile (it altered the contents of binary
+    packages, notably dropping LSM and systemd support, which could result
+    in dependent packages being broken), and the combination of nocheck,
+    nodoc and noinsttest achieves most of the same build-dependency
+    reductions.
+  * Explicitly build-depend on pkg-config.
+    Previously, this was pulled in by libglib2.0-dev. (Closes: #945201)
+  * d/upstream/metadata: Distinguish between Bug-Submit and Bug-Database
+  * Change system bus socket to /run/dbus/system_bus_socket.
+    The interoperable cross-distro path is /var/run/dbus/system_bus_socket,
+    so this remains the upstream default for the benefit of distributions
+    where /var/run and /run are (problematically) not guaranteed to be
+    equivalent. However, Debian Policy since at least v4.1.5 guarantees
+    that /var/run is a symlink to /run, and this has been implemented
+    for several stable releases (since at least initscripts 2.88dsf-29
+    in 2012, in the sysvinit case), so it is harmless to prefer the
+    path in /run, which has advantages in a few corner cases (ability
+    to unmount /var is the main one) and avoids warnings from systemd.
+    (Closes: #783321, #857678, #932105, #958289)
+  * Standards-Version: 4.5.0
+    - Note that the user for `dbus-daemon --system` is still named
+      'messagebus' for historical reasons. If it was added today,
+      we'd call it _dbus as per Policy §9.2.1, but this is not the right
+      package to be experimenting with renaming system users.
+  * d/dbus-udeb.postinst: Remove #DEBHELPER# token.
+    debhelper doesn't actually substitute this in udebs, making it just
+    an ordinary comment.
 
- -- Simon McVittie <smcv@debian.org>  Sun, 05 Jul 2020 17:10:45 +0100
+  [ Debian Janitor ]
+  * Remove trailing whitespace in d/changelog.
+  * Use secure URI in Homepage field.
+  * Re-export upstream signing key without extra signatures.
+  * Set upstream metadata fields: Bug-Submit (from ./configure),
+    Repository, Repository-Browse.
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 02 Jun 2020 19:48:04 +0100
+
+dbus (1.12.16-2) unstable; urgency=medium
+
+  * Add bug number to previous changelog entry
+  * Standards-Version: 4.4.1 (no changes required)
+    - Note that dbus-user-session still has its previous dependencies,
+      and has deliberately not been switched to the new default-logind
+      virtual package. dbus-user-session relies on systemd --user: it
+      is not enough to have systemd-logind or a compatible replacement
+      like elogind.
+  * d/dbus.init: Work around #940971 in libnss-systemd.
+    If we are booting with a non-systemd init but libnss-systemd is still
+    installed, tell libnss-systemd not to try to connect to dbus-daemon,
+    which is never going to work well from inside dbus-daemon.
+  * dbus.postinst: Append dbus to /run/reboot-required.pkgs on upgrade
+    (Closes: #867263)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 30 Sep 2019 08:47:02 +0100
 
 dbus (1.12.16-1) unstable; urgency=medium
 
@@ -21,7 +120,7 @@ dbus (1.12.16-1) unstable; urgency=medium
       system and session dbus-daemons in their default configuration were
       immune to this attack because they did not allow DBUS_COOKIE_SHA1,
       but third-party users of DBusServer such as Upstart could be
-      vulnerable.
+      vulnerable. (Closes: #930375)
 
  -- Simon McVittie <smcv@debian.org>  Sun, 09 Jun 2019 21:34:34 +0100
 
@@ -1978,7 +2077,7 @@ dbus (1.1.20-1) unstable; urgency=medium
       Methods"/> work as an implicit allow for messages sent without an
       interface bypassing the default deny rules and potentially allowing
       restricted methods exported on the bus to be executed by unauthorized
-      users. 
+      users.
 
  -- Michael Biebl <biebl@debian.org>  Thu, 28 Feb 2008 09:01:00 +0100
 

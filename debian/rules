@@ -27,13 +27,13 @@ dh_options = \
 
 common_configure_flags := \
 		--libexecdir=\$${prefix}/lib/dbus-1.0 \
+		--with-system-socket=/run/dbus/system_bus_socket \
 		$(NULL)
 
 normal_configure_flags := \
 	--libdir=/usr/lib/$(DEB_HOST_MULTIARCH) \
 	$(NULL)
 
-ifeq ($(filter pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
 ifeq ($(DEB_HOST_ARCH_OS),linux)
 # Non-bootstrap build on Linux: add Linux-specifics
 common_configure_flags += \
@@ -50,7 +50,6 @@ normal_configure_flags += \
 	--enable-user-session \
 	--with-systemduserunitdir='$${prefix}/lib/systemd/user' \
 	$(NULL)
-endif
 endif
 
 debug_configure_flags := \
@@ -84,17 +83,19 @@ udeb_configure_flags := \
 	CFLAGS='$(CFLAGS) -Os' \
 	$(NULL)
 
-ifeq ($(filter pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
+ifneq ($(filter dbus-tests,$(binaries)),)
 common_configure_flags += --enable-installed-tests
 else
 common_configure_flags += --disable-installed-tests
 endif
 
-ifeq ($(filter nocheck pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
+# Some features are needed whenever we have build-time *or* installed tests
+ifneq ($(filter nocheck,$(DEB_BUILD_OPTIONS))$(filter dbus-tests,$(binaries)),nocheck)
 common_configure_flags += PYTHON=/usr/bin/python3
+debug_configure_flags += --enable-embedded-tests
 endif
 
-ifeq ($(filter nodoc pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
+ifeq ($(filter nodoc,$(DEB_BUILD_PROFILES)),)
 normal_configure_flags += --enable-xml-docs
 else
 normal_configure_flags += --disable-xml-docs
@@ -106,11 +107,6 @@ normal_configure_flags += --enable-ducktype-docs
 else
 normal_configure_flags += --disable-doxygen-docs
 normal_configure_flags += --disable-ducktype-docs
-endif
-
-ifeq ($(filter pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
-# not a minimal build - build all the tests
-debug_configure_flags += --enable-embedded-tests
 endif
 
 override_dh_auto_configure:
@@ -167,6 +163,7 @@ test_env = \
 	$(NULL)
 
 override_dh_auto_test-arch:
+ifeq ($(filter nocheck,$(DEB_BUILD_OPTIONS)),)
 	install -d $(CURDIR)/debian/tmp-home
 	env $(test_env) \
 		dh_auto_test -- -k \
@@ -185,6 +182,7 @@ endif
 		-not -name config.log \
 		-not -name test-suite.log \
 		-print0 | xargs -0 tail -v -c1M
+endif
 
 override_dh_auto_test-indep:
 	:
@@ -213,11 +211,13 @@ ifneq ($(filter dbus-tests,$(binaries)),)
 		"s,^Exec=,Exec=sh -c 'export PATH=/usr/lib/dbus-1.0/debug-build/bin:\$$PATH; exec \"\$$@\"' sh ," \
 		debian/tmp/usr/share/installed-tests/dbus-debug-build/*.test
 	rm -f debian/tmp/${debug_build_prefix}/lib/libdbus-1.la
+	rm -f debian/tmp/${debug_build_prefix}/libexec/installed-tests/dbus/data/sha-1/Readme.txt
 	cd $(CURDIR)/debian/tmp && find | LC_ALL=C sort
 endif
 	# normal build (do this last so that it overwrites the others)
 	dh_auto_install
 	rm -f debian/tmp/usr/lib/$(DEB_HOST_MULTIARCH)/libdbus-1.la
+	rm -f debian/tmp/usr/lib/dbus-1.0/installed-tests/dbus/data/sha-1/Readme.txt
 ifeq ($(filter nodoc pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
 	# Reproducible build: sed out the generated dates from the man pages.
 	sed -i \
@@ -226,17 +226,11 @@ ifeq ($(filter nodoc pkg.dbus.minimal,$(DEB_BUILD_PROFILES)),)
 		debian/tmp/usr/share/man/man?/*
 endif
 ifeq ($(filter dbus-tests,$(binaries)),)
-	# pkg.dbus.minimal builds dbus-test-tool but not dbus-tests
+	# noinsttest builds dbus-test-tool but not dbus-tests
 	rm -f debian/tmp/usr/bin/dbus-test-tool
 endif
-ifeq ($(filter dbus-x11,$(binaries)),)
-	# pkg.dbus.minimal builds dbus-launch with degraded
-	# functionality, but not dbus-x11
-	rm -f debian/tmp/usr/bin/dbus-launch
-endif
 ifeq ($(filter dbus-1-doc,$(binaries)),)
-	# nodoc or pkg.dbus.minimal builds still install a bit of
-	# documentation
+	# nodoc builds still install a bit of documentation
 	rm -fr debian/tmp/usr/share/doc/dbus
 endif
 	# Remove the legacy bus configuration files. We move their old
@@ -265,6 +259,8 @@ override_dh_missing:
 # Yes, we do need both --no- options here. https://bugs.debian.org/837528
 override_dh_installinit:
 	dh_installinit -pdbus --no-stop-on-upgrade --no-restart-after-upgrade
+override_dh_installsystemd:
+	dh_installsystemd -pdbus --no-stop-on-upgrade --no-restart-after-upgrade
 
 override_dh_installdocs:
 	dh_installdocs --all AUTHORS NEWS README
