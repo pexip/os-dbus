@@ -4,8 +4,6 @@ set -e
 exec 2>&1
 set -u
 
-: "${AUTOPKGTEST_TMP:="${ADTTMP}"}"
-
 if [ -z "${HOME-}" ] || ! [ -w "${HOME}" ]; then
     export HOME="${AUTOPKGTEST_TMP}"
 fi

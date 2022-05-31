@@ -64,6 +64,10 @@ if [ "$1" = configure ] && [ -n "$2" ]; then
         # (used by unattended-upgrades etc.)
         touch /var/run/reboot-required || true
 
+        if ! grep -Fqsx dbus /run/reboot-required.pkgs; then
+            echo dbus >> /run/reboot-required.pkgs || true
+        fi
+
         # same thing for the older update-notifier interface
         [ -x /usr/share/update-notifier/notify-reboot-required ] && \
             /usr/share/update-notifier/notify-reboot-required || true

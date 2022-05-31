@@ -3,5 +3,3 @@
 set -e
 
 dbus-uuidgen --ensure
-
-#DEBHELPER#

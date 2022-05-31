@@ -19,7 +19,7 @@ test /run/dbus/system_bus_socket -ef /var/run/dbus/system_bus_socket || failed=1
 getent passwd messagebus || failed=1
 getent group messagebus || failed=1
 
-if [ -d /run/systemd ]; then
+if [ -d /run/systemd/system ]; then
     journalctl -f &
     journalctl_pid="$!"
 fi
@@ -123,7 +123,7 @@ dbus-send --system --dest="org.debian.packages.dbus.TradActivation" \
     / org.freedesktop.DBus.Peer.Ping \
     || failed=1
 
-if [ -d /run/systemd ]; then
+if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
 
     dbus-send --system --dest="org.debian.packages.dbus.SystemdActivation" \

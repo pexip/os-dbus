@@ -2,8 +2,6 @@
 
 set -e
 
-: "${AUTOPKGTEST_TMP:="${ADTTMP}"}"
-
 if [ -z "${HOME-}" ] || ! [ -w "${HOME}" ]; then
     export HOME="${AUTOPKGTEST_TMP}"
 fi
