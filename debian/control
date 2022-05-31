@@ -38,7 +38,7 @@ Vcs-Git: https://salsa.debian.org/utopia-team/dbus.git
 Vcs-Browser: https://salsa.debian.org/utopia-team/dbus
 Homepage: http://dbus.freedesktop.org/
 Rules-Requires-Root: no
-XS-Pexip-Upstream: http://ftp.debian.org/debian/ buster
+XS-Pexip-Upstream: http://deb.debian.org/debian/ bullseye
 
 Package: dbus
 Architecture: any
