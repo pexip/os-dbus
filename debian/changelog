@@ -1,3 +1,9 @@
+dbus (1.12.20-2pexip1) pexip; urgency=medium
+
+  * Initial bullseye build
+
+ -- Mark Hymers <mark.hymers@pexip.com>  Thu, 02 Jun 2022 14:42:07 +0100
+
 dbus (1.12.20-2) unstable; urgency=medium
 
   * Add Provides for the split binary packages added in experimental.
