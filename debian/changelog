@@ -1,3 +1,25 @@
+dbus (1.12.24-0+deb11u1) bullseye-security; urgency=medium
+
+  * New upstream stable release 1.12.22
+    - No longer logs warnings about /proc/self/oom_score_adj with
+      systemd >= 250 (Closes: #1004543)
+    - Improve reproducibility of documentation
+    - Fix a race condition in test/integration/transient-services.sh
+      which affects the autopkgtest (Closes: #1005889)
+    - Fixes for some non-Debian platforms
+  * New upstream stable release 1.12.24
+    - Fix several denial of service issues where an authenticated attacker
+      can crash the system bus by sending crafted messages
+      (CVE-2022-42010, CVE-2022-42011, CVE-2022-42012)
+    - Use a path-based Unix socket for the session bus, avoiding sandbox
+      escape for Flatpak apps with network access (dbus#416)
+    - Don't crash if asked to watch more than 128 directories for changes
+    - Fix error reporting for a rare out-of-memory condition
+    - Fixes for non-Debian mingw-w64 builds
+  * d/gbp.conf, d/control: Switch branch for bullseye
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 05 Oct 2022 12:04:31 +0100
+
 dbus (1.12.20-2) unstable; urgency=medium
 
   * Add Provides for the split binary packages added in experimental.
