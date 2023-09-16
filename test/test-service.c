@@ -1,6 +1,7 @@
 #include <config.h>
 
 #include "test-utils.h"
+#include <stdio.h>
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
@@ -60,7 +61,7 @@ check_hello_from_self_reply (DBusPendingCall *pcall,
   if (type == DBUS_MESSAGE_TYPE_METHOD_RETURN)
     {
       const char *s;
-      printf ("Reply from HelloFromSelf received\n");
+      fprintf (stderr, "Reply from HelloFromSelf received\n");
      
       if (!dbus_message_get_args (echo_message,
                               &error,
@@ -94,7 +95,7 @@ check_hello_from_self_reply (DBusPendingCall *pcall,
     }
   else if (dbus_set_error_from_message (&error, reply))
     {
-      printf ("Error type in reply: %s\n", error.message);
+      fprintf (stderr, "Error type in reply: %s\n", error.message);
 
       if (strcmp (error.name, DBUS_ERROR_NO_MEMORY) != 0)
         {
@@ -113,7 +114,7 @@ check_hello_from_self_reply (DBusPendingCall *pcall,
       dbus_error_free (&error);
     }
   else
-     _dbus_assert_not_reached ("Unexpected message received");
+     die ("Unexpected message received");
 
   hello_from_self_reply_received = TRUE;
   
@@ -155,7 +156,7 @@ handle_run_hello_from_self (DBusConnection     *connection,
 
       return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
     }
-    printf ("Sending HelloFromSelf\n");
+    fprintf (stderr, "Sending HelloFromSelf\n");
 
  _dbus_verbose ("*** Sending message to self\n");
  self_message = dbus_message_new_method_call ("org.freedesktop.DBus.TestSuiteEchoService",
@@ -173,7 +174,7 @@ handle_run_hello_from_self (DBusConnection     *connection,
   if (!dbus_pending_call_set_notify (pcall, check_hello_from_self_reply, (void *)message, NULL))
     die("No memory");
     
-  printf ("Sent HelloFromSelf\n");
+  fprintf (stderr, "Sent HelloFromSelf\n");
   return DBUS_HANDLER_RESULT_HANDLED;
 }
 
@@ -350,7 +351,7 @@ path_message_func (DBusConnection  *connection,
                                         "HelloFromSelf"))
     {
         DBusMessage *reply;
-        printf ("Received the HelloFromSelf message\n");
+        fprintf (stderr, "Received the HelloFromSelf message\n");
         
         reply = dbus_message_new_method_return (message);
         if (reply == NULL)
@@ -424,7 +425,14 @@ main (int    argc,
 #ifndef DBUS_WIN
    if (do_fork)
     {
-      pid_t pid = fork ();
+      pid_t pid;
+
+      /* Make sure our output buffers aren't redundantly printed by both the
+       * parent and the child */
+      fflush (stdout);
+      fflush (stderr);
+
+      pid = fork ();
       if (pid != 0)
         exit (0);
       sleep (1);
@@ -444,9 +452,8 @@ main (int    argc,
   loop = _dbus_loop_new ();
   if (loop == NULL)
     die ("No memory\n");
-  
-  if (!test_connection_setup (loop, connection))
-    die ("No memory\n");
+
+  test_connection_setup (loop, connection);
 
   if (!dbus_connection_add_filter (connection,
                                    filter_func, NULL, NULL))

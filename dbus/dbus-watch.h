@@ -4,7 +4,7 @@
  * Copyright (C) 2002  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -98,6 +98,13 @@ void           _dbus_watch_set_oom_last_time  (DBusWatch               *watch,
 DBusSocket     _dbus_watch_get_socket         (DBusWatch               *watch);
 DBUS_PRIVATE_EXPORT
 DBusPollable   _dbus_watch_get_pollable       (DBusWatch               *watch);
+
+static inline void
+_dbus_clear_watch (DBusWatch **pointer_to_watch)
+{
+  _dbus_clear_pointer_impl (DBusWatch, pointer_to_watch,
+                            _dbus_watch_unref);
+}
 
 /** @} */
 

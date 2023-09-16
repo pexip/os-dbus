@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003, 2004 Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -525,8 +525,8 @@ sha1_handle_first_client_response (DBusAuth         *auth,
   /* We haven't sent a challenge yet, we're expecting a desired
    * username from the client.
    */
-  DBusString tmp;
-  DBusString tmp2;
+  DBusString tmp = _DBUS_STRING_INIT_INVALID;
+  DBusString tmp2 = _DBUS_STRING_INIT_INVALID;
   dbus_bool_t retval = FALSE;
   DBusError error = DBUS_ERROR_INIT;
   DBusCredentials *myself = NULL;
@@ -550,10 +550,19 @@ sha1_handle_first_client_response (DBusAuth         *auth,
         }
     }
       
-  if (!_dbus_credentials_add_from_user (auth->desired_identity, data))
+  if (!_dbus_credentials_add_from_user (auth->desired_identity, data,
+                                        DBUS_CREDENTIALS_ADD_FLAGS_USER_DATABASE,
+                                        &error))
     {
-      _dbus_verbose ("%s: Did not get a valid username from client\n",
-                     DBUS_AUTH_NAME (auth));
+      if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
+        {
+          dbus_error_free (&error);
+          return FALSE;
+        }
+
+      _dbus_verbose ("%s: Did not get a valid username from client: %s\n",
+                     DBUS_AUTH_NAME (auth), error.message);
+      dbus_error_free (&error);
       return send_rejected (auth);
     }
       
@@ -707,9 +716,7 @@ sha1_handle_first_client_response (DBusAuth         *auth,
   _dbus_string_free (&tmp);
   _dbus_string_zero (&tmp2);
   _dbus_string_free (&tmp2);
-
-  if (myself != NULL)
-    _dbus_credentials_unref (myself);
+  _dbus_clear_credentials (&myself);
 
   return retval;
 }
@@ -1140,11 +1147,22 @@ handle_server_data_external_mech (DBusAuth         *auth,
     }
   else
     {
+      DBusError error = DBUS_ERROR_INIT;
+
       if (!_dbus_credentials_add_from_user (auth->desired_identity,
-                                            &auth->identity))
+                                            &auth->identity,
+                                            DBUS_CREDENTIALS_ADD_FLAGS_NONE,
+                                            &error))
         {
-          _dbus_verbose ("%s: could not get credentials from uid string\n",
-                         DBUS_AUTH_NAME (auth));
+          if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
+            {
+              dbus_error_free (&error);
+              return FALSE;
+            }
+
+          _dbus_verbose ("%s: could not get credentials from uid string: %s\n",
+                         DBUS_AUTH_NAME (auth), error.message);
+          dbus_error_free (&error);
           return send_rejected (auth);
         }
     }
@@ -1174,6 +1192,11 @@ handle_server_data_external_mech (DBusAuth         *auth,
 
       if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                              DBUS_CREDENTIAL_ADT_AUDIT_DATA_ID,
+                                             auth->credentials))
+        return FALSE;
+
+      if (!_dbus_credentials_add_credential (auth->authorized_identity,
+                                             DBUS_CREDENTIAL_UNIX_GROUP_IDS,
                                              auth->credentials))
         return FALSE;
 
@@ -1641,10 +1664,25 @@ process_ok(DBusAuth *auth,
                  _dbus_string_get_const_data (& DBUS_AUTH_CLIENT (auth)->guid_from_server));
 
   if (auth->unix_fd_possible)
-    return send_negotiate_unix_fd(auth);
+    {
+      if (!send_negotiate_unix_fd (auth))
+        {
+          _dbus_string_set_length (& DBUS_AUTH_CLIENT (auth)->guid_from_server, 0);
+          return FALSE;
+        }
+
+      return TRUE;
+    }
 
   _dbus_verbose("Not negotiating unix fd passing, since not possible\n");
-  return send_begin (auth);
+
+  if (!send_begin (auth))
+    {
+      _dbus_string_set_length (& DBUS_AUTH_CLIENT (auth)->guid_from_server, 0);
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
 static dbus_bool_t

@@ -4,7 +4,7 @@
  * Copyright (C) 2002-2006  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -245,9 +245,9 @@ struct DBusPreallocatedSend
 };
 
 #if HAVE_DECL_MSG_NOSIGNAL
-static dbus_bool_t _dbus_modify_sigpipe = FALSE;
+static DBusAtomic _dbus_modify_sigpipe = { FALSE };
 #else
-static dbus_bool_t _dbus_modify_sigpipe = TRUE;
+static DBusAtomic _dbus_modify_sigpipe = { TRUE };
 #endif
 
 /**
@@ -315,6 +315,8 @@ struct DBusConnection
   unsigned int shareable : 1; /**< #TRUE if libdbus owns a reference to the connection and can return it from dbus_connection_open() more than once */
   
   unsigned int exit_on_disconnect : 1; /**< If #TRUE, exit after handling disconnect signal */
+
+  unsigned int builtin_filters_enabled : 1; /**< If #TRUE, handle org.freedesktop.DBus.Peer messages automatically, whether they have a bus name or not */
 
   unsigned int route_peer_messages : 1; /**< If #TRUE, if org.freedesktop.DBus.Peer messages have a bus name, don't handle them automatically */
 
@@ -1328,7 +1330,7 @@ _dbus_connection_new_for_transport (DBusTransport *transport)
   if (objects == NULL)
     goto error;
   
-  if (_dbus_modify_sigpipe)
+  if (_dbus_atomic_get (&_dbus_modify_sigpipe) != 0)
     _dbus_disable_sigpipe ();
 
   /* initialized to 0: use atomic op to avoid mixing atomic and non-atomic */
@@ -1343,6 +1345,7 @@ _dbus_connection_new_for_transport (DBusTransport *transport)
   connection->objects = objects;
   connection->exit_on_disconnect = FALSE;
   connection->shareable = FALSE;
+  connection->builtin_filters_enabled = TRUE;
   connection->route_peer_messages = FALSE;
   connection->disconnected_message_arrived = FALSE;
   connection->disconnected_message_processed = FALSE;
@@ -2769,16 +2772,14 @@ _dbus_connection_last_unref (DBusConnection *connection)
 
   _dbus_hash_table_unref (connection->pending_replies);
   connection->pending_replies = NULL;
-  
+
   _dbus_list_foreach (&connection->outgoing_messages,
                       free_outgoing_message,
 		      connection);
   _dbus_list_clear (&connection->outgoing_messages);
-  
-  _dbus_list_foreach (&connection->incoming_messages,
-		      (DBusForeachFunction) dbus_message_unref,
-		      NULL);
-  _dbus_list_clear (&connection->incoming_messages);
+
+  _dbus_list_clear_full (&connection->incoming_messages,
+                         (DBusFreeFunction) dbus_message_unref);
 
   _dbus_counter_unref (connection->outgoing_counter);
 
@@ -4668,10 +4669,14 @@ dbus_connection_dispatch (DBusConnection *connection)
       goto out;
     }
 
-  result = _dbus_connection_run_builtin_filters_unlocked_no_update (connection, message);
-  if (result != DBUS_HANDLER_RESULT_NOT_YET_HANDLED)
-    goto out;
- 
+  /* If skipping builtin filters, we are probably a monitor. */
+  if (connection->builtin_filters_enabled)
+    {
+      result = _dbus_connection_run_builtin_filters_unlocked_no_update (connection, message);
+      if (result != DBUS_HANDLER_RESULT_NOT_YET_HANDLED)
+        goto out;
+    }
+
   if (!_dbus_list_copy (&connection->filter_list, &filter_list_copy))
     {
       _dbus_connection_release_dispatch (connection);
@@ -4686,10 +4691,11 @@ dbus_connection_dispatch (DBusConnection *connection)
       
       return DBUS_DISPATCH_NEED_MEMORY;
     }
-  
-  _dbus_list_foreach (&filter_list_copy,
-		      (DBusForeachFunction)_dbus_message_filter_ref,
-		      NULL);
+
+  for (link = _dbus_list_get_first_link (&filter_list_copy);
+       link != NULL;
+       link = _dbus_list_get_next_link (&filter_list_copy, link))
+    _dbus_message_filter_ref (link->data);
 
   /* We're still protected from dispatch() reentrancy here
    * since we acquired the dispatcher
@@ -4718,11 +4724,9 @@ dbus_connection_dispatch (DBusConnection *connection)
       link = next;
     }
 
-  _dbus_list_foreach (&filter_list_copy,
-		      (DBusForeachFunction)_dbus_message_filter_unref,
-		      NULL);
-  _dbus_list_clear (&filter_list_copy);
-  
+  _dbus_list_clear_full (&filter_list_copy,
+                         (DBusFreeFunction) _dbus_message_filter_unref);
+
   CONNECTION_LOCK (connection);
 
   if (result == DBUS_HANDLER_RESULT_NEED_MEMORY)
@@ -5389,6 +5393,25 @@ _dbus_connection_get_linux_security_label (DBusConnection  *connection,
   return result;
 }
 
+DBusCredentials *
+_dbus_connection_get_credentials (DBusConnection *connection)
+{
+  DBusCredentials *result;
+
+  _dbus_assert (connection != NULL);
+
+  CONNECTION_LOCK (connection);
+
+  if (!_dbus_transport_try_to_authenticate (connection->transport))
+    result = NULL;
+  else
+    result = _dbus_transport_get_credentials (connection->transport);
+
+  CONNECTION_UNLOCK (connection);
+
+  return result;
+}
+
 /**
  * Gets the Windows user SID of the connection if known.  Returns
  * #TRUE if the ID is filled in.  Always returns #FALSE on non-Windows
@@ -5522,6 +5545,38 @@ dbus_connection_set_allow_anonymous (DBusConnection             *connection,
   
   CONNECTION_LOCK (connection);
   _dbus_transport_set_allow_anonymous (connection->transport, value);
+  CONNECTION_UNLOCK (connection);
+}
+
+/**
+ * Enables the builtin filtering of messages.
+ *
+ * Currently the only filtering implemented by libdbus and mandated by the spec
+ * is that of peer messages.
+ *
+ * If #TRUE, #DBusConnection automatically handles all messages to the
+ * org.freedesktop.DBus.Peer interface. For monitors this can break the
+ * specification if the response is sending a message.
+ *
+ * If #FALSE, the result is similar to calling
+ * dbus_connection_set_route_peer_messages() with argument TRUE, but
+ * messages with a NULL destination are also dispatched to the
+ * application instead of being passed to the built-in filters.
+ *
+ * If a normal application disables this flag, it can break things badly. So
+ * only unset this if you are a monitor.
+ *
+ * @param connection the connection
+ * @param value #TRUE to pass through org.freedesktop.DBus.Peer messages
+ */
+void
+_dbus_connection_set_builtin_filters_enabled (DBusConnection        *connection,
+                                              dbus_bool_t            value)
+{
+  _dbus_assert (connection != NULL);
+
+  CONNECTION_LOCK (connection);
+  connection->builtin_filters_enabled = value;
   CONNECTION_UNLOCK (connection);
 }
 
@@ -6108,8 +6163,11 @@ dbus_connection_get_data (DBusConnection   *connection,
  */
 void
 dbus_connection_set_change_sigpipe (dbus_bool_t will_modify_sigpipe)
-{  
-  _dbus_modify_sigpipe = will_modify_sigpipe != FALSE;
+{
+  if (will_modify_sigpipe)
+    _dbus_atomic_set_nonzero (&_dbus_modify_sigpipe);
+  else
+    _dbus_atomic_set_zero (&_dbus_modify_sigpipe);
 }
 
 /**

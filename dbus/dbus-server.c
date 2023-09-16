@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003, 2004, 2005 Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,12 +14,12 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
- */ 
+ */
 
 #include <config.h>
 #include "dbus-server.h"
@@ -595,6 +595,7 @@ dbus_server_listen (const char     *address,
           else if (result == DBUS_SERVER_LISTEN_ADDRESS_ALREADY_USED)
             {
               _dbus_assert (server == NULL);
+              _DBUS_ASSERT_ERROR_IS_CLEAR (&tmp_error);
               dbus_set_error (error,
                        DBUS_ERROR_ADDRESS_IN_USE,
                        "Address '%s' already used",
@@ -629,6 +630,10 @@ dbus_server_listen (const char     *address,
               handled_once = TRUE;
               
               /* keep trying addresses */
+            }
+          else
+            {
+              _dbus_assert_not_reached ("Unknown result in dbus_server_listen");
             }
         }
 
@@ -1188,61 +1193,3 @@ dbus_server_get_data (DBusServer   *server,
 }
 
 /** @} */
-
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-#include "dbus-test.h"
-#include <string.h>
-
-dbus_bool_t
-_dbus_server_test (void)
-{
-  const char *valid_addresses[] = {
-    "tcp:port=1234",
-    "tcp:host=localhost,port=1234",
-    "tcp:host=localhost,port=1234;tcp:port=5678",
-#ifdef DBUS_UNIX
-    "unix:path=./boogie",
-    "tcp:port=1234;unix:path=./boogie",
-#endif
-  };
-
-  DBusServer *server;
-  int i;
-  
-  for (i = 0; i < _DBUS_N_ELEMENTS (valid_addresses); i++)
-    {
-      DBusError error = DBUS_ERROR_INIT;
-      char *address;
-      char *id;
-
-      server = dbus_server_listen (valid_addresses[i], &error);
-      if (server == NULL)
-        {
-          _dbus_warn ("server listen error: %s: %s", error.name, error.message);
-          dbus_error_free (&error);
-          _dbus_assert_not_reached ("Failed to listen for valid address.");
-        }
-
-      id = dbus_server_get_id (server);
-      _dbus_assert (id != NULL);
-      address = dbus_server_get_address (server);
-      _dbus_assert (address != NULL);
-
-      if (strstr (address, id) == NULL)
-        {
-          _dbus_warn ("server id '%s' is not in the server address '%s'",
-                      id, address);
-          _dbus_assert_not_reached ("bad server id or address");
-        }
-
-      dbus_free (id);
-      dbus_free (address);
-      
-      dbus_server_disconnect (server);
-      dbus_server_unref (server);
-    }
-
-  return TRUE;
-}
-
-#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

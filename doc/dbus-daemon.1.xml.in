@@ -32,6 +32,7 @@
     <arg choice='opt'>--nosyslog </arg>
     <arg choice='opt'>--syslog </arg>
     <arg choice='opt'>--syslog-only </arg>
+    <arg choice='opt'>--ready-event-handle=value</arg>
     <sbr/>
 </cmdsynopsis>
 </refsynopsisdiv>
@@ -199,6 +200,29 @@ files.</para>
     </listitem>
   </varlistentry>
 
+  <varlistentry>
+    <term><option>--ready-event-handle=value</option></term>
+    <listitem>
+      <para>With this option, the dbus daemon raises an event when it is ready to process
+        connections. The <replaceable>handle</replaceable> must be the Windows handle
+        for an event object, in the format printed by the <function>printf</function>
+        format string <literal>%p</literal>. The parent process must create this event
+        object (for example with the <function>CreateEvent</function> function) in a
+        nonsignaled state, then configure it to be inherited by the dbus-daemon process.
+        The dbus-daemon will signal the event as if via <function>SetEvent</function>
+        when it is ready to receive connections from clients. The parent process can
+        wait for this to occur by using functions such as
+        <function>WaitForSingleObject</function>.
+        This option is only supported under Windows. On Unix platforms,
+        a similar result can be achieved by waiting for the address and/or
+        process ID to be printed to the inherited file descriptors used
+        for <option>--print-address</option> and/or <option>--print-pid</option>.
+      </para>
+    </listitem>
+  </varlistentry>
+
+
+
 </variablelist>
 </refsect1>
 
@@ -223,6 +247,21 @@ configured in the files "@EXPANDED_DATADIR@/dbus-1/system.conf" and
 overrides in those files to avoid modifying the primary configuration
 files.</para>
 
+<para>The standard system bus normally reads additional XML files from
+  <filename>@EXPANDED_DATADIR@/dbus-1/system.d</filename>. Third-party
+  packages should install the default policies necessary for correct
+  operation into that directory, which has been supported since dbus 1.10
+  (released in 2015).</para>
+
+<para>The standard system bus normally also reads XML files from
+  <filename>@EXPANDED_SYSCONFDIR@/dbus-1/system.d</filename>, which
+  should be used by system administrators if they wish to override
+  default policies.</para>
+
+<para>Third-party packages would historically install XML files into
+  <filename>@EXPANDED_SYSCONFDIR@/dbus-1/system.d</filename>, but this
+  practice is now considered to be deprecated: that directory should
+  be treated as reserved for the system administrator.</para>
 
 <para>The configuration file is an XML document. It must have the following
 doctype declaration:</para>
@@ -302,12 +341,10 @@ to be absent.</para>
 point. Files in the directory are included in undefined order.
 Only files ending in ".conf" are included.</para>
 
-
 <para>This is intended to allow extension of the system bus by particular
 packages. For example, if CUPS wants to be able to send out
 notification of printer queue changes, it could install a file to
-@EXPANDED_DATADIR@/dbus-1/system.d or
-@EXPANDED_SYSCONFDIR@/dbus-1/system.d that allowed all apps to receive
+@EXPANDED_DATADIR@/dbus-1/system.d that allowed all apps to receive
 this message and allowed the printer daemon user to send it.</para>
 
 <itemizedlist remap='TP'>
@@ -686,7 +723,7 @@ configuration file would probably be nonsense.</para>
   precedence.</para>
 
 <para>
-  On Unix, the standard session service directories are:
+  On Unix, the standard system service directories are:
   <itemizedlist>
     <listitem>
       <para>
@@ -791,7 +828,7 @@ Available limit names are:</para>
       "max_incomplete_connections" : max number of unauthenticated
                                      connections
       "max_connections_per_user"   : max number of completed connections from
-                                     the same user
+                                     the same user (only enforced on Unix OSs)
       "max_pending_service_starts" : max number of service launches in
                                      progress at the same time
       "max_names_per_connection"   : max number of names a single
@@ -898,6 +935,7 @@ statements, and works just like &lt;deny&gt; but with the inverse meaning.</para
    send_error="error_name" | "*"
    send_broadcast="true" | "false"
    send_destination="name" | "*"
+   send_destination_prefix="name"
    send_type="method_call" | "method_return" | "signal" | "error" | "*"
    send_path="/path/name" | "*"
 
@@ -975,6 +1013,22 @@ will not work either. As a special case,
 <literal>send_destination="*"</literal> matches any message
 (whether it has a destination specified or not), and
 <literal>receive_sender="*"</literal> similarly matches any message.</para>
+
+<para>
+  A <literal>send_destination_prefix</literal> rule opens or closes
+  the whole namespace for sending. It means that messages may or may not
+  be sent to the <emphasis>owner</emphasis> of any name matching the prefix, regardless of whether
+  it is the primary or the queued owner.
+  In other words, for <literal>&lt;allow send_destination_prefix="a.b"/&gt;</literal>
+  rule and names "a.b", "a.b.c", and "a.b.c.d" present on the bus, it works the same as
+  if three separate rules: <literal>&lt;allow send_destination="a.b"/&gt;</literal>,
+  <literal>&lt;allow send_destination="a.b.c"/&gt;</literal>, and
+  <literal>&lt;allow send_destination="a.b.c.d"/&gt;</literal> had been defined.
+  The rules for matching names are the same as in <literal>own_prefix</literal>
+  (see below): a prefix of "a.b" matches names "a.b" or "a.b.c" or "a.b.c.d", but not "a.bc"
+  or "a.c". The <literal>send_destination_prefix</literal> attribute cannot be combined
+  with the <literal>send_destination</literal> attribute in the same rule.
+</para>
 
 <para>
   Rules with <literal>send_broadcast="true"</literal> match signal messages
@@ -1174,6 +1228,179 @@ dbus-daemon will refuse to start.</para>
 starts. Modifying the mode in the configuration file and sending a SIGHUP
 signal to the daemon has no effect on the mediation mode.</para>
 
+</refsect1>
+
+<refsect1 id='session_services'>
+  <title>INTEGRATING SESSION SERVICES</title>
+
+  <para>
+    Integration files are not mandatory for session services: any program
+    with access to the session bus can request a well-known name and
+    provide D-Bus interfaces.
+  </para>
+
+  <para>
+    Many D-Bus session services support <firstterm>service
+    activation</firstterm>, a mechanism in which the
+    <command>dbus-daemon</command> can launch the service on-demand,
+    either by running the session service itself or by communicating
+    with <command>systemd --user</command>. This is set up by
+    creating a <firstterm>service file</firstterm> in the directory
+    <filename><replaceable>${datadir}</replaceable>/dbus-1/services</filename>,
+    for example:
+
+<programlisting>
+[D-BUS Service]
+Name=<replaceable>com.example.SessionService1</replaceable>
+Exec=<replaceable>/usr/bin/example-session-service</replaceable>
+# Optional
+SystemdService=<replaceable>example-session-service</replaceable>
+</programlisting>
+
+    See the
+    <ulink url="https://dbus.freedesktop.org/doc/dbus-specification.html">D-Bus
+      Specification</ulink> for details of the contents and interpretation
+    of service files.</para>
+
+  <para>If there is a service file for
+    <replaceable>com.example.SessionService1</replaceable>, it should be named
+    <filename><replaceable>com.example.SessionService1</replaceable>.service</filename>,
+    although for compatibility with legacy services this is not mandatory.
+  </para>
+
+  <para>Session services that declare the optional
+    <literal>SystemdService</literal> must also provide a systemd user
+    service unit file whose name or <literal>Alias</literal> matches the
+    <literal>SystemdService</literal> (see
+    <citerefentry>
+      <refentrytitle>systemd.unit</refentrytitle>
+      <manvolnum>5</manvolnum>
+    </citerefentry>,
+    <citerefentry>
+      <refentrytitle>systemd.service</refentrytitle>
+      <manvolnum>5</manvolnum>
+    </citerefentry> for further details on systemd service units), for
+    example:
+
+<programlisting>
+[Unit]
+Description=Example session service
+
+[Service]
+Type=dbus
+BusName=<replaceable>com.example.SessionService1</replaceable>
+ExecStart=<replaceable>/usr/bin/example-session-service</replaceable>
+</programlisting>
+  </para>
+</refsect1>
+
+<refsect1 id='system_services'>
+  <title>INTEGRATING SYSTEM SERVICES</title>
+
+  <para>
+    The standard system bus does not allow method calls or owning well-known
+    bus names by default, so a useful D-Bus system service will normally
+    need to configure a default security policy that allows it to work.
+    D-Bus system services should install a default policy file in
+    <filename><replaceable>${datadir}</replaceable>/dbus-1/service.d</filename>,
+    containing the policy rules necessary to make that system service
+    functional. A best-practice policy file will often look like this:
+
+<programlisting>
+&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;!DOCTYPE busconfig PUBLIC
+ "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd"&gt;
+&lt;busconfig&gt;
+  &lt;policy user="<replaceable>_example</replaceable>"&gt;
+    &lt;allow own="<replaceable>com.example.Example1</replaceable>"/&gt;
+  &lt;/policy&gt;
+
+  &lt;policy context="default"&gt;
+    &lt;allow send_destination="<replaceable>com.example.Example1</replaceable>"/&gt;
+  &lt;/policy&gt;
+&lt;/busconfig&gt;
+</programlisting>
+
+    where <replaceable>_example</replaceable> is the username of the
+    system uid that will run the system service daemon process, and
+    <replaceable>com.example.Example1</replaceable> is its well-known
+    bus name.</para>
+
+  <para>The policy file for <replaceable>com.example.Example1</replaceable>
+    should normally be named
+    <filename><replaceable>com.example.Example1</replaceable>.conf</filename>.
+  </para>
+
+  <para>Some existing system services rely on more complex &lt;policy&gt;
+    rules to control the messages that the service can receive. However,
+    the <command>dbus-daemon</command>'s policy language is not well-suited
+    to finer-grained policies: any policy has to be expressed in terms of
+    D-Bus interfaces and method names, not in terms of higher-level
+    domain-specific concepts like removable or built-in devices. It is
+    recommended that new services should normally accept method call messages
+    from all callers, then apply a sysadmin-controllable policy to decide
+    whether to obey the requests contained in those method call messages,
+    for example by consulting
+    <ulink url="https://www.freedesktop.org/wiki/Software/polkit/">polkit</ulink>.
+  </para>
+
+  <para>
+    Like session services, many D-Bus system services support service
+    activation, a mechanism in which the <command>dbus-daemon</command>
+    can launch the service on-demand, either by running the system service
+    itself or by communicating with <command>systemd</command>. This is set
+    up by creating a service file in the directory
+    <filename><replaceable>${datadir}</replaceable>/dbus-1/system-services</filename>,
+    for example:
+
+<programlisting>
+[D-BUS Service]
+Name=<replaceable>com.example.Example1</replaceable>
+Exec=<replaceable>/usr/sbin/example-service</replaceable>
+User=<replaceable>_example</replaceable>
+# Optional
+SystemdService=<replaceable>dbus-com.example.Example1.service</replaceable>
+</programlisting>
+
+    See the
+    <ulink url="https://dbus.freedesktop.org/doc/dbus-specification.html">D-Bus
+      Specification</ulink> for details of the contents and interpretation
+    of service files.</para>
+
+  <para>If there is a service file for
+    <replaceable>com.example.Example1</replaceable>, it must be named
+    <filename><replaceable>com.example.Example1</replaceable>.service</filename>.
+  </para>
+
+  <para>System services that declare the optional
+    <literal>SystemdService</literal> must also provide a systemd
+    service unit file whose name or <literal>Alias</literal> matches the
+    <literal>SystemdService</literal> (see
+    <citerefentry>
+      <refentrytitle>systemd.unit</refentrytitle>
+      <manvolnum>5</manvolnum>
+    </citerefentry>,
+    <citerefentry>
+      <refentrytitle>systemd.service</refentrytitle>
+      <manvolnum>5</manvolnum>
+    </citerefentry> for further details on systemd service units), for
+    example:
+
+<programlisting>
+[Unit]
+Description=Example service
+
+[Service]
+Type=dbus
+BusName=<replaceable>com.example.Example1</replaceable>
+ExecStart=<replaceable>/usr/sbin/example-service</replaceable>
+
+[Install]
+WantedBy=multi-user.target
+Alias=dbus-<replaceable>com.example.Example1</replaceable>.service
+</programlisting>
+  </para>
 </refsect1>
 
 <refsect1 id='selinux'><title>SELinux</title>

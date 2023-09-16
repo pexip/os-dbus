@@ -83,7 +83,8 @@ _dbus_header_field_types[DBUS_HEADER_FIELD_LAST+1] = {
   { DBUS_HEADER_FIELD_DESTINATION, DBUS_TYPE_STRING },
   { DBUS_HEADER_FIELD_SENDER, DBUS_TYPE_STRING },
   { DBUS_HEADER_FIELD_SIGNATURE, DBUS_TYPE_SIGNATURE },
-  { DBUS_HEADER_FIELD_UNIX_FDS, DBUS_TYPE_UINT32 }
+  { DBUS_HEADER_FIELD_UNIX_FDS, DBUS_TYPE_UINT32 },
+  { DBUS_HEADER_FIELD_CONTAINER_INSTANCE, DBUS_TYPE_OBJECT_PATH }
 };
 
 /** Macro to look up the correct type for a field */
@@ -119,7 +120,9 @@ correct_header_padding (DBusHeader *header)
   header->padding = _dbus_string_get_length (&header->data) - unpadded_len;
 }
 
-/** Compute the end of the header, ignoring padding */
+/**
+ * Compute the end of the header, ignoring padding.
+ * In the #DBusHeader diagram, this is the distance from 0 to [B]. */
 #define HEADER_END_BEFORE_PADDING(header) \
   (_dbus_string_get_length (&(header)->data) - (header)->padding)
 
@@ -610,6 +613,9 @@ _dbus_header_create (DBusHeader  *header,
         goto oom;
     }
 
+  /* Note that test/message.c relies on this being in the middle of the
+   * message: if you change the order of serialization here (but why
+   * would you?), please find some other way to retain test coverage. */
   if (interface != NULL)
     {
       if (!write_basic_field (&array,
@@ -914,6 +920,11 @@ load_and_validate_field (DBusHeader     *header,
       string_validation_func = NULL;
       break;
 
+    case DBUS_HEADER_FIELD_CONTAINER_INSTANCE:
+      /* OBJECT_PATH was validated generically due to its type */
+      string_validation_func = NULL;
+      break;
+
     default:
       _dbus_assert_not_reached ("unknown field shouldn't be seen here");
       break;
@@ -961,9 +972,7 @@ load_and_validate_field (DBusHeader     *header,
  * @param fields_array_len claimed length of fields array
  * @param body_len claimed length of body
  * @param header_len claimed length of header
- * @param str a string
- * @param start start of header, 8-aligned
- * @param len length of string to look at
+ * @param str a string starting with the header
  * @returns #FALSE if no memory or data was invalid, #TRUE otherwise
  */
 dbus_bool_t
@@ -974,9 +983,7 @@ _dbus_header_load (DBusHeader        *header,
                    int                fields_array_len,
                    int                header_len,
                    int                body_len,
-                   const DBusString  *str,
-                   int                start,
-                   int                len)
+                   const DBusString  *str)
 {
   int leftover;
   DBusValidity v;
@@ -988,12 +995,14 @@ _dbus_header_load (DBusHeader        *header,
   int padding_start;
   int padding_len;
   int i;
+  int len;
 
-  _dbus_assert (start == (int) _DBUS_ALIGN_VALUE (start, 8));
+  len = _dbus_string_get_length (str);
+
   _dbus_assert (header_len <= len);
   _dbus_assert (_dbus_string_get_length (&header->data) == 0);
 
-  if (!_dbus_string_copy_len (str, start, header_len, &header->data, 0))
+  if (!_dbus_string_copy_len (str, 0, header_len, &header->data, 0))
     {
       _dbus_verbose ("Failed to copy buffer into new header\n");
       *validity = DBUS_VALIDITY_UNKNOWN_OOM_ERROR;
@@ -1002,14 +1011,14 @@ _dbus_header_load (DBusHeader        *header,
 
   if (mode == DBUS_VALIDATION_MODE_WE_TRUST_THIS_DATA_ABSOLUTELY)
     {
-      leftover = len - header_len - body_len - start;
+      leftover = len - header_len - body_len;
     }
   else
     {
       v = _dbus_validate_body_with_reason (&_dbus_header_signature_str, 0,
                                            byte_order,
                                            &leftover,
-                                           str, start, len);
+                                           str, 0, len);
       
       if (v != DBUS_VALID)
         {
@@ -1021,9 +1030,9 @@ _dbus_header_load (DBusHeader        *header,
   _dbus_assert (leftover < len);
 
   padding_len = header_len - (FIRST_FIELD_OFFSET + fields_array_len);
-  padding_start = start + FIRST_FIELD_OFFSET + fields_array_len;
-  _dbus_assert (start + header_len == (int) _DBUS_ALIGN_VALUE (padding_start, 8));
-  _dbus_assert (start + header_len == padding_start + padding_len);
+  padding_start = FIRST_FIELD_OFFSET + fields_array_len;
+  _dbus_assert (header_len == (int) _DBUS_ALIGN_VALUE (padding_start, 8));
+  _dbus_assert (header_len == padding_start + padding_len);
 
   if (mode != DBUS_VALIDATION_MODE_WE_TRUST_THIS_DATA_ABSOLUTELY)
     {
@@ -1049,7 +1058,7 @@ _dbus_header_load (DBusHeader        *header,
   _dbus_type_reader_init (&reader,
                           byte_order,
                           &_dbus_header_signature_str, 0,
-                          str, start);
+                          str, 0);
 
   /* BYTE ORDER */
   _dbus_assert (_dbus_type_reader_get_current_type (&reader) == DBUS_TYPE_BYTE);
@@ -1509,6 +1518,57 @@ _dbus_header_byteswap (DBusHeader *header,
                           &header->data, 0);
 
   _dbus_string_set_byte (&header->data, BYTE_ORDER_OFFSET, new_order);
+}
+
+/**
+ * Remove every header field not known to this version of dbus.
+ *
+ * @param header the header
+ * @returns #FALSE if no memory
+ */
+dbus_bool_t
+_dbus_header_remove_unknown_fields (DBusHeader *header)
+{
+  DBusTypeReader array;
+  DBusTypeReader fields_reader;
+
+  _dbus_type_reader_init (&fields_reader,
+                          _dbus_header_get_byte_order (header),
+                          &_dbus_header_signature_str,
+                          FIELDS_ARRAY_SIGNATURE_OFFSET,
+                          &header->data,
+                          FIELDS_ARRAY_LENGTH_OFFSET);
+
+  _dbus_type_reader_recurse (&fields_reader, &array);
+
+  while (_dbus_type_reader_get_current_type (&array) != DBUS_TYPE_INVALID)
+    {
+      DBusTypeReader sub;
+      unsigned char field_code;
+
+      _dbus_type_reader_recurse (&array, &sub);
+
+      _dbus_assert (_dbus_type_reader_get_current_type (&sub) == DBUS_TYPE_BYTE);
+      _dbus_type_reader_read_basic (&sub, &field_code);
+
+      if (field_code > DBUS_HEADER_FIELD_LAST)
+        {
+          if (!reserve_header_padding (header))
+            return FALSE;
+
+          if (!_dbus_type_reader_delete (&array, &fields_reader))
+            return FALSE;
+
+          correct_header_padding (header);
+          _dbus_header_cache_invalidate_all (header);
+        }
+      else
+        {
+          _dbus_type_reader_next (&array);
+        }
+    }
+
+  return TRUE;
 }
 
 /** @} */

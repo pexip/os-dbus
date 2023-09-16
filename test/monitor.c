@@ -28,6 +28,8 @@
 
 #include <string.h>
 
+#include "dbus/dbus-connection-internal.h"
+
 #include "test-utils-glib.h"
 
 typedef struct {
@@ -538,15 +540,15 @@ static void
 become_monitor (Fixture *f,
     const Config *config)
 {
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   dbus_bool_t ok;
   DBusMessageIter appender, array_appender;
   const char * const *match_rules;
   int i;
   dbus_uint32_t zero = 0;
 
-  dbus_connection_set_route_peer_messages (f->monitor, TRUE);
+  _dbus_connection_set_builtin_filters_enabled (f->monitor, FALSE);
 
   if (config == NULL)
     config = f->config;
@@ -579,31 +581,16 @@ become_monitor (Fixture *f,
       !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_message_unref (m);
-  m = NULL;
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  ok = dbus_message_get_args (m, &f->e,
+  ok = dbus_message_get_args (reply, &f->e,
       DBUS_TYPE_INVALID);
   test_assert_no_error (&f->e);
   g_assert (ok);
 
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 /*
@@ -613,8 +600,8 @@ static void
 test_invalid (Fixture *f,
     gconstpointer context)
 {
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   dbus_bool_t ok;
   DBusMessageIter appender, array_appender;
   dbus_uint32_t zero = 0;
@@ -645,32 +632,18 @@ test_invalid (Fixture *f,
         &invalid_flags))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_message_unref (m);
-  m = NULL;
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_INVALID_ARGS);
+
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* Try to become a monitor but use the wrong object path - not allowed
    * (security hardening against inappropriate XML policy rules) */
-
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
 
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       "/", DBUS_INTERFACE_MONITORING, "BecomeMonitor");
@@ -688,32 +661,18 @@ test_invalid (Fixture *f,
       !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_message_unref (m);
-  m = NULL;
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_UNKNOWN_INTERFACE);
+
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* Try to become a monitor but specify a bad match rule -
    * also not allowed */
-
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
 
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_MONITORING, "BecomeMonitor");
@@ -735,61 +694,34 @@ test_invalid (Fixture *f,
   if (!dbus_message_iter_append_basic (&array_appender, DBUS_TYPE_STRING,
         &s) ||
       !dbus_message_iter_close_container (&appender, &array_appender) ||
-      !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero) ||
-      !dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_append_basic (&appender, DBUS_TYPE_UINT32, &zero))
+    test_oom ();
 
-  dbus_message_unref (m);
-  m = NULL;
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_MATCH_RULE_INVALID);
 
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* We did not become a monitor, so we can still call methods. */
 
-  pc = NULL;
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetId");
 
   if (m == NULL)
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->monitor, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->monitor, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_message_unref (m);
-  m = NULL;
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (dbus_set_error_from_message (&f->e, m))
+  if (dbus_set_error_from_message (&f->e, reply))
     g_error ("%s: %s", f->e.name, f->e.message);
 
-  ok = dbus_message_get_args (m, &f->e,
+  ok = dbus_message_get_args (reply, &f->e,
       DBUS_TYPE_STRING, &s,
       DBUS_TYPE_INVALID);
   test_assert_no_error (&f->e);
@@ -797,8 +729,8 @@ test_invalid (Fixture *f,
   g_assert_cmpstr (s, !=, NULL);
   g_assert_cmpstr (s, !=, "");
 
-  dbus_pending_call_unref (pc);
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 /*
@@ -2016,12 +1948,15 @@ static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
 {
+  GList *link;
+
   dbus_error_free (&f->e);
   g_clear_error (&f->ge);
 
   if (f->monitor != NULL)
     {
       dbus_connection_remove_filter (f->monitor, monitor_filter, f);
+      test_connection_shutdown (f->ctx, f->monitor);
       dbus_connection_close (f->monitor);
       dbus_connection_unref (f->monitor);
       f->monitor = NULL;
@@ -2029,6 +1964,7 @@ teardown (Fixture *f,
 
   if (f->sender != NULL)
     {
+      test_connection_shutdown (f->ctx, f->sender);
       dbus_connection_close (f->sender);
       dbus_connection_unref (f->sender);
       f->sender = NULL;
@@ -2040,6 +1976,8 @@ teardown (Fixture *f,
       if (f->recipient_enqueue_filter_added)
         dbus_connection_remove_filter (f->recipient, recipient_enqueue_filter,
             f);
+
+      test_connection_shutdown (f->ctx, f->recipient);
       dbus_connection_close (f->recipient);
       dbus_connection_unref (f->recipient);
       f->recipient = NULL;
@@ -2048,6 +1986,7 @@ teardown (Fixture *f,
   if (f->systemd != NULL)
     {
       dbus_connection_remove_filter (f->systemd, systemd_filter, f);
+      test_connection_shutdown (f->ctx, f->systemd);
       dbus_connection_close (f->systemd);
       dbus_connection_unref (f->systemd);
       f->systemd = NULL;
@@ -2056,6 +1995,7 @@ teardown (Fixture *f,
   if (f->activated != NULL)
     {
       dbus_connection_remove_filter (f->activated, activated_filter, f);
+      test_connection_shutdown (f->ctx, f->activated);
       dbus_connection_close (f->activated);
       dbus_connection_unref (f->activated);
       f->activated = NULL;
@@ -2070,10 +2010,14 @@ teardown (Fixture *f,
 
   test_main_context_unref (f->ctx);
 
-  g_queue_foreach (&f->monitored, (GFunc) dbus_message_unref, NULL);
+  for (link = f->monitored.head; link != NULL; link = link->next)
+    dbus_message_unref (link->data);
+
   g_queue_clear (&f->monitored);
 
-  g_queue_foreach (&f->received, (GFunc) dbus_message_unref, NULL);
+  for (link = f->received.head; link != NULL; link = link->next)
+    dbus_message_unref (link->data);
+
   g_queue_clear (&f->received);
 
   g_free (f->address);
@@ -2083,6 +2027,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/monitor/invalid", Fixture, NULL,
@@ -2128,5 +2074,7 @@ main (int argc,
       setup, test_activation, teardown);
 #endif
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

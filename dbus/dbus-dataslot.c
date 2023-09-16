@@ -4,7 +4,7 @@
  * Copyright (C) 2003 Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -24,6 +24,7 @@
 #include <config.h>
 #include "dbus-dataslot.h"
 #include "dbus-threads-internal.h"
+#include <dbus/dbus-test-tap.h>
 
 /**
  * @defgroup DBusDataSlot Data slots
@@ -352,6 +353,7 @@ _dbus_data_slot_list_free (DBusDataSlotList *list)
 #include "dbus-test.h"
 #include <stdio.h>
 
+/* Test-only, does not need to be thread-safe */
 static int free_counter;
 
 static void
@@ -367,7 +369,7 @@ test_free_slot_data_func (void *data)
  * Test function for data slots
  */
 dbus_bool_t
-_dbus_data_slot_test (void)
+_dbus_data_slot_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 {
   DBusDataSlotAllocator allocator;
   DBusDataSlotList list;
@@ -376,7 +378,7 @@ _dbus_data_slot_test (void)
   void *old_data;
 
   if (!_dbus_data_slot_allocator_init (&allocator, _DBUS_LOCK_server_slots))
-    _dbus_assert_not_reached ("no memory for allocator");
+    _dbus_test_fatal ("no memory for allocator");
 
   _dbus_data_slot_list_init (&list);
 
@@ -394,7 +396,7 @@ _dbus_data_slot_test (void)
       _dbus_data_slot_allocator_alloc (&allocator, &tmp);
 
       if (tmp != i)
-        _dbus_assert_not_reached ("did not allocate slots in numeric order");
+        _dbus_test_fatal ("did not allocate slots in numeric order");
 
       ++i;
     }
@@ -407,7 +409,7 @@ _dbus_data_slot_test (void)
                                      _DBUS_INT_TO_POINTER (i), 
                                      test_free_slot_data_func,
                                      &old_free_func, &old_data))
-        _dbus_assert_not_reached ("no memory to set data");
+        _dbus_test_fatal ("no memory to set data");
 
       _dbus_assert (old_free_func == NULL);
       _dbus_assert (old_data == NULL);
@@ -427,7 +429,7 @@ _dbus_data_slot_test (void)
                                      _DBUS_INT_TO_POINTER (i), 
                                      test_free_slot_data_func,
                                      &old_free_func, &old_data))
-        _dbus_assert_not_reached ("no memory to set data");
+        _dbus_test_fatal ("no memory to set data");
 
       _dbus_assert (old_free_func == test_free_slot_data_func);
       _dbus_assert (_DBUS_POINTER_TO_INT (old_data) == i);

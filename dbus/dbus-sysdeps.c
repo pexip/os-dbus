@@ -1,11 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-sysdeps.c Wrappers around system/libc features shared between UNIX and Windows (internal to D-Bus implementation)
- * 
+ *
  * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -56,6 +56,14 @@
 # include <unistd.h>
 #else
 extern char **environ;
+#endif
+
+#ifdef DBUS_WIN
+#include "dbus-sockets-win.h"
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
 #endif
 
 /**
@@ -333,8 +341,7 @@ _dbus_split_paths_and_append (DBusString *dirs,
   return TRUE;
 
  oom:
-  _dbus_list_foreach (dir_list, (DBusForeachFunction)dbus_free, NULL); 
-  _dbus_list_clear (dir_list);
+  _dbus_list_clear_full (dir_list, dbus_free);
   return FALSE;
 }
 
@@ -771,6 +778,201 @@ _dbus_log (DBusSystemLogSeverity  severity,
   _dbus_logv (severity, msg, args);
 
   va_end (args);
+}
+
+/*
+ * Try to convert the IPv4 or IPv6 address pointed to by
+ * sockaddr_pointer into a string.
+ *
+ * @param sockaddr_pointer A struct sockaddr_in or struct sockaddr_in6
+ * @param len The length of the struct pointed to by sockaddr_pointer
+ * @param string An array to write the address into
+ * @param string_len Length of string (should usually be at least INET6_ADDRSTRLEN)
+ * @param family_name Used to return "ipv4" or "ipv6", or NULL to ignore
+ * @param port Used to return the port number, or NULL to ignore
+ * @returns #FALSE with errno set if the address family was not understood
+ */
+dbus_bool_t
+_dbus_inet_sockaddr_to_string (const void *sockaddr_pointer,
+                               size_t len,
+                               char *string,
+                               size_t string_len,
+                               const char **family_name,
+                               dbus_uint16_t *port,
+                               DBusError *error)
+{
+  union
+    {
+      struct sockaddr sa;
+      struct sockaddr_storage storage;
+      struct sockaddr_in ipv4;
+      struct sockaddr_in6 ipv6;
+    } addr;
+  int saved_errno;
+
+  if (len > sizeof (addr))
+    return FALSE;
+
+  _DBUS_ZERO (addr);
+  memcpy (&addr, sockaddr_pointer, len);
+
+  switch (addr.sa.sa_family)
+    {
+      case AF_INET:
+        if (inet_ntop (AF_INET, &addr.ipv4.sin_addr, string, string_len) != NULL)
+          {
+            if (family_name != NULL)
+              *family_name = "ipv4";
+
+            if (port != NULL)
+              *port = ntohs (addr.ipv4.sin_port);
+
+            return TRUE;
+          }
+        else
+          {
+            saved_errno = _dbus_get_low_level_socket_errno ();
+            dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                            "Failed to get identity of IPv4 socket: %s",
+                            _dbus_strerror (saved_errno));
+          }
+
+        return FALSE;
+
+#ifdef AF_INET6
+      case AF_INET6:
+        if (inet_ntop (AF_INET6, &addr.ipv6.sin6_addr, string, string_len) != NULL)
+          {
+            if (family_name != NULL)
+              *family_name = "ipv6";
+
+            if (port != NULL)
+              *port = ntohs (addr.ipv6.sin6_port);
+
+            return TRUE;
+          }
+        else
+          {
+            saved_errno = _dbus_get_low_level_socket_errno ();
+            dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                            "Failed to get identity of IPv6 socket: %s",
+                            _dbus_strerror (saved_errno));
+          }
+
+        return FALSE;
+#endif
+
+      default:
+        dbus_set_error (error, DBUS_ERROR_FAILED,
+                        "Failed to get identity of socket: unknown family");
+        return FALSE;
+    }
+}
+
+/*
+ * Format an error appropriate for saved_errno for the IPv4 or IPv6
+ * address pointed to by sockaddr_pointer of length sockaddr_len.
+ *
+ * @param error The error to set
+ * @param sockaddr_pointer A struct sockaddr_in or struct sockaddr_in6
+ * @param len The length of the struct pointed to by sockaddr_pointer
+ * @param description A prefix like "Failed to listen on socket"
+ * @param saved_errno The OS-level error number to use
+ */
+void
+_dbus_set_error_with_inet_sockaddr (DBusError *error,
+                                    const void *sockaddr_pointer,
+                                    size_t len,
+                                    const char *description,
+                                    int saved_errno)
+{
+  char string[INET6_ADDRSTRLEN];
+  dbus_uint16_t port;
+  const struct sockaddr *addr = sockaddr_pointer;
+
+  if (_dbus_inet_sockaddr_to_string (sockaddr_pointer, len,
+                                     string, sizeof (string), NULL, &port,
+                                     NULL))
+    {
+      dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                      "%s \"%s\" port %u: %s",
+                      description, string, port, _dbus_strerror (saved_errno));
+    }
+  else
+    {
+      dbus_set_error (error, _dbus_error_from_errno (saved_errno),
+                      "%s <address of unknown family %d>: %s",
+                      description, addr->sa_family,
+                      _dbus_strerror (saved_errno));
+    }
+}
+
+void
+_dbus_combine_tcp_errors (DBusList **sources,
+                          const char *summary,
+                          const char *host,
+                          const char *port,
+                          DBusError *dest)
+{
+  DBusString message = _DBUS_STRING_INIT_INVALID;
+
+  if (_dbus_list_length_is_one (sources))
+    {
+      /* If there was exactly one error, just use it */
+      dbus_move_error (_dbus_list_get_first (sources), dest);
+    }
+  else
+    {
+      DBusList *iter;
+      const char *name = NULL;
+
+      /* If there was more than one error, concatenate all the
+       * errors' diagnostic messages, and use their common error
+       * name, or DBUS_ERROR_FAILED if more than one name is
+       * represented */
+      if (!_dbus_string_init (&message))
+        {
+          _DBUS_SET_OOM (dest);
+          goto out;
+        }
+
+      for (iter = _dbus_list_get_first_link (sources);
+           iter != NULL;
+           iter = _dbus_list_get_next_link (sources, iter))
+        {
+          DBusError *error = iter->data;
+
+          if (name == NULL)
+            {
+              /* no error names known yet, try to use this one */
+              name = error->name;
+            }
+          else if (strcmp (name, error->name) != 0)
+            {
+              /* errors of two different names exist, reconcile by
+               * using FAILED */
+              name = DBUS_ERROR_FAILED;
+            }
+
+          if ((_dbus_string_get_length (&message) > 0 &&
+               !_dbus_string_append (&message, "; ")) ||
+              !_dbus_string_append (&message, error->message))
+            {
+              _DBUS_SET_OOM (dest);
+              goto out;
+            }
+        }
+
+      if (name == NULL)
+        name = DBUS_ERROR_FAILED;
+
+      dbus_set_error (dest, name, "%s to \"%s\":%s (%s)",
+                      summary, host ? host : "*", port,
+                      _dbus_string_get_const_data (&message));
+    }
+
+out:
+  _dbus_string_free (&message);
 }
 
 /** @} end of sysdeps */

@@ -4,7 +4,7 @@
  * Copyright (C) 2002  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -64,6 +64,8 @@ void        _dbus_message_add_counter_link      (DBusMessage  *message,
                                                  DBusList     *link);
 void        _dbus_message_remove_counter        (DBusMessage  *message,
                                                  DBusCounter  *counter);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_message_remove_unknown_fields (DBusMessage  *message);
 
 DBUS_PRIVATE_EXPORT
 DBusMessageLoader* _dbus_message_loader_new                   (void);
@@ -140,10 +142,6 @@ _dbus_clear_variant (DBusVariant **variant_p)
 {
   _dbus_clear_pointer_impl (DBusVariant, variant_p, _dbus_variant_free);
 }
-
-typedef struct DBusInitialFDs DBusInitialFDs;
-DBusInitialFDs *_dbus_check_fdleaks_enter (void);
-void            _dbus_check_fdleaks_leave (DBusInitialFDs *fds);
 
 DBUS_END_DECLS
 

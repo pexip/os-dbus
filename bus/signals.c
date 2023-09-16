@@ -29,6 +29,7 @@
 #include "services.h"
 #include "utils.h"
 #include <dbus/dbus-marshal-validate.h>
+#include <dbus/dbus-test-tap.h>
 
 struct BusMatchRule
 {
@@ -1607,21 +1608,32 @@ bus_matchmaker_remove_rule (BusMatchmaker   *matchmaker,
   bus_match_rule_unref (rule);
 }
 
-/* Remove a single rule which is equal to the given rule by value */
-dbus_bool_t
-bus_matchmaker_remove_rule_by_value (BusMatchmaker   *matchmaker,
-                                     BusMatchRule    *value,
-                                     DBusError       *error)
+/*
+ * Prepare to remove the the most-recently-added rule which is equal to
+ * the given rule by value, but do not actually do it yet.
+ *
+ * Return a linked-list link which must be treated as opaque by the caller:
+ * the only valid thing to do with it is to pass it to
+ * bus_matchmaker_commit_remove_rule_by_value().
+ *
+ * The returned linked-list link becomes invalid when control returns to
+ * the main loop. If the caller decides not to remove the rule after all,
+ * there is currently no need to cancel explicitly.
+ */
+DBusList *
+bus_matchmaker_prepare_remove_rule_by_value (BusMatchmaker   *matchmaker,
+                                             BusMatchRule    *value,
+                                             DBusError       *error)
 {
   DBusList **rules;
   DBusList *link = NULL;
 
-  _dbus_verbose ("Removing rule by value with message_type %d, interface %s\n",
+  _dbus_verbose ("Finding rule by value with message_type %d, interface %s\n",
                  value->message_type,
                  value->interface != NULL ? value->interface : "<null>");
 
   rules = bus_matchmaker_get_rules (matchmaker, value->message_type,
-      value->interface, FALSE);
+                                    value->interface, FALSE);
 
   if (rules != NULL)
     {
@@ -1638,26 +1650,37 @@ bus_matchmaker_remove_rule_by_value (BusMatchmaker   *matchmaker,
           prev = _dbus_list_get_prev_link (rules, link);
 
           if (match_rule_equal (rule, value))
-            {
-              bus_matchmaker_remove_rule_link (rules, link);
-              break;
-            }
+            return link;
 
           link = prev;
         }
     }
 
-  if (link == NULL)
-    {
-      dbus_set_error (error, DBUS_ERROR_MATCH_RULE_NOT_FOUND,
-                      "The given match rule wasn't found and can't be removed");
-      return FALSE;
-    }
+  dbus_set_error (error, DBUS_ERROR_MATCH_RULE_NOT_FOUND,
+                  "The given match rule wasn't found and can't be removed");
+  return NULL;
+}
 
+/*
+ * Commit a previous call to bus_matchmaker_prepare_remove_rule_by_value(),
+ * which must have been done during the same main-loop iteration.
+ */
+void
+bus_matchmaker_commit_remove_rule_by_value (BusMatchmaker *matchmaker,
+                                            BusMatchRule  *value,
+                                            DBusList      *link)
+{
+  DBusList **rules;
+
+  _dbus_assert (match_rule_equal (link->data, value));
+  rules = bus_matchmaker_get_rules (matchmaker, value->message_type,
+                                    value->interface, FALSE);
+  /* Should only be called if a rule matching value was successfully
+   * added, which means rules must contain at least link */
+  _dbus_assert (rules != NULL);
+  bus_matchmaker_remove_rule_link (rules, link);
   bus_matchmaker_gc_rules (matchmaker, value->message_type, value->interface,
       rules);
-
-  return TRUE;
 }
 
 static void
@@ -2244,7 +2267,8 @@ assert_large_rule (BusMatchRule *rule)
 }
 
 static dbus_bool_t
-test_parsing (void *data)
+test_parsing (void        *data,
+              dbus_bool_t  have_memory)
 {
   BusMatchRule *rule;
 
@@ -2739,7 +2763,7 @@ test_matching (void)
   message1 = dbus_message_new (DBUS_MESSAGE_TYPE_SIGNAL);
   _dbus_assert (message1 != NULL);
   if (!dbus_message_set_member (message1, "Frobated"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   v_STRING = "foobar";
   v_INT32 = 3;
@@ -2747,8 +2771,8 @@ test_matching (void)
                                  DBUS_TYPE_STRING, &v_STRING,
                                  DBUS_TYPE_INT32, &v_INT32,
                                  NULL))
-    _dbus_assert_not_reached ("oom");
-  
+    _dbus_test_fatal ("oom");
+
   check_matching (message1, 1,
                   should_match_message_1,
                   should_not_match_message_1);
@@ -2758,14 +2782,14 @@ test_matching (void)
   message2 = dbus_message_new (DBUS_MESSAGE_TYPE_SIGNAL);
   _dbus_assert (message2 != NULL);
   if (!dbus_message_set_member (message2, "NameOwnerChanged"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   /* Obviously this isn't really a NameOwnerChanged signal. */
   v_STRING = EXAMPLE_NAME;
   if (!dbus_message_append_args (message2,
                                  DBUS_TYPE_STRING, &v_STRING,
                                  NULL))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   check_matching (message2, 2,
                   should_match_message_2,
@@ -2814,12 +2838,12 @@ test_path_match (int type,
 
   _dbus_assert (message != NULL);
   if (!dbus_message_set_member (message, "Foo"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   if (!dbus_message_append_args (message,
                                  type, &path,
                                  NULL))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   matched = match_rule_matches (rule, NULL, NULL, message, 0);
 
@@ -2924,22 +2948,22 @@ test_matching_path_namespace (void)
   message1 = dbus_message_new (DBUS_MESSAGE_TYPE_SIGNAL);
   _dbus_assert (message1 != NULL);
   if (!dbus_message_set_path (message1, "/foo/TheObjectManager"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   message2 = dbus_message_new (DBUS_MESSAGE_TYPE_SIGNAL);
   _dbus_assert (message2 != NULL);
   if (!dbus_message_set_path (message2, "/foo/TheObjectManager/child_object"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   message3 = dbus_message_new (DBUS_MESSAGE_TYPE_SIGNAL);
   _dbus_assert (message3 != NULL);
   if (!dbus_message_set_path (message3, "/foo/TheObjectManagerOther"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   message4 = dbus_message_new (DBUS_MESSAGE_TYPE_SIGNAL);
   _dbus_assert (message4 != NULL);
   if (!dbus_message_set_path (message4, "/"))
-    _dbus_assert_not_reached ("oom");
+    _dbus_test_fatal ("oom");
 
   check_matching (message1, 1,
                   path_namespace_should_match_message_1,
@@ -2961,7 +2985,7 @@ test_matching_path_namespace (void)
 }
 
 dbus_bool_t
-bus_signals_test (const DBusString *test_data_dir)
+bus_signals_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 {
   BusMatchmaker *matchmaker;
 
@@ -2971,7 +2995,7 @@ bus_signals_test (const DBusString *test_data_dir)
   bus_matchmaker_unref (matchmaker);
 
   if (!_dbus_test_oom_handling ("parsing match rules", test_parsing, NULL))
-    _dbus_assert_not_reached ("Parsing match rules test failed");
+    _dbus_test_fatal ("Parsing match rules test failed");
 
   test_equality ();
   test_matching ();
@@ -2982,4 +3006,3 @@ bus_signals_test (const DBusString *test_data_dir)
 }
 
 #endif /* DBUS_ENABLE_EMBEDDED_TESTS */
-

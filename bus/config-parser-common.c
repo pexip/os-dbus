@@ -20,7 +20,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
- 
+
 #include <config.h>
 #include <dbus/dbus-internals.h>
 #include <string.h>
@@ -192,4 +192,3 @@ bus_config_parser_element_type_to_name (ElementType type)
       return NULL;
     }
 }
-

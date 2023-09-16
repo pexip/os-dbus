@@ -68,9 +68,6 @@
 #ifdef HAVE_WRITEV
 #include <sys/uio.h>
 #endif
-#ifdef HAVE_POLL
-#include <sys/poll.h>
-#endif
 #ifdef HAVE_BACKTRACE
 #include <execinfo.h>
 #endif
@@ -79,6 +76,9 @@
 #endif
 #ifdef HAVE_ALLOCA_H
 #include <alloca.h>
+#endif
+#ifdef HAVE_SYS_RANDOM_H
+#include <sys/random.h>
 #endif
 
 #ifdef HAVE_ADT
@@ -1068,6 +1068,11 @@ _dbus_connect_exec (const char     *path,
       _dbus_fd_set_close_on_exec (fds[1]);
     }
 
+  /* Make sure our output buffers aren't redundantly printed by both the
+   * parent and the child */
+  fflush (stdout);
+  fflush (stderr);
+
   pid = fork ();
   if (pid < 0)
     {
@@ -1429,10 +1434,13 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
                                      DBusError      *error)
 {
   int saved_errno = 0;
+  DBusList *connect_errors = NULL;
   DBusSocket fd = DBUS_SOCKET_INIT;
   int res;
   struct addrinfo hints;
-  struct addrinfo *ai, *tmp;
+  struct addrinfo *ai = NULL;
+  const struct addrinfo *tmp;
+  DBusError *connect_error;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR(error);
 
@@ -1461,7 +1469,8 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
                       _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host, port, gai_strerror(res), res);
-      return _dbus_socket_get_invalid ();
+      _dbus_socket_invalidate (&fd);
+      goto out;
     }
 
   tmp = ai;
@@ -1469,9 +1478,9 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
     {
       if (!_dbus_open_socket (&fd.fd, tmp->ai_family, SOCK_STREAM, 0, error))
         {
-          freeaddrinfo(ai);
           _DBUS_ASSERT_ERROR_IS_SET(error);
-          return _dbus_socket_get_invalid ();
+          _dbus_socket_invalidate (&fd);
+          goto out;
         }
       _DBUS_ASSERT_ERROR_IS_CLEAR(error);
 
@@ -1479,22 +1488,42 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
         {
           saved_errno = errno;
           _dbus_close (fd.fd, NULL);
-          fd.fd = -1;
+          _dbus_socket_invalidate (&fd);
+
+          connect_error = dbus_new0 (DBusError, 1);
+
+          if (connect_error == NULL)
+            {
+              _DBUS_SET_OOM (error);
+              goto out;
+            }
+
+          dbus_error_init (connect_error);
+          _dbus_set_error_with_inet_sockaddr (connect_error,
+                                              tmp->ai_addr, tmp->ai_addrlen,
+                                              "Failed to connect to socket",
+                                              saved_errno);
+
+          if (!_dbus_list_append (&connect_errors, connect_error))
+            {
+              dbus_error_free (connect_error);
+              dbus_free (connect_error);
+              _DBUS_SET_OOM (error);
+              goto out;
+            }
+
           tmp = tmp->ai_next;
           continue;
         }
 
       break;
     }
-  freeaddrinfo(ai);
 
-  if (fd.fd == -1)
+  if (!_dbus_socket_is_valid (fd))
     {
-      dbus_set_error (error,
-                      _dbus_error_from_errno (saved_errno),
-                      "Failed to connect to socket \"%s:%s\" %s",
-                      host, port, _dbus_strerror(saved_errno));
-      return _dbus_socket_get_invalid ();
+      _dbus_combine_tcp_errors (&connect_errors, "Failed to connect",
+                                host, port, error);
+      goto out;
     }
 
   if (noncefile != NULL)
@@ -1503,19 +1532,30 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
       dbus_bool_t ret;
       _dbus_string_init_const (&noncefileStr, noncefile);
       ret = _dbus_send_nonce (fd, &noncefileStr, error);
-      _dbus_string_free (&noncefileStr);
 
       if (!ret)
         {
           _dbus_close (fd.fd, NULL);
-          return _dbus_socket_get_invalid ();
+          _dbus_socket_invalidate (&fd);
+          goto out;
         }
     }
 
   if (!_dbus_set_fd_nonblocking (fd.fd, error))
     {
       _dbus_close (fd.fd, NULL);
-      return _dbus_socket_get_invalid ();
+      _dbus_socket_invalidate (&fd);
+      goto out;
+    }
+
+out:
+  if (ai != NULL)
+    freeaddrinfo (ai);
+
+  while ((connect_error = _dbus_list_pop_first (&connect_errors)))
+    {
+      dbus_error_free (connect_error);
+      dbus_free (connect_error);
     }
 
   return fd;
@@ -1533,6 +1573,7 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
  * @param port the port to listen on, if zero a free port will be used
  * @param family the address family to listen on, NULL for all
  * @param retport string to return the actual port listened on
+ * @param retfamily string to return the actual family listened on
  * @param fds_p location to store returned file descriptors
  * @param error return location for errors
  * @returns the number of listening file descriptors or -1 on error
@@ -1542,15 +1583,20 @@ _dbus_listen_tcp_socket (const char     *host,
                          const char     *port,
                          const char     *family,
                          DBusString     *retport,
+                         const char    **retfamily,
                          DBusSocket    **fds_p,
                          DBusError      *error)
 {
   int saved_errno;
   int nlisten_fd = 0, res, i;
+  DBusList *bind_errors = NULL;
+  DBusError *bind_error = NULL;
   DBusSocket *listen_fd = NULL;
   struct addrinfo hints;
   struct addrinfo *ai, *tmp;
   unsigned int reuseaddr;
+  dbus_bool_t have_ipv4 = FALSE;
+  dbus_bool_t have_ipv6 = FALSE;
 
   *fds_p = NULL;
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -1619,36 +1665,59 @@ _dbus_listen_tcp_socket (const char     *host,
         {
           saved_errno = errno;
           _dbus_close(fd, NULL);
-          if (saved_errno == EADDRINUSE)
+
+          /*
+           * We don't treat this as a fatal error, because there might be
+           * other addresses that we can listen on. In particular:
+           *
+           * - If saved_errno is EADDRINUSE after we
+           *   "goto redo_lookup_with_port" after binding a port on one of the
+           *   possible addresses, we will try to bind that same port on
+           *   every address, including the same address again for a second
+           *   time, which will fail with EADDRINUSE.
+           *
+           * - If saved_errno is EADDRINUSE, it might be because binding to
+           *   an IPv6 address implicitly binds to a corresponding IPv4
+           *   address or vice versa (e.g. Linux with bindv6only=0).
+           *
+           * - If saved_errno is EADDRNOTAVAIL when we asked for family
+           *   AF_UNSPEC, it might be because IPv6 is disabled for this
+           *   particular interface (e.g. Linux with
+           *   /proc/sys/net/ipv6/conf/lo/disable_ipv6).
+           */
+          bind_error = dbus_new0 (DBusError, 1);
+
+          if (bind_error == NULL)
             {
-              /* Depending on kernel policy, binding to an IPv6 address
-                 might implicitly bind to a corresponding IPv4
-                 address or vice versa, resulting in EADDRINUSE for the
-                 other one (e.g. bindv6only=0 on Linux).
-
-                 Also, after we "goto redo_lookup_with_port" after binding
-                 a port on one of the possible addresses, we will
-                 try to bind that same port on every address, including the
-                 same address again for a second time; that one will
-                 also fail with EADDRINUSE.
-
-                 For both those reasons, ignore EADDRINUSE here */
-              tmp = tmp->ai_next;
-              continue;
+              _DBUS_SET_OOM (error);
+              goto failed;
             }
-          dbus_set_error (error, _dbus_error_from_errno (saved_errno),
-                          "Failed to bind socket \"%s:%s\": %s",
-                          host ? host : "*", port, _dbus_strerror (saved_errno));
-          goto failed;
+
+          dbus_error_init (bind_error);
+          _dbus_set_error_with_inet_sockaddr (bind_error, tmp->ai_addr, tmp->ai_addrlen,
+                                              "Failed to bind socket",
+                                              saved_errno);
+
+          if (!_dbus_list_append (&bind_errors, bind_error))
+            {
+              dbus_error_free (bind_error);
+              dbus_free (bind_error);
+              _DBUS_SET_OOM (error);
+              goto failed;
+            }
+
+          /* Try the next address, maybe it will work better */
+          tmp = tmp->ai_next;
+          continue;
         }
 
       if (listen (fd, 30 /* backlog */) < 0)
         {
           saved_errno = errno;
           _dbus_close (fd, NULL);
-          dbus_set_error (error, _dbus_error_from_errno (saved_errno),
-                          "Failed to listen on socket \"%s:%s\": %s",
-                          host ? host : "*", port, _dbus_strerror (saved_errno));
+          _dbus_set_error_with_inet_sockaddr (error, tmp->ai_addr, tmp->ai_addrlen,
+                                              "Failed to listen on socket",
+                                              saved_errno);
           goto failed;
         }
 
@@ -1663,6 +1732,11 @@ _dbus_listen_tcp_socket (const char     *host,
       listen_fd = newlisten_fd;
       listen_fd[nlisten_fd].fd = fd;
       nlisten_fd++;
+
+      if (tmp->ai_addr->sa_family == AF_INET)
+        have_ipv4 = TRUE;
+      else if (tmp->ai_addr->sa_family == AF_INET6)
+        have_ipv6 = TRUE;
 
       if (!_dbus_string_get_length(retport))
         {
@@ -1728,12 +1802,15 @@ _dbus_listen_tcp_socket (const char     *host,
 
   if (!nlisten_fd)
     {
-      errno = EADDRINUSE;
-      dbus_set_error (error, _dbus_error_from_errno (errno),
-                      "Failed to bind socket \"%s:%s\": %s",
-                      host ? host : "*", port, _dbus_strerror (errno));
+      _dbus_combine_tcp_errors (&bind_errors, "Failed to bind", host,
+                                port, error);
       goto failed;
     }
+
+  if (have_ipv4 && !have_ipv6)
+    *retfamily = "ipv4";
+  else if (!have_ipv4 && have_ipv6)
+    *retfamily = "ipv6";
 
   for (i = 0 ; i < nlisten_fd ; i++)
     {
@@ -1745,6 +1822,14 @@ _dbus_listen_tcp_socket (const char     *host,
 
   *fds_p = listen_fd;
 
+  /* This list might be non-empty even on success, because we might be
+   * ignoring EADDRINUSE or EADDRNOTAVAIL */
+  while ((bind_error = _dbus_list_pop_first (&bind_errors)))
+    {
+      dbus_error_free (bind_error);
+      dbus_free (bind_error);
+    }
+
   return nlisten_fd;
 
  failed:
@@ -1752,6 +1837,13 @@ _dbus_listen_tcp_socket (const char     *host,
     freeaddrinfo(ai);
   for (i = 0 ; i < nlisten_fd ; i++)
     _dbus_close(listen_fd[i].fd, NULL);
+
+  while ((bind_error = _dbus_list_pop_first (&bind_errors)))
+    {
+      dbus_error_free (bind_error);
+      dbus_free (bind_error);
+    }
+
   dbus_free(listen_fd);
   return -1;
 }
@@ -1830,6 +1922,124 @@ write_credentials_byte (int             server_fd,
       _dbus_verbose ("wrote credentials byte\n");
       return TRUE;
     }
+}
+
+/* return FALSE on OOM, TRUE otherwise, even if no groups were found */
+static dbus_bool_t
+add_groups_to_credentials (int              client_fd,
+                           DBusCredentials *credentials,
+                           dbus_gid_t       primary)
+{
+#if defined(__linux__) && defined(SO_PEERGROUPS)
+  _DBUS_STATIC_ASSERT (sizeof (gid_t) <= sizeof (dbus_gid_t));
+  /* This function assumes socklen_t is unsigned, which is true on Linux */
+  _DBUS_STATIC_ASSERT (((socklen_t) -1) > 0);
+  gid_t *buf = NULL;
+  socklen_t len = 1024;
+  dbus_bool_t oom = FALSE;
+  /* libdbus has a different representation of group IDs just to annoy you */
+  dbus_gid_t *converted_gids = NULL;
+  dbus_bool_t need_primary = TRUE;
+  size_t n_gids;
+  size_t i;
+
+  n_gids = ((size_t) len) / sizeof (gid_t);
+  buf = dbus_new (gid_t, n_gids);
+
+  if (buf == NULL)
+    return FALSE;
+
+  while (getsockopt (client_fd, SOL_SOCKET, SO_PEERGROUPS, buf, &len) < 0)
+    {
+      int e = errno;
+      gid_t *replacement;
+
+      _dbus_verbose ("getsockopt failed with %s, len now %lu\n",
+                     _dbus_strerror (e), (unsigned long) len);
+
+      if (e != ERANGE || (size_t) len <= n_gids * sizeof (gid_t))
+        {
+          _dbus_verbose ("Failed to getsockopt(SO_PEERGROUPS): %s\n",
+                         _dbus_strerror (e));
+          goto out;
+        }
+
+      /* If not enough space, len is updated to be enough.
+       * Try again with a large enough buffer. */
+      n_gids = ((size_t) len) / sizeof (gid_t);
+      replacement = dbus_realloc (buf, len);
+
+      if (replacement == NULL)
+        {
+          oom = TRUE;
+          goto out;
+        }
+
+      buf = replacement;
+      _dbus_verbose ("will try again with %lu\n", (unsigned long) len);
+    }
+
+  if (len > n_gids * sizeof (gid_t))
+    {
+      _dbus_verbose ("%lu > %zu", (unsigned long) len, n_gids * sizeof (gid_t));
+      _dbus_assert_not_reached ("getsockopt(SO_PEERGROUPS) overflowed");
+    }
+
+  if (len % sizeof (gid_t) != 0)
+    {
+      _dbus_verbose ("getsockopt(SO_PEERGROUPS) did not return an "
+                     "integer multiple of sizeof(gid_t): %lu should be "
+                     "divisible by %zu",
+                     (unsigned long) len, sizeof (gid_t));
+      goto out;
+    }
+
+  /* Allocate an extra space for the primary group ID */
+  n_gids = ((size_t) len) / sizeof (gid_t);
+
+  /* If n_gids is less than this, then (n_gids + 1) certainly doesn't
+   * overflow, and neither does multiplying that by sizeof(dbus_gid_t).
+   * This is using _DBUS_INT32_MAX as a conservative lower bound for
+   * the maximum size_t. */
+  if (n_gids >= (_DBUS_INT32_MAX / sizeof (dbus_gid_t)) - 1)
+    {
+      _dbus_verbose ("getsockopt(SO_PEERGROUPS) returned a huge number "
+                     "of groups (%lu bytes), ignoring",
+                     (unsigned long) len);
+      goto out;
+    }
+
+  converted_gids = dbus_new (dbus_gid_t, n_gids + 1);
+
+  if (converted_gids == NULL)
+    {
+      oom = TRUE;
+      goto out;
+    }
+
+  for (i = 0; i < n_gids; i++)
+    {
+      converted_gids[i] = (dbus_gid_t) buf[i];
+
+      if (converted_gids[i] == primary)
+        need_primary = FALSE;
+    }
+
+  if (need_primary && primary != DBUS_GID_UNSET)
+    {
+      converted_gids[n_gids] = primary;
+      n_gids++;
+    }
+
+  _dbus_credentials_take_unix_gids (credentials, converted_gids, n_gids);
+
+out:
+  dbus_free (buf);
+  return !oom;
+#else
+  /* no error */
+  return TRUE;
+#endif
 }
 
 /* return FALSE on OOM, TRUE otherwise, even if no credentials were found */
@@ -1980,6 +2190,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
   struct iovec iov;
   char buf;
   dbus_uid_t uid_read;
+  dbus_gid_t primary_gid_read;
   dbus_pid_t pid_read;
   int bytes_read;
 
@@ -1999,6 +2210,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
   _DBUS_STATIC_ASSERT (sizeof (gid_t) <= sizeof (dbus_gid_t));
 
   uid_read = DBUS_UID_UNSET;
+  primary_gid_read = DBUS_GID_UNSET;
   pid_read = DBUS_PID_UNSET;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -2085,6 +2297,12 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
       {
         pid_read = cr.pid;
         uid_read = cr.uid;
+#ifdef __linux__
+        /* Do other platforms have cr.gid? (Not that it really matters,
+         * because the gid is useless to us unless we know the complete
+         * group vector, which we only know on Linux.) */
+        primary_gid_read = cr.gid;
+#endif
       }
 #elif defined(HAVE_UNPCBID) && defined(LOCAL_PEEREID)
     /* Another variant of the above - used on NetBSD
@@ -2260,6 +2478,14 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
     }
 
   if (!add_linux_security_label_to_credentials (client_fd.fd, credentials))
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  /* We don't put any groups in the credentials unless we can put them
+   * all there. */
+  if (!add_groups_to_credentials (client_fd.fd, credentials, primary_gid_read))
     {
       _DBUS_SET_OOM (error);
       return FALSE;
@@ -2452,7 +2678,7 @@ fill_user_info (DBusUserInfo       *info,
    * checks
    */
 
-#if defined (HAVE_POSIX_GETPWNAM_R) || defined (HAVE_NONPOSIX_GETPWNAM_R)
+#ifdef HAVE_GETPWNAM_R
   {
     struct passwd *p;
     int result;
@@ -2481,20 +2707,12 @@ fill_user_info (DBusUserInfo       *info,
           }
 
         p = NULL;
-#ifdef HAVE_POSIX_GETPWNAM_R
         if (uid != DBUS_UID_UNSET)
           result = getpwuid_r (uid, &p_str, buf, buflen,
                                &p);
         else
           result = getpwnam_r (username_c, &p_str, buf, buflen,
                                &p);
-#else
-        if (uid != DBUS_UID_UNSET)
-          p = getpwuid_r (uid, &p_str, buf, buflen);
-        else
-          p = getpwnam_r (username_c, &p_str, buf, buflen);
-        result = 0;
-#endif /* !HAVE_POSIX_GETPWNAM_R */
         //Try a bigger buffer if ERANGE was returned
         if (result == ERANGE && buflen < 512 * 1024)
           {
@@ -2529,6 +2747,8 @@ fill_user_info (DBusUserInfo       *info,
   {
     /* I guess we're screwed on thread safety here */
     struct passwd *p;
+
+#warning getpwnam_r() not available, please report this to the dbus maintainers with details of your OS
 
     if (uid != DBUS_UID_UNSET)
       p = getpwuid (uid);
@@ -2701,8 +2921,14 @@ _dbus_user_info_fill_uid (DBusUserInfo *info,
 }
 
 /**
- * Adds the credentials of the current process to the
- * passed-in credentials object.
+ * Adds the most important credentials of the current process
+ * (the uid and pid) to the passed-in credentials object.
+ *
+ * The group vector is not included because it is rarely needed.
+ * The Linux security label is not included because it is rarely
+ * needed, it requires reading /proc, and the LSM API doesn't actually
+ * guarantee that the string seen in /proc is comparable to the strings
+ * found in SO_PEERSEC results.
  *
  * @param credentials credentials to add to
  * @returns #FALSE if no memory; does not properly roll back on failure, so only some credentials may have been added
@@ -2784,46 +3010,6 @@ _dbus_pid_for_log (void)
   return getpid ();
 }
 
-/**
- * Gets a UID from a UID string.
- *
- * @param uid_str the UID in string form
- * @param uid UID to fill in
- * @returns #TRUE if successfully filled in UID
- */
-dbus_bool_t
-_dbus_parse_uid (const DBusString      *uid_str,
-                 dbus_uid_t            *uid)
-{
-  int end;
-  long val;
-
-  if (_dbus_string_get_length (uid_str) == 0)
-    {
-      _dbus_verbose ("UID string was zero length\n");
-      return FALSE;
-    }
-
-  val = -1;
-  end = 0;
-  if (!_dbus_string_parse_int (uid_str, 0, &val,
-                               &end))
-    {
-      _dbus_verbose ("could not parse string as a UID\n");
-      return FALSE;
-    }
-
-  if (end != _dbus_string_get_length (uid_str))
-    {
-      _dbus_verbose ("string contained trailing stuff after UID\n");
-      return FALSE;
-    }
-
-  *uid = val;
-
-  return TRUE;
-}
-
 #if !DBUS_USE_SYNC
 /* To be thread-safe by default on platforms that don't necessarily have
  * atomic operations (notably Debian armel, which is armv4t), we must
@@ -2900,6 +3086,42 @@ _dbus_atomic_get (DBusAtomic *atomic)
   pthread_mutex_unlock (&atomic_mutex);
 
   return res;
+#endif
+}
+
+/**
+ * Atomically set the value of an integer to 0.
+ *
+ * @param atomic pointer to the integer to set
+ */
+void
+_dbus_atomic_set_zero (DBusAtomic *atomic)
+{
+#if DBUS_USE_SYNC
+  /* Atomic version of "*atomic &= 0; return *atomic" */
+  __sync_and_and_fetch (&atomic->value, 0);
+#else
+  pthread_mutex_lock (&atomic_mutex);
+  atomic->value = 0;
+  pthread_mutex_unlock (&atomic_mutex);
+#endif
+}
+
+/**
+ * Atomically set the value of an integer to something nonzero.
+ *
+ * @param atomic pointer to the integer to set
+ */
+void
+_dbus_atomic_set_nonzero (DBusAtomic *atomic)
+{
+#if DBUS_USE_SYNC
+  /* Atomic version of "*atomic |= 1; return *atomic" */
+  __sync_or_and_fetch (&atomic->value, 1);
+#else
+  pthread_mutex_lock (&atomic_mutex);
+  atomic->value = 1;
+  pthread_mutex_unlock (&atomic_mutex);
 #endif
 }
 
@@ -3185,12 +3407,26 @@ _dbus_generate_random_bytes (DBusString *str,
                              int         n_bytes,
                              DBusError  *error)
 {
-  int old_len;
+  int old_len = _dbus_string_get_length (str);
   int fd;
   int result;
+#ifdef HAVE_GETRANDOM
+  char *buffer;
 
-  old_len = _dbus_string_get_length (str);
-  fd = -1;
+  if (!_dbus_string_lengthen (str, n_bytes))
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  buffer = _dbus_string_get_data_len (str, old_len, n_bytes);
+  result = getrandom (buffer, n_bytes, GRND_NONBLOCK);
+
+  if (result == n_bytes)
+    return TRUE;
+
+  _dbus_string_set_length (str, old_len);
+#endif
 
   /* note, urandom on linux will fall back to pseudorandom */
   fd = open ("/dev/urandom", O_RDONLY);
@@ -3288,6 +3524,28 @@ _dbus_fd_set_close_on_exec (int fd)
     return;
 
   val |= FD_CLOEXEC;
+
+  fcntl (fd, F_SETFD, val);
+}
+
+/**
+ * Sets the file descriptor to *not* be close-on-exec. This can be called
+ * after _dbus_fd_set_all_close_on_exec() to make exceptions for pipes
+ * used to communicate with child processes.
+ *
+ * @param fd the file descriptor
+ */
+void
+_dbus_fd_clear_close_on_exec (int fd)
+{
+  int val;
+
+  val = fcntl (fd, F_GETFD, 0);
+
+  if (val < 0)
+    return;
+
+  val &= ~FD_CLOEXEC;
 
   fcntl (fd, F_SETFD, val);
 }
@@ -3710,6 +3968,11 @@ _read_subprocess_line_argv (const char *progpath,
       goto out;
     }
 
+  /* Make sure our output buffers aren't redundantly printed by both the
+   * parent and the child */
+  fflush (stdout);
+  fflush (stderr);
+
   pid = fork ();
   if (pid < 0)
     {
@@ -3839,10 +4102,7 @@ _read_subprocess_line_argv (const char *progpath,
  out:
   sigprocmask (SIG_SETMASK, &old_set, NULL);
 
-  if (retval)
-    _DBUS_ASSERT_ERROR_IS_CLEAR (error);
-  else
-    _DBUS_ASSERT_ERROR_IS_SET (error);
+  _DBUS_ASSERT_ERROR_XOR_BOOL (error, retval);
 
   if (result_pipe[0] != -1)
     close (result_pipe[0]);
@@ -4367,19 +4627,10 @@ _dbus_append_keyring_directory_for_credentials (DBusString      *directory,
   return FALSE;
 }
 
-//PENDING(kdab) docs
-dbus_bool_t
-_dbus_daemon_publish_session_bus_address (const char* addr,
-                                          const char *scope)
-{
-  return TRUE;
-}
-
-//PENDING(kdab) docs
+/* Documented in dbus-sysdeps-win.c, does nothing on Unix */
 void
 _dbus_daemon_unpublish_session_bus_address (void)
 {
-
 }
 
 /**
@@ -4462,12 +4713,18 @@ _dbus_socket_can_pass_unix_fd (DBusSocket fd)
 #endif
 }
 
-/**
- * Closes all file descriptors except the first three (i.e. stdin,
- * stdout, stderr).
+static void
+close_ignore_error (int fd)
+{
+  close (fd);
+}
+
+/*
+ * Similar to Solaris fdwalk(3), but without the ability to stop iteration,
+ * and may call func for integers that are not actually valid fds.
  */
-void
-_dbus_close_all (void)
+static void
+act_on_fds_3_and_up (void (*func) (int fd))
 {
   int maxfds, i;
 
@@ -4506,7 +4763,7 @@ _dbus_close_all (void)
           if (fd == dirfd (d))
             continue;
 
-          close (fd);
+          func (fd);
         }
 
       closedir (d);
@@ -4524,7 +4781,27 @@ _dbus_close_all (void)
 
   /* close all inherited fds */
   for (i = 3; i < maxfds; i++)
-    close (i);
+    func (i);
+}
+
+/**
+ * Closes all file descriptors except the first three (i.e. stdin,
+ * stdout, stderr).
+ */
+void
+_dbus_close_all (void)
+{
+  act_on_fds_3_and_up (close_ignore_error);
+}
+
+/**
+ * Sets all file descriptors except the first three (i.e. stdin,
+ * stdout, stderr) to be close-on-execute.
+ */
+void
+_dbus_fd_set_all_close_on_exec (void)
+{
+  act_on_fds_3_and_up (_dbus_fd_set_close_on_exec);
 }
 
 /**
@@ -4604,6 +4881,8 @@ _dbus_append_address_from_socket (DBusSocket  fd,
   char hostip[INET6_ADDRSTRLEN];
   socklen_t size = sizeof (socket);
   DBusString path_str;
+  const char *family_name = NULL;
+  dbus_uint16_t port;
 
   if (getsockname (fd.fd, &socket.sa, &size))
     goto err;
@@ -4616,32 +4895,60 @@ _dbus_append_address_from_socket (DBusSocket  fd,
           _dbus_string_init_const (&path_str, &(socket.un.sun_path[1]));
           if (_dbus_string_append (address, "unix:abstract=") &&
               _dbus_address_append_escaped (address, &path_str))
-            return TRUE;
+            {
+              return TRUE;
+            }
+          else
+            {
+              _DBUS_SET_OOM (error);
+              return FALSE;
+            }
         }
       else
         {
           _dbus_string_init_const (&path_str, socket.un.sun_path);
           if (_dbus_string_append (address, "unix:path=") &&
               _dbus_address_append_escaped (address, &path_str))
-            return TRUE;
+            {
+              return TRUE;
+            }
+          else
+            {
+              _DBUS_SET_OOM (error);
+              return FALSE;
+            }
         }
+      /* not reached */
       break;
+
     case AF_INET:
-      if (inet_ntop (AF_INET, &socket.ipv4.sin_addr, hostip, sizeof (hostip)))
-        if (_dbus_string_append_printf (address, "tcp:family=ipv4,host=%s,port=%u",
-                                        hostip, ntohs (socket.ipv4.sin_port)))
-          return TRUE;
-      break;
 #ifdef AF_INET6
     case AF_INET6:
-      _dbus_string_init_const (&path_str, hostip);
-      if (inet_ntop (AF_INET6, &socket.ipv6.sin6_addr, hostip, sizeof (hostip)))
-        if (_dbus_string_append_printf (address, "tcp:family=ipv6,port=%u,host=",
-                                        ntohs (socket.ipv6.sin6_port)) &&
-            _dbus_address_append_escaped (address, &path_str))
-          return TRUE;
-      break;
 #endif
+       _dbus_string_init_const (&path_str, hostip);
+
+      if (_dbus_inet_sockaddr_to_string (&socket, size, hostip, sizeof (hostip),
+                                         &family_name, &port, error))
+        {
+          if (_dbus_string_append_printf (address, "tcp:family=%s,port=%u,host=",
+                                          family_name, port) &&
+              _dbus_address_append_escaped (address, &path_str))
+            {
+              return TRUE;
+            }
+          else
+            {
+              _DBUS_SET_OOM (error);
+              return FALSE;
+            }
+        }
+      else
+        {
+          return FALSE;
+        }
+      /* not reached */
+      break;
+
     default:
       dbus_set_error (error,
                       _dbus_error_from_errno (EINVAL),
@@ -4651,7 +4958,7 @@ _dbus_append_address_from_socket (DBusSocket  fd,
  err:
   dbus_set_error (error,
                   _dbus_error_from_errno (errno),
-                  "Failed to open socket: %s",
+                  "Failed to read address from socket: %s",
                   _dbus_strerror (errno));
   return FALSE;
 }
@@ -4756,6 +5063,20 @@ _dbus_logv (DBusSystemLogSeverity  severity,
       fputc ('\n', stderr);
       va_end (tmp);
     }
+}
+
+/*
+ * Return the low-level representation of a socket error, as used by
+ * cross-platform socket APIs like inet_ntop(), send() and recv(). This
+ * is the standard errno on Unix, but is WSAGetLastError() on Windows.
+ *
+ * Some libdbus internal functions copy this into errno, but with
+ * hindsight that was probably a design flaw.
+ */
+int
+_dbus_get_low_level_socket_errno (void)
+{
+  return errno;
 }
 
 /* tests in dbus-sysdeps-util.c */

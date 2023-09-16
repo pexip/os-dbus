@@ -1,12 +1,12 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-sysdeps.c Wrappers around system/libc features (internal to D-BUS implementation)
- * 
+ *
  * Copyright (C) 2002, 2003  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  * Copyright (C) 2005 Novell, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -16,7 +16,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -46,7 +46,6 @@ const char* _dbus_win_error_from_last_error (void);
 dbus_bool_t _dbus_win_startup_winsock (void);
 void _dbus_win_warn_win_error  (const char *message,
                                 unsigned long code);
-                                
 DBUS_PRIVATE_EXPORT
 char * _dbus_win_error_string (int error_number);
 DBUS_PRIVATE_EXPORT
@@ -90,6 +89,31 @@ void        _dbus_threads_windows_ensure_ctor_linked (void);
 
 DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_getsid(char **sid, dbus_pid_t process_id);
+
+HANDLE      _dbus_spawn_program (const char *name,
+                                 char **argv,
+                                 char **envp,
+                                 dbus_bool_t inherit_handles,
+                                 DBusError *error);
+
+DBUS_PRIVATE_EXPORT
+void _dbus_win_set_error_from_last_error (DBusError  *error,
+                                          const char *format,
+                                          ...) _DBUS_GNUC_PRINTF (2, 3);
+
+DBUS_PRIVATE_EXPORT
+HANDLE _dbus_win_event_create_inheritable (DBusError *error);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_win_event_set (HANDLE handle, DBusError *error);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_win_event_wait (HANDLE handle, int timeout, DBusError *error);
+DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_win_event_free (HANDLE handle, DBusError *error);
+
+dbus_bool_t _dbus_daemon_is_session_bus_address_published (const char *scope);
+dbus_bool_t _dbus_daemon_publish_session_bus_address (const char *address,
+                                                      const char *shm_name);
+
 #endif
 
 /** @} end of sysdeps-win.h */

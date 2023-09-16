@@ -109,9 +109,6 @@
 /* A 'va_copy' style function */
 #undef DBUS_VA_COPY
 
-/* 'va_lists' cannot be copies as values */
-#undef DBUS_VA_COPY_AS_ARRAY
-
 /* Defined if we run on a W32 API based system */
 #undef DBUS_WIN
 
@@ -120,6 +117,9 @@
 
 /* Define if GLib, GObject, GIO are available */
 #undef DBUS_WITH_GLIB
+
+/* Enable traditional activation without using systemd */
+#undef ENABLE_TRADITIONAL_ACTIVATION
 
 /* The maximum number of connections that can be handled at once */
 #undef FD_SETSIZE
@@ -130,7 +130,7 @@
 /* Prevent post-2.44 APIs */
 #undef GLIB_VERSION_MAX_ALLOWED
 
-/* Ignore post-2.40 deprecations */
+/* Ignore post-2.38 deprecations */
 #undef GLIB_VERSION_MIN_REQUIRED
 
 /* Disable GLib public API sanity checking */
@@ -211,6 +211,12 @@
 /* Define to 1 if you have the `getpeerucred' function. */
 #undef HAVE_GETPEERUCRED
 
+/* Define to 1 if you have the `getpwnam_r' function. */
+#undef HAVE_GETPWNAM_R
+
+/* Define to 1 if you have the `getrandom' function. */
+#undef HAVE_GETRANDOM
+
 /* Define to 1 if you have the `getresuid' function. */
 #undef HAVE_GETRESUID
 
@@ -220,17 +226,11 @@
 /* Define if you have gio-unix-2.0 */
 #undef HAVE_GIO_UNIX
 
-/* Have GNU-style varargs macros */
-#undef HAVE_GNUC_VARARGS
-
 /* Define to 1 if you have the `inotify_init1' function. */
 #undef HAVE_INOTIFY_INIT1
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
-
-/* Have ISO C99 varargs macros */
-#undef HAVE_ISO_VARARGS
 
 /* Define to 1 if you have the `issetugid' function. */
 #undef HAVE_ISSETUGID
@@ -256,9 +256,6 @@
 /* Define to 1 if you have the `nanosleep' function. */
 #undef HAVE_NANOSLEEP
 
-/* Have non-POSIX function getpwnam_r */
-#undef HAVE_NONPOSIX_GETPWNAM_R
-
 /* Define if your system needs _NSGetEnviron to set up the environment */
 #undef HAVE_NSGETENVIRON
 
@@ -267,9 +264,6 @@
 
 /* Define to 1 if you have the `poll' function. */
 #undef HAVE_POLL
-
-/* Have POSIX function getpwnam_r */
-#undef HAVE_POSIX_GETPWNAM_R
 
 /* Define to 1 if you have the `prctl' function. */
 #undef HAVE_PRCTL
@@ -337,14 +331,14 @@
 /* Define to 1 if you have the <sys/prctl.h> header file. */
 #undef HAVE_SYS_PRCTL_H
 
+/* Define to 1 if you have the <sys/random.h> header file. */
+#undef HAVE_SYS_RANDOM_H
+
 /* Define to 1 if you have the <sys/resource.h> header file. */
 #undef HAVE_SYS_RESOURCE_H
 
 /* Define to 1 if you have the <sys/stat.h> header file. */
 #undef HAVE_SYS_STAT_H
-
-/* Define to 1 if you have the <sys/syslimits.h> header file. */
-#undef HAVE_SYS_SYSLIMITS_H
 
 /* Define to 1 if you have the <sys/time.h> header file. */
 #undef HAVE_SYS_TIME_H
@@ -370,15 +364,9 @@
 /* Define to 1 if you have the `usleep' function. */
 #undef HAVE_USLEEP
 
-/* Define to 1 if you have the `vasprintf' function. */
-#undef HAVE_VASPRINTF
-
 /* Define to 1 or 0, depending whether the compiler supports simple visibility
    declarations. */
 #undef HAVE_VISIBILITY
-
-/* Define to 1 if you have the `vsnprintf' function. */
-#undef HAVE_VSNPRINTF
 
 /* Define to 1 if you have the <wchar.h> header file. */
 #undef HAVE_WCHAR_H
@@ -388,6 +376,9 @@
 
 /* Define to 1 if you have the <ws2tcpip.h> header file. */
 #undef HAVE_WS2TCPIP_H
+
+/* Define to 1 if you have X11 library */
+#undef HAVE_X11
 
 /* Define to 1 if you have the `XML_SetHashSalt' function. */
 #undef HAVE_XML_SETHASHSALT
@@ -569,9 +560,6 @@
 			#endif
 		
 
-/* Define to 1 if the X Window System is missing or not being used. */
-#undef X_DISPLAY_MISSING
-
 /* Define to enable BSD features */
 #undef _BSD_SOURCE
 
@@ -594,6 +582,9 @@
 
 /* Defined to get newer W32 CE APIs */
 #undef _WIN32_WCE
+
+/* Define to the minimum supported Windows version (0x0600 is Vista) */
+#undef _WIN32_WINNT
 
 /* Define to `__inline__' or `__inline' if that's what the C compiler
    calls it, or to nothing if 'inline' is not supported under any name.  */

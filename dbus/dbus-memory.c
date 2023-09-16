@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -27,6 +27,7 @@
 #include "dbus-sysdeps.h"
 #include "dbus-list.h"
 #include "dbus-threads.h"
+#include <dbus/dbus-test-tap.h>
 #include <stdlib.h>
 
 /**
@@ -98,6 +99,7 @@
  */
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
+/* Test-only, does not need to be thread-safe */
 static dbus_bool_t debug_initialized = FALSE;
 static int fail_nth = -1;
 static size_t fail_size = 0;
@@ -253,18 +255,6 @@ dbus_bool_t
 _dbus_decrement_fail_alloc_counter (void)
 {
   _dbus_initialize_malloc_debug ();
-#ifdef DBUS_WIN_FIXME
-  {
-    static dbus_bool_t called = 0;
-
-    if (!called)
-      {
-        _dbus_verbose("TODO: memory allocation testing errors disabled for now\n");
-        called = 1;
-      }
-    return FALSE;
-  }
-#endif
 
   if (fail_alloc_counter <= 0)
     {
@@ -929,7 +919,7 @@ dbus_shutdown (void)
  * @returns #TRUE on success.
  */
 dbus_bool_t
-_dbus_memory_test (void)
+_dbus_memory_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 {
   dbus_bool_t old_guards;
   void *p;
@@ -939,18 +929,18 @@ _dbus_memory_test (void)
   guards = TRUE;
   p = dbus_malloc (4);
   if (p == NULL)
-    _dbus_assert_not_reached ("no memory");
+    _dbus_test_fatal ("no memory");
   for (size = 4; size < 256; size += 4)
     {
       p = dbus_realloc (p, size);
       if (p == NULL)
-	_dbus_assert_not_reached ("no memory");
+        _dbus_test_fatal ("no memory");
     }
   for (size = 256; size != 0; size -= 4)
     {
       p = dbus_realloc (p, size);
       if (p == NULL)
-	_dbus_assert_not_reached ("no memory");
+        _dbus_test_fatal ("no memory");
     }
   dbus_free (p);
   guards = old_guards;

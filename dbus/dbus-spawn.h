@@ -1,11 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-spawn.h Wrapper around fork/exec
- * 
+ *
  * Copyright (C) 2002, 2003  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -40,13 +40,14 @@ typedef void (* DBusBabysitterFinishedFunc) (DBusBabysitter *sitter,
 
 typedef enum {
   DBUS_SPAWN_REDIRECT_OUTPUT = (1 << 0),
+  DBUS_SPAWN_SILENCE_OUTPUT = (1 << 1),
   DBUS_SPAWN_NONE = 0
 } DBusSpawnFlags;
 
 dbus_bool_t _dbus_spawn_async_with_babysitter     (DBusBabysitter           **sitter_p,
                                                    const char                *log_name,
                                                    char              * const *argv,
-                                                   char                     **env,
+                                                   char              * const *env,
                                                    DBusSpawnFlags             flags,
                                                    DBusSpawnChildSetupFunc    child_setup,
                                                    void                      *user_data,

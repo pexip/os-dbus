@@ -5,7 +5,7 @@
  * Copyright (C) 2003  CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -670,7 +670,7 @@ bus_registry_release_service (BusRegistry      *registry,
     {
       *result = DBUS_RELEASE_NAME_REPLY_NON_EXISTENT;
     }
-  else if (!bus_service_has_owner (service, connection))
+  else if (!bus_service_owner_in_queue (service, connection))
     {
       *result = DBUS_RELEASE_NAME_REPLY_NOT_OWNER;
     }
@@ -680,7 +680,7 @@ bus_registry_release_service (BusRegistry      *registry,
                                      transaction, error))
         goto out;
 
-      _dbus_assert (!bus_service_has_owner (service, connection));
+      _dbus_assert (!bus_service_owner_in_queue (service, connection));
       *result = DBUS_RELEASE_NAME_REPLY_RELEASED;
     }
 
@@ -1274,8 +1274,8 @@ bus_service_get_allow_replacement (BusService *service)
 }
 
 dbus_bool_t
-bus_service_has_owner (BusService     *service,
-		       DBusConnection *connection)
+bus_service_owner_in_queue (BusService     *service,
+                            DBusConnection *connection)
 {
   DBusList *link;
 
@@ -1289,8 +1289,7 @@ bus_service_has_owner (BusService     *service,
 
 dbus_bool_t 
 bus_service_list_queued_owners (BusService *service,
-                                DBusList  **return_list,
-                                DBusError  *error)
+                                DBusList  **return_list)
 {
   DBusList *link;
 
@@ -1317,6 +1316,5 @@ bus_service_list_queued_owners (BusService *service,
   
  oom:
   _dbus_list_clear (return_list);
-  BUS_SET_OOM (error);
   return FALSE;
 }

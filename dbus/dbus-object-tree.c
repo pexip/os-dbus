@@ -28,6 +28,7 @@
 #include "dbus-hash.h"
 #include "dbus-protocol.h"
 #include "dbus-string.h"
+#include <dbus/dbus-test-tap.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -1648,7 +1649,7 @@ run_decompose_tests (void)
               ++i;
             }
           _dbus_warn ("}");
-          _dbus_assert_not_reached ("path decompose failed");
+          _dbus_test_fatal ("path decompose failed");
         }
 
       dbus_free_string_array (result);
@@ -1673,7 +1674,8 @@ find_subtree_registered_or_unregistered (DBusObjectTree *tree,
 /* Returns TRUE if the right thing happens, but the right thing might
  * be OOM. */
 static dbus_bool_t
-object_tree_test_iteration (void *data)
+object_tree_test_iteration (void        *data,
+                            dbus_bool_t  have_memory)
 {
   const char *path0[] = { NULL };
   const char *path1[] = { "foo", NULL };
@@ -2317,7 +2319,7 @@ object_tree_test_iteration (void *data)
  * @returns #TRUE on success.
  */
 dbus_bool_t
-_dbus_object_tree_test (void)
+_dbus_object_tree_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 {
   return _dbus_test_oom_handling ("object tree",
                                   object_tree_test_iteration,

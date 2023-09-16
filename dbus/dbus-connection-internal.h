@@ -4,7 +4,7 @@
  * Copyright (C) 2002  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -25,6 +25,7 @@
 
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-connection.h>
+#include <dbus/dbus-credentials.h>
 #include <dbus/dbus-message.h>
 #include <dbus/dbus-transport.h>
 #include <dbus/dbus-resources.h>
@@ -119,6 +120,11 @@ void              _dbus_connection_set_pending_fds_function       (DBusConnectio
 DBUS_PRIVATE_EXPORT
 dbus_bool_t       _dbus_connection_get_linux_security_label       (DBusConnection  *connection,
                                                                    char           **label_p);
+DBUS_PRIVATE_EXPORT
+DBusCredentials  *_dbus_connection_get_credentials                (DBusConnection  *connection);
+DBUS_PRIVATE_EXPORT
+void              _dbus_connection_set_builtin_filters_enabled    (DBusConnection  *connection,
+                                                                   dbus_bool_t      value);
 
 /* if DBUS_ENABLE_STATS */
 DBUS_PRIVATE_EXPORT
@@ -135,7 +141,7 @@ void _dbus_connection_get_stats (DBusConnection *connection,
                                  dbus_uint32_t  *out_peak_fds);
 
 
-/* if DBUS_ENABLE_EMBEDDED_TESTS */
+DBUS_EMBEDDED_TESTS_EXPORT
 const char* _dbus_connection_get_address (DBusConnection *connection);
 
 /* This _dbus_bus_* stuff doesn't really belong here, but dbus-bus-internal.h seems

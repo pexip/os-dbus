@@ -88,18 +88,21 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-TESTS = $(am__EXEEXT_1)
+TESTS = $(am__EXEEXT_1) $(am__EXEEXT_2)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__append_1 = \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test-systemserver.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-ids \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-dispatch \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-timeout \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-disconnected \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-privserver-client \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-shutdown \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-threads-init \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_2 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-pending-call-dispatch \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-pending-call-timeout \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-privserver-client \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-threads-init \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	$(NULL)
 
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@noinst_PROGRAMS = test-pending-call-dispatch$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-pending-call-timeout$(EXEEXT) \
@@ -107,7 +110,6 @@ TESTS = $(am__EXEEXT_1)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-threads-init$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-ids$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-shutdown$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-privserver$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-privserver-client$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-autolaunch$(EXEEXT)
 subdir = test/name-test
@@ -122,8 +124,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/visibility.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(am__DIST_COMMON)
@@ -134,7 +136,9 @@ CONFIG_CLEAN_VPATH_FILES =
 PROGRAMS = $(noinst_PROGRAMS)
 test_autolaunch_SOURCES = test-autolaunch.c
 test_autolaunch_OBJECTS = test-autolaunch.$(OBJEXT)
+am__DEPENDENCIES_1 =
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_autolaunch_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
@@ -142,35 +146,43 @@ am__v_lt_0 = --silent
 am__v_lt_1 = 
 test_ids_SOURCES = test-ids.c
 test_ids_OBJECTS = test-ids.$(OBJEXT)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_ids_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_ids_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la
 test_pending_call_disconnected_SOURCES =  \
 	test-pending-call-disconnected.c
 test_pending_call_disconnected_OBJECTS =  \
 	test-pending-call-disconnected.$(OBJEXT)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_disconnected_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_disconnected_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la
 test_pending_call_dispatch_SOURCES = test-pending-call-dispatch.c
 test_pending_call_dispatch_OBJECTS =  \
 	test-pending-call-dispatch.$(OBJEXT)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_dispatch_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_dispatch_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la
 test_pending_call_timeout_SOURCES = test-pending-call-timeout.c
 test_pending_call_timeout_OBJECTS =  \
 	test-pending-call-timeout.$(OBJEXT)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_timeout_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
-test_privserver_SOURCES = test-privserver.c
-test_privserver_OBJECTS = test-privserver.$(OBJEXT)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_privserver_DEPENDENCIES =  \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_timeout_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la
 test_privserver_client_SOURCES = test-privserver-client.c
 test_privserver_client_OBJECTS = test-privserver-client.$(OBJEXT)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_privserver_client_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la
 test_shutdown_SOURCES = test-shutdown.c
 test_shutdown_OBJECTS = test-shutdown.$(OBJEXT)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_shutdown_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la
 test_threads_init_SOURCES = test-threads-init.c
 test_threads_init_OBJECTS = test-threads-init.$(OBJEXT)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_threads_init_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_threads_init_DEPENDENCIES =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__DEPENDENCIES_1) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -192,8 +204,7 @@ am__depfiles_remade = ./$(DEPDIR)/test-autolaunch.Po \
 	./$(DEPDIR)/test-pending-call-dispatch.Po \
 	./$(DEPDIR)/test-pending-call-timeout.Po \
 	./$(DEPDIR)/test-privserver-client.Po \
-	./$(DEPDIR)/test-privserver.Po ./$(DEPDIR)/test-shutdown.Po \
-	./$(DEPDIR)/test-threads-init.Po
+	./$(DEPDIR)/test-shutdown.Po ./$(DEPDIR)/test-threads-init.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -215,12 +226,12 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = test-autolaunch.c test-ids.c \
 	test-pending-call-disconnected.c test-pending-call-dispatch.c \
-	test-pending-call-timeout.c test-privserver.c \
-	test-privserver-client.c test-shutdown.c test-threads-init.c
+	test-pending-call-timeout.c test-privserver-client.c \
+	test-shutdown.c test-threads-init.c
 DIST_SOURCES = test-autolaunch.c test-ids.c \
 	test-pending-call-disconnected.c test-pending-call-dispatch.c \
-	test-pending-call-timeout.c test-privserver.c \
-	test-privserver-client.c test-shutdown.c test-threads-init.c
+	test-pending-call-timeout.c test-privserver-client.c \
+	test-shutdown.c test-threads-init.c
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -432,12 +443,12 @@ AM_RECURSIVE_TARGETS = check recheck
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	run-test-systemserver.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-ids$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-dispatch$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-timeout$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-pending-call-disconnected$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-privserver-client$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-shutdown$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-threads-init$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-shutdown$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__EXEEXT_2 = test-pending-call-dispatch$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-pending-call-timeout$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-privserver-client$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-threads-init$(EXEEXT)
 TEST_SUITE_LOG = test-suite.log
 LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
 am__set_b = \
@@ -481,7 +492,6 @@ CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
 CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
 CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
 CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
-CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
@@ -495,6 +505,7 @@ DBUS_BINDIR = @DBUS_BINDIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
+DBUS_GENERATE_MAN = @DBUS_GENERATE_MAN@
 DBUS_INT16_TYPE = @DBUS_INT16_TYPE@
 DBUS_INT32_TYPE = @DBUS_INT32_TYPE@
 DBUS_INT64_CONSTANT = @DBUS_INT64_CONSTANT@
@@ -518,12 +529,18 @@ DBUS_TEST_USER = @DBUS_TEST_USER@
 DBUS_UINT64_CONSTANT = @DBUS_UINT64_CONSTANT@
 DBUS_USER = @DBUS_USER@
 DBUS_VERSION = @DBUS_VERSION@
+DBUS_VER_FILE_TYPE = @DBUS_VER_FILE_TYPE@
+DBUS_VER_INTERNAL_NAME = @DBUS_VER_INTERNAL_NAME@
+DBUS_VER_ORIGINAL_NAME = @DBUS_VER_ORIGINAL_NAME@
 DBUS_X_CFLAGS = @DBUS_X_CFLAGS@
 DBUS_X_LIBS = @DBUS_X_LIBS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DLLTOOL = @DLLTOOL@
 DOXYGEN = @DOXYGEN@
+DOXYGEN_GENERATE_QHP = @DOXYGEN_GENERATE_QHP@
+DOXYGEN_QCH_FILE = @DOXYGEN_QCH_FILE@
+DOXYGEN_QHG_LOCATION = @DOXYGEN_QHG_LOCATION@
 DSYMUTIL = @DSYMUTIL@
 DUCKTYPE = @DUCKTYPE@
 DUMPBIN = @DUMPBIN@
@@ -598,14 +615,13 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PYTHON = @PYTHON@
-PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
-PYTHON_PLATFORM = @PYTHON_PLATFORM@
-PYTHON_PREFIX = @PYTHON_PREFIX@
-PYTHON_VERSION = @PYTHON_VERSION@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QHELPGENERATOR = @QHELPGENERATOR@
 RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
+SANITIZE_CFLAGS = @SANITIZE_CFLAGS@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -628,13 +644,10 @@ WARN_CFLAGS = @WARN_CFLAGS@
 WARN_CXXFLAGS = @WARN_CXXFLAGS@
 WARN_LDFLAGS = @WARN_LDFLAGS@
 WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
-XMKMF = @XMKMF@
 XMLTO = @XMLTO@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
-X_EXTRA_LIBS = @X_EXTRA_LIBS@
 X_LIBS = @X_LIBS@
-X_PRE_LIBS = @X_PRE_LIBS@
 YELP_BUILD = @YELP_BUILD@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -682,13 +695,10 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgconfig_prefix = @pkgconfig_prefix@
-pkgpyexecdir = @pkgpyexecdir@
-pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-pyexecdir = @pyexecdir@
-pythondir = @pythondir@
+qchdir = @qchdir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
@@ -702,12 +712,15 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir) \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
+	$(VALGRIND_CFLAGS) \
 	-DDBUS_COMPILATION \
 	$(NULL)
 
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 
@@ -718,7 +731,7 @@ LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/build-aux/tap-driver
 SH_LOG_DRIVER = $(LOG_DRIVER)
 LOG_COMPILER = \
 	@abs_top_builddir@/tools/dbus-run-session$(EXEEXT) \
-	--config-file=@abs_builddir@/uninstalled-session.conf \
+        --config-file=@abs_top_builddir@/test/data/valid-config-files/tmp-session.conf \
 	--dbus-daemon=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT) \
 	-- \
 	$(NULL)
@@ -729,7 +742,6 @@ SH_LOG_COMPILER = $(SHELL)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TOP_BUILDDIR=@abs_top_builddir@; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TOP_SRCDIR=@abs_top_srcdir@; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export PATH="@abs_top_builddir@/bus:$$PATH"; \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export PYTHON=@PYTHON@; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TEST_DATA=@abs_top_builddir@/test/data; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TEST_DAEMON=@abs_top_builddir@/bus/dbus-daemon$(EXEEXT); \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        export DBUS_TEST_DBUS_LAUNCH=@abs_top_builddir@/tools/dbus-launch$(EXEEXT); \
@@ -738,20 +750,47 @@ SH_LOG_COMPILER = $(SHELL)
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        unset DBUS_SESSION_BUS_PID; \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@        $(NULL)
 
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@check_DATA = \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	uninstalled-session.conf \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(NULL)
+EXTRA_DIST = run-test.sh run-test-systemserver.sh
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_dispatch_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
 
-EXTRA_DIST = run-test.sh run-test-systemserver.sh test-wait-for-echo.py test-activation-forking.py
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_dispatch_LDADD = $(top_builddir)/dbus/libdbus-1.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_timeout_LDADD = $(top_builddir)/dbus/libdbus-1.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_disconnected_LDADD = $(top_builddir)/dbus/libdbus-1.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_threads_init_LDADD = $(top_builddir)/dbus/libdbus-1.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_ids_LDADD = $(top_builddir)/dbus/libdbus-1.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_shutdown_LDADD = ../libdbus-testutils.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_privserver_LDADD = ../libdbus-testutils.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_privserver_client_LDADD = ../libdbus-testutils.la
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_autolaunch_LDADD = ../libdbus-testutils.la
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_timeout_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_pending_call_disconnected_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_threads_init_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_ids_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(top_builddir)/dbus/libdbus-1.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_shutdown_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_privserver_client_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@test_autolaunch_LDADD = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(CODE_COVERAGE_LIBS) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	../libdbus-testutils.la \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
 all: all-am
 
 .SUFFIXES:
@@ -765,9 +804,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu test/name-test/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign test/name-test/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu test/name-test/Makefile
+	  $(AUTOMAKE) --foreign test/name-test/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -815,10 +854,6 @@ test-pending-call-timeout$(EXEEXT): $(test_pending_call_timeout_OBJECTS) $(test_
 	@rm -f test-pending-call-timeout$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_pending_call_timeout_OBJECTS) $(test_pending_call_timeout_LDADD) $(LIBS)
 
-test-privserver$(EXEEXT): $(test_privserver_OBJECTS) $(test_privserver_DEPENDENCIES) $(EXTRA_test_privserver_DEPENDENCIES) 
-	@rm -f test-privserver$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(test_privserver_OBJECTS) $(test_privserver_LDADD) $(LIBS)
-
 test-privserver-client$(EXEEXT): $(test_privserver_client_OBJECTS) $(test_privserver_client_DEPENDENCIES) $(EXTRA_test_privserver_client_DEPENDENCIES) 
 	@rm -f test-privserver-client$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_privserver_client_OBJECTS) $(test_privserver_client_LDADD) $(LIBS)
@@ -843,7 +878,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-pending-call-dispatch.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-pending-call-timeout.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-privserver-client.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-privserver.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-shutdown.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-threads-init.Po@am__quote@ # am--include-marker
 
@@ -1055,7 +1089,7 @@ $(TEST_SUITE_LOG): $(TEST_LOGS)
 	fi;								\
 	$$success || exit 1
 
-check-TESTS: $(check_DATA)
+check-TESTS: 
 	@list='$(RECHECK_LOGS)';           test -z "$$list" || rm -f $$list
 	@list='$(RECHECK_LOGS:.log=.trs)'; test -z "$$list" || rm -f $$list
 	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
@@ -1065,7 +1099,7 @@ check-TESTS: $(check_DATA)
 	log_list=`echo $$log_list`; trs_list=`echo $$trs_list`; \
 	$(MAKE) $(AM_MAKEFLAGS) $(TEST_SUITE_LOG) TEST_LOGS="$$log_list"; \
 	exit $$?;
-recheck: all $(check_DATA)
+recheck: all 
 	@test -z "$(TEST_SUITE_LOG)" || rm -f $(TEST_SUITE_LOG)
 	@set +e; $(am__set_TESTS_bases); \
 	bases=`for i in $$bases; do echo $$i; done \
@@ -1079,6 +1113,20 @@ recheck: all $(check_DATA)
 test-ids.log: test-ids$(EXEEXT)
 	@p='test-ids$(EXEEXT)'; \
 	b='test-ids'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-pending-call-disconnected.log: test-pending-call-disconnected$(EXEEXT)
+	@p='test-pending-call-disconnected$(EXEEXT)'; \
+	b='test-pending-call-disconnected'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-shutdown.log: test-shutdown$(EXEEXT)
+	@p='test-shutdown$(EXEEXT)'; \
+	b='test-shutdown'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -1097,23 +1145,9 @@ test-pending-call-timeout.log: test-pending-call-timeout$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
-test-pending-call-disconnected.log: test-pending-call-disconnected$(EXEEXT)
-	@p='test-pending-call-disconnected$(EXEEXT)'; \
-	b='test-pending-call-disconnected'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-privserver-client.log: test-privserver-client$(EXEEXT)
 	@p='test-privserver-client$(EXEEXT)'; \
 	b='test-privserver-client'; \
-	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
-	--log-file $$b.log --trs-file $$b.trs \
-	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
-	"$$tst" $(AM_TESTS_FD_REDIRECT)
-test-shutdown.log: test-shutdown$(EXEEXT)
-	@p='test-shutdown$(EXEEXT)'; \
-	b='test-shutdown'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -1173,7 +1207,6 @@ distdir-am: $(DISTFILES)
 	  fi; \
 	done
 check-am: all-am
-	$(MAKE) $(AM_MAKEFLAGS) $(check_DATA)
 	$(MAKE) $(AM_MAKEFLAGS) check-TESTS
 check: check-am
 all-am: Makefile $(PROGRAMS)
@@ -1223,7 +1256,6 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/test-pending-call-dispatch.Po
 	-rm -f ./$(DEPDIR)/test-pending-call-timeout.Po
 	-rm -f ./$(DEPDIR)/test-privserver-client.Po
-	-rm -f ./$(DEPDIR)/test-privserver.Po
 	-rm -f ./$(DEPDIR)/test-shutdown.Po
 	-rm -f ./$(DEPDIR)/test-threads-init.Po
 	-rm -f Makefile
@@ -1277,7 +1309,6 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/test-pending-call-dispatch.Po
 	-rm -f ./$(DEPDIR)/test-pending-call-timeout.Po
 	-rm -f ./$(DEPDIR)/test-privserver-client.Po
-	-rm -f ./$(DEPDIR)/test-privserver.Po
 	-rm -f ./$(DEPDIR)/test-shutdown.Po
 	-rm -f ./$(DEPDIR)/test-threads-init.Po
 	-rm -f Makefile
@@ -1317,11 +1348,6 @@ uninstall-am:
 
 .PRECIOUS: Makefile
 
-
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@uninstalled-session.conf: $(top_builddir)/bus/session.conf Makefile
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(SED) -e 's|<standard_session_servicedirs.*$$|<servicedir>@abs_top_builddir@/test/data/valid-service-files</servicedir>|g' \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@		-e 's|<include.*$$||g' \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@		< $< > $@
 
 # Tell versions [3.59,3.63) of GNU make to not export all variables.
 # Otherwise a system limit (for SysV at least) may be exceeded.

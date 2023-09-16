@@ -40,13 +40,17 @@
 # include <unistd.h>
 # include <sys/socket.h>
 # include <sys/types.h>
+# include <sys/wait.h>
 # include <pwd.h>
 #endif
 
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <gio/gio.h>
 
 #include <dbus/dbus.h>
+
+#include "dbus/dbus-valgrind-internal.h"
 
 #ifdef G_OS_WIN
 # define isatty(x) _isatty(x)
@@ -63,6 +67,61 @@ _test_assert_no_error (const DBusError *e,
 }
 
 #ifdef DBUS_UNIX
+static gboolean
+can_become_user_or_skip (uid_t uid)
+{
+  gchar *message;
+  pid_t child_pid;
+  pid_t pid;
+  int wstatus;
+
+  /* We can't switch to the uid without affecting the whole process,
+   * which we don't necessarily want to do, so try it in a child process. */
+  child_pid = fork ();
+
+  if (child_pid < 0)
+    g_error ("fork: %s", g_strerror (errno));
+
+  if (child_pid == 0)
+    {
+      /* Child process: try to become uid, exit 0 on success, exit with
+       * status = errno on failure */
+
+      if (setuid (uid) != 0)
+        {
+          /* make sure we report failure even if errno is wrong */
+          if (errno == 0)
+            errno = ENODATA;
+
+          _exit (errno);
+        }
+
+      /* success */
+      _exit (0);
+    }
+
+  /* Parent process: wait for child and report result */
+
+  pid = waitpid (child_pid, &wstatus, 0);
+  g_assert_cmpuint (child_pid, ==, pid);
+
+  if (WIFEXITED (wstatus) && WEXITSTATUS (wstatus) == 0)
+    return TRUE;
+
+  if (WIFEXITED (wstatus))
+    message = g_strdup_printf ("unable to become uid %lu: %s",
+                               (unsigned long) uid,
+                               g_strerror (WEXITSTATUS (wstatus)));
+  else
+    message = g_strdup_printf ("unable to become uid %lu: unknown wait status %d",
+                               (unsigned long) uid,
+                               wstatus);
+
+  g_test_skip (message);
+  g_free (message);
+  return FALSE;
+}
+
 static void
 child_setup (gpointer user_data)
 {
@@ -124,6 +183,7 @@ spawn_dbus_daemon (const gchar *binary,
           case TEST_USER_ROOT:
             break;
 
+          case TEST_USER_ROOT_DROP_TO_MESSAGEBUS:
           case TEST_USER_MESSAGEBUS:
             pwd = getpwnam (DBUS_USER);
 
@@ -135,6 +195,16 @@ spawn_dbus_daemon (const gchar *binary,
                 g_test_skip (message);
                 g_free (message);
                 return NULL;
+              }
+
+            if (!can_become_user_or_skip (pwd->pw_uid))
+              return NULL;
+
+            if (user == TEST_USER_ROOT_DROP_TO_MESSAGEBUS)
+              {
+                /* Let the dbus-daemon start as root and drop privileges
+                 * itself */
+                pwd = NULL;
               }
 
             break;
@@ -151,6 +221,9 @@ spawn_dbus_daemon (const gchar *binary,
                 g_free (message);
                 return NULL;
               }
+
+            if (!can_become_user_or_skip (pwd->pw_uid))
+              return NULL;
 
             break;
 
@@ -199,6 +272,24 @@ spawn_dbus_daemon (const gchar *binary,
       &address_fd,
       NULL, /* child's stderr = our stderr */
       &error);
+
+  /* The other uid might not have access to our build directory if we
+   * are building in /root or something */
+  if (user != TEST_USER_ME &&
+      g_getenv ("DBUS_TEST_UNINSTALLED") != NULL &&
+      error != NULL &&
+      error->domain == G_SPAWN_ERROR &&
+      (error->code == G_SPAWN_ERROR_CHDIR ||
+       error->code == G_SPAWN_ERROR_ACCES ||
+       error->code == G_SPAWN_ERROR_PERM))
+    {
+      g_prefix_error (&error, "Unable to launch %s as other user: ",
+          binary);
+      g_test_skip (error->message);
+      g_clear_error (&error);
+      return NULL;
+    }
+
   g_assert_no_error (error);
 
   g_ptr_array_free (argv, TRUE);
@@ -322,43 +413,69 @@ DBusConnection *
 test_connect_to_bus (TestMainContext *ctx,
     const gchar *address)
 {
-  DBusConnection *conn;
-  DBusError error = DBUS_ERROR_INIT;
-  dbus_bool_t ok;
+  GError *error = NULL;
+  DBusConnection *conn = test_try_connect_to_bus (ctx, address, &error);
 
-  conn = dbus_connection_open_private (address, &error);
-  test_assert_no_error (&error);
+  g_assert_no_error (error);
   g_assert (conn != NULL);
-
-  ok = dbus_bus_register (conn, &error);
-  test_assert_no_error (&error);
-  g_assert (ok);
-  g_assert (dbus_bus_get_unique_name (conn) != NULL);
-
-  if (ctx != NULL)
-    test_connection_setup (ctx, conn);
-
   return conn;
 }
 
 DBusConnection *
-test_connect_to_bus_as_user (TestMainContext *ctx,
-    const char *address,
-    TestUser user)
+test_try_connect_to_bus (TestMainContext *ctx,
+    const gchar *address,
+    GError **gerror)
+{
+  DBusConnection *conn;
+  DBusError error = DBUS_ERROR_INIT;
+
+  conn = dbus_connection_open_private (address, &error);
+
+  if (conn == NULL)
+    goto fail;
+
+  if (!dbus_bus_register (conn, &error))
+    goto fail;
+
+  g_assert (dbus_bus_get_unique_name (conn) != NULL);
+
+  if (ctx != NULL && !test_connection_try_setup (ctx, conn))
+    {
+      _DBUS_SET_OOM (&error);
+      goto fail;
+    }
+
+  return conn;
+
+fail:
+  if (gerror != NULL)
+    *gerror = g_dbus_error_new_for_dbus_error (error.name, error.message);
+
+  if (conn != NULL)
+    {
+      dbus_connection_close (conn);
+      dbus_connection_unref (conn);
+    }
+
+  dbus_error_free (&error);
+  return FALSE;
+}
+
+static gboolean
+become_other_user (TestUser user,
+                   GError **error)
 {
   /* For now we only do tests like this on Linux, because I don't know how
    * safe this use of setresuid() is on other platforms */
 #if defined(HAVE_GETRESUID) && defined(HAVE_SETRESUID) && defined(__linux__)
   uid_t ruid, euid, suid;
   const struct passwd *pwd;
-  DBusConnection *conn;
   const char *username;
+
+  g_return_val_if_fail (user != TEST_USER_ME, FALSE);
 
   switch (user)
     {
-      case TEST_USER_ME:
-        return test_connect_to_bus (ctx, address);
-
       case TEST_USER_ROOT:
         username = "root";
         break;
@@ -371,8 +488,14 @@ test_connect_to_bus_as_user (TestMainContext *ctx,
         username = DBUS_TEST_USER;
         break;
 
+      /* TEST_USER_ROOT_DROP_TO_MESSAGEBUS is only meaningful for
+       * test_get_dbus_daemon(), not as a client */
+      case TEST_USER_ROOT_DROP_TO_MESSAGEBUS:
+        g_return_val_if_reached (FALSE);
+
+      case TEST_USER_ME:
       default:
-        g_return_val_if_reached (NULL);
+        g_return_val_if_reached (FALSE);
     }
 
   if (getresuid (&ruid, &euid, &suid) != 0)
@@ -380,54 +503,112 @@ test_connect_to_bus_as_user (TestMainContext *ctx,
 
   if (ruid != 0 || euid != 0 || suid != 0)
     {
-      g_test_message ("not uid 0 (ruid=%ld euid=%ld suid=%ld)",
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+          "not uid 0 (ruid=%ld euid=%ld suid=%ld)",
           (unsigned long) ruid, (unsigned long) euid, (unsigned long) suid);
-      g_test_skip ("not uid 0");
-      return NULL;
+      return FALSE;
     }
 
   pwd = getpwnam (username);
 
   if (pwd == NULL)
     {
-      g_test_message ("getpwnam(\"%s\"): %s", username, g_strerror (errno));
-      g_test_skip ("not uid 0");
-      return NULL;
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+          "getpwnam(\"%s\"): %s", username, g_strerror (errno));
+      return FALSE;
     }
 
   /* Impersonate the desired user while we connect to the bus.
-   * This should work, because we're root. */
+   * This should work, because we're root; so if it fails, we just crash. */
   if (setresuid (pwd->pw_uid, pwd->pw_uid, 0) != 0)
     g_error ("setresuid(%ld, (same), 0): %s",
         (unsigned long) pwd->pw_uid, g_strerror (errno));
 
-  conn = test_connect_to_bus (ctx, address);
-
-  /* go back to our saved uid */
-  if (setresuid (0, 0, 0) != 0)
-    g_error ("setresuid(0, 0, 0): %s", g_strerror (errno));
-
-  return conn;
+  return TRUE;
 
 #else
+  g_return_val_if_fail (user != TEST_USER_ME, FALSE);
 
   switch (user)
     {
-      case TEST_USER_ME:
-        return test_connect_to_bus (ctx, address);
-
       case TEST_USER_ROOT:
       case TEST_USER_MESSAGEBUS:
       case TEST_USER_OTHER:
-        g_test_skip ("setresuid() not available, or unsure about "
+        g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+            "setresuid() not available, or unsure about "
             "credentials-passing semantics on this platform");
-        return NULL;
+        return FALSE;
 
+      /* TEST_USER_ROOT_DROP_TO_MESSAGEBUS is only meaningful for
+       * test_get_dbus_daemon(), not as a client */
+      case TEST_USER_ROOT_DROP_TO_MESSAGEBUS:
+        g_return_val_if_reached (FALSE);
+
+      case TEST_USER_ME:
       default:
-        g_return_val_if_reached (NULL);
+        g_return_val_if_reached (FALSE);
     }
 
 #endif
+}
+
+/* Undo the effect of a successful call to become_other_user() */
+static void
+back_to_root (void)
+{
+#if defined(HAVE_GETRESUID) && defined(HAVE_SETRESUID) && defined(__linux__)
+  if (setresuid (0, 0, 0) != 0)
+    g_error ("setresuid(0, 0, 0): %s", g_strerror (errno));
+#else
+  g_error ("become_other_user() cannot succeed on this platform");
+#endif
+}
+
+/*
+ * Raise G_IO_ERROR_NOT_SUPPORTED if the requested user is impossible.
+ * Do not mark the test as skipped: we might have more to test anyway.
+ */
+DBusConnection *
+test_try_connect_to_bus_as_user (TestMainContext *ctx,
+    const char *address,
+    TestUser user,
+    GError **error)
+{
+  DBusConnection *conn;
+
+  if (user != TEST_USER_ME && !become_other_user (user, error))
+    return NULL;
+
+  conn = test_try_connect_to_bus (ctx, address, error);
+
+  if (user != TEST_USER_ME)
+    back_to_root ();
+
+  return conn;
+}
+
+/*
+ * Raise G_IO_ERROR_NOT_SUPPORTED if the requested user is impossible.
+ */
+GDBusConnection *
+test_try_connect_gdbus_as_user (const char *address,
+                                TestUser user,
+                                GError **error)
+{
+  GDBusConnection *conn;
+
+  if (user != TEST_USER_ME && !become_other_user (user, error))
+    return NULL;
+
+  conn = g_dbus_connection_new_for_address_sync (address,
+      (G_DBUS_CONNECTION_FLAGS_MESSAGE_BUS_CONNECTION |
+       G_DBUS_CONNECTION_FLAGS_AUTHENTICATION_CLIENT),
+      NULL, NULL, error);
+
+  if (user != TEST_USER_ME)
+    back_to_root ();
+
+  return conn;
 }
 
 static void
@@ -494,6 +675,8 @@ static void
 set_timeout (guint factor)
 {
   static guint timeout = 0;
+  const gchar *env_factor_str;
+  guint64 env_factor = 1;
 
   /* Prevent tests from hanging forever. This is intended to be long enough
    * that any reasonable regression test on any reasonable hardware would
@@ -502,6 +685,21 @@ set_timeout (guint factor)
 
   if (timeout != 0)
     g_source_remove (timeout);
+
+  if (RUNNING_ON_VALGRIND)
+    factor = factor * 10;
+
+  env_factor_str = g_getenv ("DBUS_TEST_TIMEOUT_MULTIPLIER");
+
+  if (env_factor_str != NULL)
+    {
+      env_factor = g_ascii_strtoull (env_factor_str, NULL, 10);
+
+      if (env_factor == 0)
+        g_error ("Invalid DBUS_TEST_TIMEOUT_MULTIPLIER %s", env_factor_str);
+
+      factor = factor * env_factor;
+    }
 
   timeout = g_timeout_add_seconds (TIMEOUT * factor, time_out, NULL);
 #ifdef G_OS_UNIX
@@ -523,7 +721,30 @@ set_timeout (guint factor)
 void
 test_init (int *argcp, char ***argvp)
 {
+  /* If our argv only contained the executable name, assume we were
+   * run by Automake with LOG_COMPILER overridden by
+   * VALGRIND_CHECK_RULES from AX_VALGRIND_CHECK, and automatically switch
+   * on TAP output. This avoids needing glib-tap-test.sh. We still use
+   * glib-tap-test.sh in the common case because it replaces \r\n line
+   * endings with \n, which we need if running the tests under Wine. */
+  static char tap[] = "--tap";
+  static char *substitute_argv[] = { NULL, tap, NULL };
+
+  g_return_if_fail (argcp != NULL);
+  g_return_if_fail (*argcp > 0);
+  g_return_if_fail (argvp != NULL);
+  g_return_if_fail (argvp[0] != NULL);
+  g_return_if_fail (argvp[0][0] != NULL);
+
+  if (*argcp == 1)
+    {
+      substitute_argv[0] = (*argvp)[0];
+      *argcp = 2;
+      *argvp = substitute_argv;
+    }
+
   g_test_init (argcp, argvp, NULL);
+
   g_test_bug_base ("https://bugs.freedesktop.org/show_bug.cgi?id=");
   set_timeout (1);
 }
@@ -649,6 +870,42 @@ test_mkdir (const gchar *path,
     }
 }
 
+void
+test_oom (void)
+{
+  g_error ("Out of memory");
+}
+
+/*
+ * Send the given method call and wait for a reply, spinning the main
+ * context as necessary.
+ */
+DBusMessage *
+test_main_context_call_and_wait (TestMainContext *ctx,
+    DBusConnection *connection,
+    DBusMessage *call,
+    int timeout)
+{
+  DBusPendingCall *pc = NULL;
+  DBusMessage *reply = NULL;
+
+  if (!dbus_connection_send_with_reply (connection, call, &pc, timeout) ||
+      pc == NULL)
+    test_oom ();
+
+  if (dbus_pending_call_get_completed (pc))
+    test_pending_call_store_reply (pc, &reply);
+  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
+        &reply, NULL))
+    test_oom ();
+
+  while (reply == NULL)
+    test_main_context_iterate (ctx, TRUE);
+
+  dbus_clear_pending_call (&pc);
+  return g_steal_pointer (&reply);
+}
+
 gboolean
 test_check_tcp_works (void)
 {
@@ -702,4 +959,67 @@ test_check_tcp_works (void)
   /* Assume that on Windows, TCP always works */
   return TRUE;
 #endif
+}
+
+/*
+ * Store the result of an async operation. @user_data is a pointer to a
+ * variable that can store @result, initialized to %NULL.
+ */
+void
+test_store_result_cb (GObject *source_object G_GNUC_UNUSED,
+                      GAsyncResult *result,
+                      gpointer user_data)
+{
+  GAsyncResult **result_p = user_data;
+
+  g_assert_nonnull (result_p);
+  g_assert_null (*result_p);
+  *result_p = g_object_ref (result);
+}
+
+/*
+ * Report that a test should have failed, but we are tolerating the
+ * failure because it represents a known bug or missing feature.
+ *
+ * This is the same as g_test_incomplete(), but with a workaround for
+ * GLib bug 1474 so that we don't fail tests on older GLib.
+ */
+void
+test_incomplete (const gchar *message)
+{
+  if (glib_check_version (2, 57, 3))
+    {
+      /* In GLib >= 2.57.3, g_test_incomplete() behaves as intended:
+       * the test result is reported as an expected failure and the
+       * overall test exits 0 */
+      g_test_incomplete (message);
+    }
+  else
+    {
+      /* In GLib < 2.57.3, g_test_incomplete() reported the wrong TAP
+       * result (an unexpected success) and the overall test exited 1,
+       * which would break "make check". g_test_skip() is the next
+       * best thing available. */
+      g_test_skip (message);
+    }
+}
+
+/*
+ * Return location of @exe test helper executable, or NULL if unknown.
+ *
+ * @exe must already include %DBUS_EXEEXT if appropriate.
+ *
+ * Returns: (transfer full) (nullable): an absolute path or NULL.
+ */
+gchar *
+test_get_helper_executable (const gchar *exe)
+{
+  const char *dbus_test_exec;
+
+  dbus_test_exec = _dbus_getenv ("DBUS_TEST_EXEC");
+
+  if (dbus_test_exec == NULL)
+    return NULL;
+
+  return g_build_filename (dbus_test_exec, exe, NULL);
 }

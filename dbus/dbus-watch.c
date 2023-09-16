@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -251,10 +251,9 @@ _dbus_watch_list_free (DBusWatchList *watch_list)
   /* free watch_data and removes watches as a side effect */
   _dbus_watch_list_set_functions (watch_list,
                                   NULL, NULL, NULL, NULL, NULL);
-  _dbus_list_foreach (&watch_list->watches,
-                      (DBusForeachFunction) _dbus_watch_unref,
-                      NULL);
-  _dbus_list_clear (&watch_list->watches);
+
+  _dbus_list_clear_full (&watch_list->watches,
+                         (DBusFreeFunction) _dbus_watch_unref);
 
   dbus_free (watch_list);
 }

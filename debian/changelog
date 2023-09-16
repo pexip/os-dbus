@@ -1,37 +1,551 @@
-dbus (1.12.28-0+deb11u1) bullseye; urgency=medium
+dbus (1.14.10-1~deb12u1) bookworm; urgency=medium
 
-  * New upstream stable release 1.12.26
-    - Fixes a denial of service issue that is not relevant for the way
-      we compile dbus in Debian
-  * New upstream stable release 1.12.28
+  * Rebuild for bookworm
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 16 Sep 2023 11:03:58 +0100
+
+dbus (1.14.10-1) unstable; urgency=medium
+
+  * New upstream stable release
+    - Fix a dbus-daemon crash during policy reload if a connection belongs
+      to a user account that has been deleted, or if a Name Service Switch
+      plugin is broken, on kernels not supporting SO_PEERGROUPS
+    - Report the error correctly if getting the groups of a uid fails
+    - If a connection has a primary group ID but no supplementary groups,
+      report the primary group ID in GetConnectionCredentials()
+      UnixGroupIDs field
+  * dbus-user-session: Copy XDG_CURRENT_DESKTOP to activation environment.
+    Previously this was only done if dbus-x11 was installed.
+    This is needed by various freedesktop.org specifications, in particular
+    for xdg-desktop-portal (>= 1.17) to choose the correct portal backend
+    for a desktop session. Some session managers like gnome-session and
+    plasma-workspace already upload this into the activation environment,
+    but many older or simpler session managers do not.
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 01 Sep 2023 15:41:38 +0100
+
+dbus (1.14.8-2~deb12u1) bookworm; urgency=medium
+
+  * Rebuild for bookworm
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 11 Jul 2023 20:59:33 +0100
+
+dbus (1.14.8-2) unstable; urgency=high
+
+  * dbus-daemon.postinst: Stop trying to take DPKG_ROOT into account.
+    This unintentionally disabled the code path that would copy systemd's
+    /etc/machine-id in preference to creating an entirely new machine ID.
+    (Closes: #1040790)
+  * d/tests: Add test coverage for #1040790
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 11 Jul 2023 18:38:22 +0100
+
+dbus (1.14.8-1~deb12u1) bookworm; urgency=medium
+
+  * Rebuild for bookworm
+  * d/gbp.conf: Use debian/bookworm branch
+  * d/watch: Only watch for 1.14.x releases
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 11 Jun 2023 12:42:56 +0100
+
+dbus (1.14.8-1) unstable; urgency=medium
+
+  [ Simon McVittie ]
+  * New upstream stable release
     - Fixes a denial of service issue if the root or messagebus user is
       monitoring messages on the system bus with the Monitoring interface
       (dbus-monitor, busctl monitor, gdbus monitor or similar)
       (Closes: #1037151)
 
- -- Simon McVittie <smcv@debian.org>  Tue, 06 Jun 2023 15:07:35 +0100
+  [ Helmut Grohne ]
+  * Mark dbus-daemon and dbus-bin Multi-Arch: foreign (Closes: #1033056)
 
-dbus (1.12.24-0+deb11u1) bullseye-security; urgency=medium
+ -- Simon McVittie <smcv@debian.org>  Tue, 06 Jun 2023 15:05:50 +0100
 
-  * New upstream stable release 1.12.22
-    - No longer logs warnings about /proc/self/oom_score_adj with
-      systemd >= 250 (Closes: #1004543)
-    - Improve reproducibility of documentation
-    - Fix a race condition in test/integration/transient-services.sh
-      which affects the autopkgtest (Closes: #1005889)
-    - Fixes for some non-Debian platforms
-  * New upstream stable release 1.12.24
+dbus (1.14.6-1) unstable; urgency=medium
+
+  * New upstream stable release
+    - Fixes a denial of service issue that is not relevant for the way
+      we compile dbus in Debian
+  * d/copyright: Update
+  * Standards-Version: 4.6.2 (no changes required)
+  * d/control: Mark dbus-*-bus-common as Multi-Arch: foreign.
+    Thanks to Dave Jones / Ubuntu
+  * d/upstream/metadata: Update Gitlab URLs to preferred format
+  * Drop migration path from very old debug symbol packages
+  * Avoid explicitly specifying -Wl,--as-needed linker flag,
+    which is the default with Debian 12 toolchains
+  * Remove version constraints unnecessary since Debian 10
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 08 Feb 2023 13:21:47 +0000
+
+dbus (1.14.4-1) unstable; urgency=high
+
+  * New upstream stable release 1.14.4
     - Fix several denial of service issues where an authenticated attacker
       can crash the system bus by sending crafted messages
       (CVE-2022-42010, CVE-2022-42011, CVE-2022-42012)
     - Use a path-based Unix socket for the session bus, avoiding sandbox
       escape for Flatpak apps with network access (dbus#416)
-    - Don't crash if asked to watch more than 128 directories for changes
-    - Fix error reporting for a rare out-of-memory condition
-    - Fixes for non-Debian mingw-w64 builds
-  * d/gbp.conf, d/control: Switch branch for bullseye
 
- -- Simon McVittie <smcv@debian.org>  Wed, 05 Oct 2022 12:04:31 +0100
+ -- Simon McVittie <smcv@debian.org>  Wed, 05 Oct 2022 12:00:00 +0100
+
+dbus (1.14.2-1) unstable; urgency=medium
+
+  [ Simon McVittie ]
+  * New upstream stable release
+  * d/copyright: Update
+
+  [ Dave Jones ]
+  * Make autopkgtest cross-friendly
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 26 Sep 2022 17:09:42 +0100
+
+dbus (1.14.0-2) unstable; urgency=medium
+
+  * Revert workaround for #994204. Since debhelper 13.7, the workaround
+    doesn't do what we wanted either, causing unwanted dbus-daemon restarts
+    when rebuilt with a current debhelper.
+  * Explicitly build-depend on a debhelper without #994204 (either a newer
+    version where it is fixed, or an older version which didn't have that
+    problem). The failure mode caused by that bug is particularly bad
+    for dbus.
+  * Standards-Version: 4.6.1 (no changes required)
+  * Use XML catalog from built tree, fixing incorrect paths to DTDs
+  * Update Lintian overrides
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 16 Jul 2022 23:00:40 +0100
+
+dbus (1.14.0-1) unstable; urgency=medium
+
+  * Merge from experimental
+    - d/changelog: Reorder changelog to reflect the order of events as
+      seen from unstable
+    - d/gbp.conf, d/control: Adjust branches for 1.14.x
+  * New upstream stable release branch
+    - dbus-daemon: GetConnectionCredentials provides UnixGroupIDs from
+      Linux SO_PEERGROUPS
+    - dbus-daemon: <policy group="..."> uses Linux SO_PEERGROUPS
+    - dbus-daemon: add <allow send_destination_prefix="..."> (also works
+      on <deny>)
+    - dbus-daemon: removes header fields that it does not understand
+    - dbus-daemon: Add ActivatableServicesChanged signal
+    - dbus-user-session: dbus-daemon is now in session.slice
+    - dbus-bin: Add `dbus-send --sender`
+    - dbus-daemon: Installing into /etc/dbus-1/system.d is officially
+      reserved for the sysadmin, packages should install into
+      /usr/share/dbus-1/system.d
+    - libdbus-1-3, dbus-daemon: DBusServer no longer accepts login names
+      for EXTERNAL authentication, only numeric uids or the empty string
+    - dbus-daemon: several environment variables set by systemd are no
+      longer inherited by traditional (non-systemd) activated services
+    - dbus-daemon: notifies systemd that it is ready via sd_notify()
+  * d/control: Drop python3 build-dependency, no longer needed
+  * d/watch: Only watch for stable releases for this branch
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 28 Feb 2022 13:32:54 +0000
+
+dbus (1.13.22-1) experimental; urgency=medium
+
+  * New upstream release (release candidate for 1.14.0)
+    - No longer logs warnings about /proc/self/oom_score_adj with
+      systemd >= 250 (Closes: #1004543)
+  * Drop patch for #1005889, applied upstream
+  * Register DTDs in the XML catalog
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 23 Feb 2022 18:04:43 +0000
+
+dbus (1.13.20-2) experimental; urgency=medium
+
+  * Merge packaging from unstable
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 21 Feb 2022 12:34:27 +0000
+
+dbus (1.13.20-1) experimental; urgency=medium
+
+  * Merge packaging from unstable
+  * New upstream development release
+  * Put the shared library in /lib/MULTIARCH, as we do in unstable,
+    in accordance with the advice given by the Technical Committee
+    in #994388.
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 17 Dec 2021 13:29:39 +0000
+
+dbus (1.13.18-2) experimental; urgency=medium
+
+  [ Luca Boccassi ]
+  * Split tools and configs into -bin and -common packages.
+    User creation also moves to dbus-common. This is useful for
+    other D-Bus implementations like dbus-broker.
+
+  [ Simon McVittie ]
+  * Split dbus-common into -session-bus-common and -system-bus-common.
+    This allows us to install the integration files for session services
+    without having to create the messagebus user or run a system bus,
+    which is useful for CI environments that will run
+    session-service-dependent unit tests in a container where a system bus
+    is not necessary or desired, particularly in situations where creating
+    new uids can be problematic such as unprivileged containers.
+  * dbus: Provide a default-dbus-system-bus virtual package.
+    This allows us to signal what the default implementation of
+    dbus-system-bus is, even when other implementations like dbus-broker
+    also provide the dbus-system-bus virtual package.
+  * Move dbus-daemon, dbus-run-session and creation of
+    /var/lib/dbus/machine-id to a new dbus-daemon package.
+    This decouples the system integration for the well-known system bus
+    (still in the dbus package) from the dbus-daemon. This means that
+    packages that merely want to run a dbus-daemon in a small container
+    or chroot (for example to run integration tests or provide a minimal
+    session bus environment) do not need to pull in adduser, an init system,
+    or the setuid helper used to implement traditional activation.
+    dbus remains Priority: standard, because the majority of systems benefit
+    from having a working D-Bus system bus (in particular to communicate
+    with logind).
+  * d/watch: Watch for any archive extension.
+    Upstream releases switched from tar.gz to tar.xz for the 1.13.x branch.
+  * dbus-tests: Silence Lintian warnings for breakout-link
+  * Remove unnecessary Readme.txt from sha1 test data.
+    This causes Lintian warnings because it isn't UTF-8, and it isn't
+    actually useful.
+  * Silence more Lintian tags for D-Bus vs. dbus in package descriptions.
+    We're careful to say D-Bus when we mean the protocol, and dbus when we
+    mean the reference implementation of the protocol.
+  * Standards-Version: 4.5.1 (no changes required)
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 17 Feb 2021 21:38:53 +0000
+
+dbus (1.13.18-1) experimental; urgency=medium
+
+  [ Mark Hindley ]
+  * Fix system-bus autopkgtest detection of systemd as PID1.
+    The test attempts to detect whether systemd is available by testing for
+    /run/systemd. However, this path can exist on non-systemd systems.
+    Look for /run/systemd/system instead. (Closes: #962466)
+
+  [ Simon McVittie ]
+  * New upstream development release
+    - Prevent use-after-free if two usernames share a uid
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 02 Jul 2020 14:15:32 +0100
+
+dbus (1.13.16-1) experimental; urgency=medium
+
+  * New upstream development release
+    - CVE-2020-12049: Prevent a denial of service attack in which a local
+      user can make the system dbus-daemon run out of file descriptors
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 02 Jun 2020 16:52:02 +0100
+
+dbus (1.13.14-1) experimental; urgency=medium
+
+  [ Simon McVittie ]
+  * New upstream development release
+    - Drop patches that were applied upstream
+    - d/copyright: Update
+  * Move to debhelper compat level 13
+    - Don't restart systemd units on upgrade.
+      Previously, this was handled by the dh_installinit override.
+    - Add ${misc:Pre-Depends} to all binary packages.
+      This is required for dbus for dh_installsystemd under dh compat
+      level 12, and is harmless for the others.
+    - Stop overriding HOME, which is now done by default.
+  * dbus: Remove an unused Lintian override.
+    Lintian used to warn twice for the statically-enabled dbus.service unit,
+    but now only warns once.
+  * dbus-tests: Silence package-contains-documentation-outside-usr-share-doc
+    Lintian tag.
+    The tests contain some READMEs that describe what is in their directory.
+  * d/tests: Remove support for ancient autopkgtest versions.
+    AUTOPKGTEST_TMP is now required to be set, and we do not fall back
+    to the deprecated ADTTMP.
+  * Introduce noinsttest build profile.
+    This disables dbus-tests, and when combined with nocheck it disables
+    the circular GLib dependency.
+  * Remove non-standard pkg.dbus.minimal build profile.
+    It was not a "safe" build profile (it altered the contents of binary
+    packages, notably dropping LSM and systemd support, which could result
+    in dependent packages being broken), and the combination of nocheck,
+    nodoc and noinsttest achieves most of the same build-dependency
+    reductions.
+  * Explicitly build-depend on pkg-config.
+    Previously, this was pulled in by libglib2.0-dev. (Closes: #945201)
+  * d/upstream/metadata: Distinguish between Bug-Submit and Bug-Database
+  * Change system bus socket to /run/dbus/system_bus_socket.
+    The interoperable cross-distro path is /var/run/dbus/system_bus_socket,
+    so this remains the upstream default for the benefit of distributions
+    where /var/run and /run are (problematically) not guaranteed to be
+    equivalent. However, Debian Policy since at least v4.1.5 guarantees
+    that /var/run is a symlink to /run, and this has been implemented
+    for several stable releases (since at least initscripts 2.88dsf-29
+    in 2012, in the sysvinit case), so it is harmless to prefer the
+    path in /run, which has advantages in a few corner cases (ability
+    to unmount /var is the main one) and avoids warnings from systemd.
+    (Closes: #783321, #857678, #932105, #958289)
+  * Standards-Version: 4.5.0
+    - Note that the user for `dbus-daemon --system` is still named
+      'messagebus' for historical reasons. If it was added today,
+      we'd call it _dbus as per Policy §9.2.1, but this is not the right
+      package to be experimenting with renaming system users.
+  * d/dbus-udeb.postinst: Remove #DEBHELPER# token.
+    debhelper doesn't actually substitute this in udebs, making it just
+    an ordinary comment.
+
+  [ Debian Janitor ]
+  * d/changelog: Remove trailing whitespace.
+  * Use secure URI in Homepage field.
+  * Re-export upstream signing key without extra signatures.
+  * Set upstream metadata fields: Bug-Submit (from ./configure),
+    Repository, Repository-Browse.
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 21 Apr 2020 15:39:49 +0100
+
+dbus (1.13.12-2) experimental; urgency=medium
+
+  * Add bug number to 1.13.12-1 changelog entry
+  * Merge packaging changes from unstable
+  * d/p/tests-Skip-system-bus-test-if-we-are-root-but-messagebus-.patch,
+    d/p/tests-Skip-if-unable-to-launch-uninstalled-dbus-daemon-as.patch,
+    d/p/auth-Clear-GUID-from-server-if-out-of-memory.patch,
+    d/p/bus-Make-audit-initialization-idempotent.patch,
+    d/p/bus-tests-Shut-down-audit-socket.patch:
+    Fix test failures when build-time tests are run as root (in
+    particular this happens when the CI pipeline runs reprotest)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 30 Sep 2019 11:51:00 +0100
+
+dbus (1.13.12-1) experimental; urgency=medium
+
+  * New upstream development release
+    - CVE-2019-12749: Do not attempt to carry out DBUS_COOKIE_SHA1
+      authentication for identities that differ from the user running the
+      DBusServer. Previously, a local attacker could manipulate symbolic
+      links in their own home directory to bypass authentication and
+      connect to a DBusServer with elevated privileges. The standard
+      system and session dbus-daemons in their default configuration were
+      immune to this attack because they did not allow DBUS_COOKIE_SHA1,
+      but third-party users of DBusServer such as Upstart could be
+      vulnerable. (Closes: #930375)
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 09 Jun 2019 21:33:03 +0100
+
+dbus (1.13.10-1) experimental; urgency=medium
+
+  [ Simon McVittie ]
+  * New upstream development release
+    - Fix incorrect fd limits for services launched by the system bus
+      via traditional (non-systemd) activation (Closes: #928877)
+    - d/copyright: Update
+  * Explicitly enable the new --enable-traditional-activation option.
+    This is the upstream default anyway, but it would be a serious
+    regression if our dbus builds only supported systemd activation.
+  * d/tests/system-bus: Add a smoke-test for traditional activation,
+    and a smoke-test for systemd activation on systems booted with systemd.
+  * d/p/dbus-daemon-test-Don-t-test-fd-limits-if-in-an-unprivileg.patch:
+    Drop patch, applied upstream
+  * d/rules, d/tests: Run automated tests with DBUS_TEST_MALLOC_FAILURES=0.
+    Testing the code paths for memory allocation failures is too slow
+    to do routinely as a downstream.
+  * Standards-Version: 4.3.0 (no changes required)
+
+  [ Michael Biebl ]
+  * Move libraries to /usr/lib.
+    Since we can rely on /usr being available during early boot nowadays,
+    there is no longer a need to move any libraries to /lib.
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 13 May 2019 19:53:32 +0100
+
+dbus (1.13.8-1) experimental; urgency=medium
+
+  [ Ritesh Raj Sarraf ]
+  * Explicitly set session and test socket directory to /tmp, instead
+    of using a (possibly non-standard) TMPDIR
+
+  [ Simon McVittie ]
+  * New upstream development release
+    - d/copyright: Update
+  * d/tests/build: Mark as superficial (see #904979)
+  * d/tests/build: Comment why we don't test or support static linking
+    here (it's because libsystemd doesn't)
+  * dbus: Drop dependency on lsb-base. It is only needed when booting
+    with sysvinit and initscripts, but initscripts already Depends on
+    lsb-base (see #864999).
+  * dbus: Add Provides: dbus-system-bus and Provides: dbus-bin.
+    This provides a way to split the package in a later Debian version
+    or in derivatives. dbus-system-bus represents the well-known system
+    bus facility (/lib/systemd/system/dbus.service and /etc/init.d/dbus),
+    while dbus-bin represents the availability of executables like
+    dbus-daemon and dbus-send.
+  * Standards-Version: 4.2.1 (no changes required)
+  * d/p/dbus-daemon-test-Don-t-test-fd-limits-if-in-an-unprivileg.patch:
+    Add proposed patch to skip fd limit tests if we are uid 0 but do not
+    have CAP_SYS_RESOURCE (Closes: #908092)
+  * d/tests/system-bus: Add a smoke-test for the system bus
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 04 Dec 2018 15:56:19 +0000
+
+dbus (1.13.6-1) experimental; urgency=medium
+
+  * New upstream release
+    - Drop patches that were applied upstream
+  * Don't run the build-time tests for the debug build in parallel.
+    Some of the tests added by the debug build start many processes,
+    and the debug build's tests have intermittently been timing out on
+    reproducible-builds infrastructure, possibly because these machines
+    run with a high "make -j" value and more than one multi-processing
+    test gets run at the same time.
+  * Standards-Version: 4.1.5 (no changes required)
+  * Update symbols file for rename of private symbol
+    dbus_internal_do_not_use_get_uuid (anyone using that symbol despite
+    its name should expect the consequences :-)
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 02 Aug 2018 21:05:26 +0100
+
+dbus (1.13.4-3) experimental; urgency=medium
+
+  * d/control: Fix branch name in Vcs-Git
+  * d/rules: Use nss_wrapper to ensure that 127.0.0.1 and localhost
+    can be resolved successfully, fixing build-time tests in pbuilder
+    with the network namespace unshared (see #897662)
+  * d/rules: Make sure the X11 DISPLAY (if any) doesn't leak into the
+    test environment, fixing build-time tests if /tmp is unshared
+  * d/p/sysdeps-unix-Handle-errors-from-getaddrinfo-correctly.patch:
+    Add patch from upstream master branch to fix getaddrinfo error
+    reporting for tcp: and nonce-tcp: transports
+  * d/p/server-oom-test-Parse-the-address-instead-of-going-direct.patch,
+    d/p/test-Test-the-same-things-with-unix-that-we-do-with-tcp.patch,
+    d/p/server-oom-test-Don-t-assume-localhost-is-resolvable.patch,
+    test-Skip-TCP-tests-if-getaddrinfo-doesn-t-work.patch:
+    Add patches from upstream master branch to improve test robustness
+    and coverage when getaddrinfo doesn't work
+  * d/rules: Improve quoting
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 10 Jun 2018 14:21:26 +0100
+
+dbus (1.13.4-2) experimental; urgency=medium
+
+  * Remove debian/dbus-tests.shlibs.local. It was useful before 1.11.10-2
+    to make dbus-tests depend on the debug build in dbus-1-dbg, but now
+    that the debug build is itself in dbus-tests, making dbus-tests
+    depend on itself is not useful. It also suppressed the generated
+    dependency on libdbus-1-3 (= ${binary:Version}), causing autopkgtest
+    failures when only dbus-tests was upgraded.
+  * d/patches: Refresh via gbp-pq
+  * d/rules: If tests fail, continue to run all tests before reporting
+    failure
+  * d/rules: On success or failure, output all test logs for comparison
+    (in particular this lets us see how close we are to arbitrary
+    timeouts on slower architectures)
+  * d/p/debian/tests-Multiply-timeouts-by-20-on-riscv64.patch:
+    Compensate for the riscv64 port being bootstrapped on
+    qemu-system-riscv64 by multiplying arbitrary timeouts by 20. If this
+    fails, the logs will at least tell us how much more time is needed.
+    (Closes: #897607, hopefully)
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 09 May 2018 15:49:21 +0100
+
+dbus (1.13.4-1) experimental; urgency=medium
+
+  * New upstream development release
+    - d/copyright: cmake/modules/FindGObject.cmake no longer exists
+  * Standards-Version: 4.1.4 (no changes required)
+  * tests: Use AUTOPKGTEST_TMP in preference to deprecated ADTTMP
+  * tests: Make sure $HOME is set to somewhere we can write (workaround for
+    #897170)
+  * Build ducktype documentation, unless building with nodoc
+    - Build-depend on ducktype and yelp-tools
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 30 Apr 2018 15:01:11 +0100
+
+dbus (1.13.2-1) experimental; urgency=medium
+
+  * New upstream development release
+  * Update symbols file for new ABI
+  * d/tests/root: Re-run test-dbus-daemon as root, since it now contains
+    tests that are skipped as non-root
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 01 Mar 2018 22:55:32 +0000
+
+dbus (1.13.0-1) experimental; urgency=medium
+
+  * New upstream development release
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 08 Feb 2018 18:13:38 +0000
+
+dbus (1.12.22-1) unstable; urgency=medium
+
+  * New upstream bug fix release
+    - No longer logs warnings about /proc/self/oom_score_adj with
+      systemd >= 250 (Closes: #1004543)
+    - Improve reproducibility of documentation
+  * Drop patch for #1005889, included upstream
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 25 Feb 2022 17:38:58 +0000
+
+dbus (1.12.20-4) unstable; urgency=medium
+
+  * Use debhelper 13 instead of dh-exec where possible.
+    We still need to use dh-exec to filter files that are only installed
+    on Linux systems, but we no longer need it for ${DEB_HOST_MULTIARCH}
+    substitution.
+  * d/control: Build-depend on valgrind-if-available.
+    Thanks to Adam Borowski
+  * Add a patch to ensure the dbus-daemon is running for an integration test.
+    Hopefully closes: #1005889
+  * Update Lintian overrides syntax
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 21 Feb 2022 12:31:27 +0000
+
+dbus (1.12.20-3) unstable; urgency=medium
+
+  [ Luca Boccassi ]
+  * Split tools and configs into -bin and -common packages.
+    User creation also moves to dbus-common. This is useful for
+    other D-Bus implementations like dbus-broker.
+
+  [ Simon McVittie ]
+  * Split dbus-common into -session-bus-common and -system-bus-common.
+    This allows us to install the integration files for session services
+    without having to create the messagebus user or run a system bus,
+    which is useful for CI environments that will run
+    session-service-dependent unit tests in a container where a system bus
+    is not necessary or desired, particularly in situations where creating
+    new uids can be problematic such as unprivileged containers.
+  * dbus: Provide a default-dbus-system-bus virtual package.
+    This allows us to signal what the default implementation of
+    dbus-system-bus is, even when other implementations like dbus-broker
+    also provide the dbus-system-bus virtual package.
+  * Move dbus-daemon, dbus-run-session and creation of
+    /var/lib/dbus/machine-id to a new dbus-daemon package.
+    This decouples the system integration for the well-known system bus
+    (still in the dbus package) from the dbus-daemon. This means that
+    packages that merely want to run a dbus-daemon in a small container
+    or chroot (for example to run integration tests or provide a minimal
+    session bus environment) do not need to pull in adduser, an init system,
+    or the setuid helper used to implement traditional activation.
+    dbus remains Priority: standard, because the majority of systems benefit
+    from having a working D-Bus system bus (in particular to communicate
+    with logind).
+  * d/watch: Watch for any archive extension.
+    Upstream releases switched from tar.gz to tar.xz for the 1.13.x branch.
+  * Silence more Lintian tags for D-Bus vs. dbus in package descriptions.
+    We're careful to say D-Bus when we mean the protocol, and dbus when we
+    mean the reference implementation of the protocol.
+  * d/tests/gnome-desktop-testing: Use set -u so we'll fail on references
+    to unset environment variables
+  * Update Lintian overrides for dbus-tests
+  * Standards-Version: 4.6.0 (no changes required)
+  * d/rules, d/dbus.prerm, d/dbus.postinst: Never restart dbus-daemon.
+    Since debhelper 13.4, there appears to be no way to stop debhelper from
+    restarting services, other than telling it not to start our service and
+    taking responsibility for doing so ourselves. (Workaround for #994204)
+  * d/dbus.postinst: Remove compatibility code for Debian 8 to 9 upgrades
+  * All maintainer scripts: Respect $DPKG_ROOT
+  * d/dbus.maintscript: Remove cleanup of old conffiles.
+    This has been unnecessary since Debian 10 and Ubuntu 18.04.
+  * Don't <include> /etc/dbus-1/s*.conf.dpkg-bak in bus configuration.
+    This was part of the Debian 8 to Debian 9 upgrade path.
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 25 Oct 2021 10:32:43 +0100
 
 dbus (1.12.20-2) unstable; urgency=medium
 

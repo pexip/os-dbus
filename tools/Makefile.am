@@ -1,5 +1,6 @@
 AM_CPPFLAGS = \
 	-I$(top_srcdir) \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
 	$(DBUS_X_CFLAGS) \
 	-DDBUS_COMPILATION \
@@ -8,6 +9,7 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 # if assertions are enabled, improve backtraces
@@ -16,6 +18,7 @@ AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 bin_PROGRAMS = \
 	dbus-launch \
 	dbus-monitor \
+	dbus-run-session \
 	dbus-send \
 	dbus-test-tool \
 	dbus-update-activation-environment \
@@ -24,7 +27,6 @@ bin_PROGRAMS = \
 if DBUS_UNIX
 bin_PROGRAMS += \
 	dbus-cleanup-sockets \
-	dbus-run-session \
 	dbus-uuidgen \
 	$(NULL)
 endif
@@ -57,21 +59,27 @@ dbus_launch_SOURCES=				\
 	tool-common.c \
 	tool-common.h \
 	$(NULL)
+endif
+
 dbus_launch_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	$(NULL)
 dbus_launch_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(DBUS_X_LIBS) \
 	$(NULL)
 
 dbus_run_session_SOURCES =			\
-	dbus-run-session.c
+	dbus-run-session.c \
+	tool-common.c \
+	tool-common.h
+	$(NULL)
 
 dbus_run_session_LDADD = \
-	$(top_builddir)/dbus/libdbus-1.la \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-internal.la \
 	$(NULL)
-endif
 
 dbus_cleanup_sockets_SOURCES=			\
 	dbus-cleanup-sockets.c
@@ -80,15 +88,18 @@ dbus_uuidgen_SOURCES=				\
 	dbus-uuidgen.c
 
 dbus_send_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(NULL)
 
 dbus_monitor_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(NETWORK_libs) \
 	$(NULL)
 
 dbus_uuidgen_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(NULL)
 
@@ -105,14 +116,20 @@ dbus_test_tool_SOURCES = \
 	test-tool.c \
 	test-tool.h \
 	$(NULL)
-dbus_test_tool_LDADD = $(top_builddir)/dbus/libdbus-1.la
+dbus_test_tool_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(NULL)
 
 dbus_update_activation_environment_SOURCES = \
 	dbus-update-activation-environment.c \
 	tool-common.c \
 	tool-common.h \
 	$(NULL)
-dbus_update_activation_environment_LDADD = $(top_builddir)/dbus/libdbus-1.la
+dbus_update_activation_environment_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(NULL)
 
 if DBUS_WIN
 SUFFIXES = .rc

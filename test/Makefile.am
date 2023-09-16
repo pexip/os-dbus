@@ -15,6 +15,7 @@ AM_CPPFLAGS = \
 	$(APPARMOR_CFLAGS) \
 	$(GLIB_CFLAGS) \
 	$(GIO_UNIX_CFLAGS) \
+	$(VALGRIND_CFLAGS) \
 	$(NULL)
 
 # improve backtraces from test stuff
@@ -22,11 +23,14 @@ AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 noinst_LTLIBRARIES = libdbus-testutils.la
 
 libdbus_testutils_la_SOURCES = \
+	disable-crash-handling.c \
+	disable-crash-handling.h \
 	test-utils.c \
 	test-utils.h \
 	$(NULL)
@@ -54,43 +58,55 @@ EXTRA_DIST += glib-tap-test.sh
 EXTRA_DIST += tap-test.sh.in
 
 TESTS =
+noinst_PROGRAMS =
 
 if DBUS_ENABLE_EMBEDDED_TESTS
+
+uninstallable_test_programs =
+
 ## break-loader removed for now
 ## these binaries are used in tests but are not themselves tests
 TEST_BINARIES = \
-	test-spawn \
 	test-exit \
 	test-names \
+	test-privserver \
 	test-segfault \
-	test-service \
 	test-shell-service \
-	test-sleep-forever \
 	$(NULL)
 
-## These are conceptually part of directories that come earlier in SUBDIRS
-## order, but we don't want to run them til we arrive in this directory,
-## since they depend on stuff from this directory. We wrap them in a
-## simple shell script to get TAP output.
+if !DBUS_WINCE
+if ENABLE_TRADITIONAL_ACTIVATION
+uninstallable_test_programs += test-spawn-oom
+endif ENABLE_TRADITIONAL_ACTIVATION
+endif !DBUS_WINCE
 
-wrap_bus_tests = test-bus.sh
-wrap_dbus_tests = test-dbus.sh
-
-if DBUS_UNIX
-wrap_bus_tests += test-bus-launch-helper.sh
-wrap_bus_tests += test-bus-system.sh
+if ENABLE_TRADITIONAL_ACTIVATION
+TEST_BINARIES               += test-spawn
 endif
 
-TESTS += $(wrap_bus_tests) $(wrap_dbus_tests)
-CLEANFILES += $(wrap_bus_tests) $(wrap_dbus_tests)
+uninstallable_test_programs += \
+	test-bus \
+	test-bus-dispatch \
+	test-bus-dispatch-sha1 \
+	test-marshal-recursive \
+	test-message-internals \
+	test-strings \
+	$(NULL)
 
-$(wrap_bus_tests): test-bus%.sh: ../bus/test-bus%$(EXEEXT) tap-test.sh.in Makefile
-	sed -e 's![@]RUN[@]!$<!' \
-		< $(srcdir)/tap-test.sh.in > $@
+if DBUS_UNIX
+test_counter_SOURCES = internals/counter.c
+test_counter_LDADD = libdbus-testutils.la
 
-$(wrap_dbus_tests): test-dbus%.sh: ../dbus/test-dbus%$(EXEEXT) tap-test.sh.in Makefile
-	sed -e 's![@]RUN[@]!$<!' \
-		< $(srcdir)/tap-test.sh.in > $@
+if ENABLE_TRADITIONAL_ACTIVATION
+uninstallable_test_programs += test-bus-launch-helper-oom
+uninstallable_test_programs += test-bus-system
+# this is used by the tests but is not, itself, a test
+TEST_BINARIES += dbus-daemon-launch-helper-for-tests
+endif ENABLE_TRADITIONAL_ACTIVATION
+endif DBUS_UNIX
+
+noinst_PROGRAMS += $(uninstallable_test_programs)
+TESTS += $(uninstallable_test_programs)
 
 else !DBUS_ENABLE_EMBEDDED_TESTS
 
@@ -98,16 +114,36 @@ TEST_BINARIES=
 
 endif !DBUS_ENABLE_EMBEDDED_TESTS
 
-noinst_PROGRAMS= $(TEST_BINARIES)
+test_atomic_SOURCES = internals/atomic.c
+test_atomic_LDADD = libdbus-testutils.la
+
+noinst_PROGRAMS += $(TEST_BINARIES)
+
+# This helper is meant to crash, so if we're compiling the rest with
+# AddressSanitizer, we need to stop it from catching the SIGSEGV and
+# turning it into _exit(1); so don't give it SANITIZE_CFLAGS.
+# CODE_COVERAGE_CFLAGS are fairly pointless here, too.
+test_segfault_CFLAGS =
 
 test_service_LDADD = libdbus-testutils.la
 test_names_LDADD = libdbus-testutils.la
+test_privserver_LDADD = libdbus-testutils.la
 ## break_loader_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_shell_service_LDADD = libdbus-testutils.la
 test_shell_SOURCES = shell-test.c
 test_shell_LDADD = libdbus-testutils.la
+test_strings_SOURCES = internals/strings.c
+test_strings_LDADD = libdbus-testutils.la
+
+if ENABLE_TRADITIONAL_ACTIVATION
 test_spawn_SOURCES = spawn-test.c
 test_spawn_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+test_spawn_oom_SOURCES = internals/spawn-oom.c
+test_spawn_oom_LDADD = libdbus-testutils.la
+endif
+
+test_assertions_SOURCES = internals/assertions.c
+test_assertions_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
 test_printf_SOURCES = internals/printf.c
 test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
@@ -115,11 +151,28 @@ test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_refs_SOURCES = internals/refs.c
 test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
+# We have to compile a separate copy of disable-crash-handling.c for
+# test-segfault rather than using libdbus-testutils.la, because
+# otherwise it would fail to link when using the AddressSanitizer.
+test_segfault_SOURCES = \
+	disable-crash-handling.c \
+	disable-crash-handling.h \
+	test-segfault.c \
+	$(NULL)
+# Deliberately not adding CODE_COVERAGE_LIBS here because we really
+# don't care about coverage for the test program that segfaults!
+
 test_server_oom_SOURCES = internals/server-oom.c
 test_server_oom_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 
+test_sysdeps_SOURCES = internals/sysdeps.c
+test_sysdeps_LDADD =  libdbus-testutils.la $(GLIB_LIBS)
+
 test_syslog_SOURCES = internals/syslog.c
 test_syslog_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
+test_userdb_SOURCES = internals/userdb.c
+test_userdb_LDADD =  libdbus-testutils.la $(GLIB_LIBS)
 
 test_variant_SOURCES = internals/variant.c
 test_variant_LDADD = libdbus-testutils.la $(GLIB_LIBS)
@@ -131,10 +184,86 @@ manual_dir_iter_SOURCES = manual-dir-iter.c
 manual_dir_iter_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 
 manual_paths_SOURCES = manual-paths.c
-manual_paths_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+manual_paths_LDADD = libdbus-testutils.la
 
 manual_tcp_SOURCES = manual-tcp.c
 manual_tcp_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+
+test_bus_launch_helper_oom_SOURCES = bus/launch-helper-oom.c
+test_bus_launch_helper_oom_LDADD = \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+dbus_daemon_launch_helper_for_tests_SOURCES = bus/launch-helper-for-tests.c
+dbus_daemon_launch_helper_for_tests_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	$(NULL)
+
+test_bus_system_SOURCES = bus/system.c
+test_bus_system_LDADD = \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_bus_SOURCES = bus/main.c
+test_bus_LDADD = \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_bus_dispatch_SOURCES = bus/dispatch.c
+test_bus_dispatch_LDADD = \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_bus_dispatch_sha1_SOURCES = bus/dispatch-sha1.c
+test_bus_dispatch_sha1_LDADD = \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_hash_SOURCES = internals/hash.c
+test_hash_LDADD = libdbus-testutils.la
+
+test_marshal_recursive_SOURCES = \
+	internals/dbus-marshal-recursive-util.c \
+	internals/dbus-marshal-recursive-util.h \
+	internals/marshal-recursive.c \
+	$(NULL)
+test_marshal_recursive_LDADD = libdbus-testutils.la
+
+test_message_internals_SOURCES = \
+	internals/dbus-marshal-recursive-util.c \
+	internals/dbus-marshal-recursive-util.h \
+	internals/dbus-message-factory.c \
+	internals/dbus-message-factory.h \
+	internals/dbus-message-util.c \
+	internals/dbus-message-util.h \
+	internals/message-internals.c \
+	$(NULL)
+test_message_internals_LDADD = libdbus-testutils.la
+
+test_misc_internals_SOURCES = \
+	internals/address.c \
+	internals/dbus-auth-script.c \
+	internals/dbus-auth-script.h \
+	internals/dbus-auth-util.c \
+	internals/dbus-credentials-util.c \
+	internals/dbus-marshal-byteswap-util.c \
+	internals/dbus-marshal-recursive-util.c \
+	internals/dbus-marshal-recursive-util.h \
+	internals/dbus-marshal-validate-util.c \
+	internals/dbus-string-util.c \
+	internals/dbus-sysdeps-util.c \
+	internals/mempool.c \
+	internals/misc-internals.c \
+	internals/misc-internals.h \
+	internals/sha.c \
+	$(NULL)
+test_misc_internals_LDADD = libdbus-testutils.la
 
 EXTRA_DIST += dbus-test-runner
 
@@ -146,9 +275,14 @@ nobase_testexec_PROGRAMS =
 nobase_testmeta_DATA =
 
 installable_helpers = \
+	test-service \
+	test-sleep-forever \
 	$(NULL)
 installable_tests = \
+	test-atomic \
+	test-hash \
 	test-shell \
+	test-misc-internals \
 	test-printf \
 	$(NULL)
 installable_manual_tests = \
@@ -167,10 +301,13 @@ endif
 
 if DBUS_WITH_GLIB
 installable_tests += \
+	test-assertions \
 	test-corrupt \
 	test-dbus-daemon \
 	test-dbus-daemon-eavesdrop \
+	test-desktop-file \
 	test-fdpass \
+	test-header-fields \
 	test-message \
 	test-monitor \
 	test-loopback \
@@ -179,8 +316,10 @@ installable_tests += \
 	test-relay \
 	test-server-oom \
 	test-syntax \
+	test-sysdeps \
 	test-syslog \
 	test-uid-permissions \
+	test-userdb \
 	test-variant \
 	$(NULL)
 
@@ -191,6 +330,7 @@ installable_helpers += \
 	$(NULL)
 
 installable_tests += \
+	test-containers \
 	test-sd-activation \
 	$(NULL)
 
@@ -224,6 +364,14 @@ installable_manual_tests += \
 	manual-test-thread-blocking \
 	$(NULL)
 endif DBUS_WITH_GLIB
+
+if DBUS_UNIX
+if DBUS_ENABLE_EMBEDDED_TESTS
+installable_tests += \
+	test-counter \
+	$(NULL)
+endif DBUS_ENABLE_EMBEDDED_TESTS
+endif DBUS_UNIX
 
 installable_test_meta = \
 	$(dist_installable_test_scripts:=.test) \
@@ -299,6 +447,12 @@ test_apparmor_activation_LDADD = \
     $(NULL)
 endif
 
+test_containers_SOURCES = containers.c
+test_containers_LDADD = \
+    libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
 test_corrupt_SOURCES = corrupt.c
 test_corrupt_LDADD = \
     libdbus-testutils.la \
@@ -327,6 +481,24 @@ test_dbus_daemon_LDADD = \
 test_dbus_daemon_eavesdrop_SOURCES = dbus-daemon-eavesdrop.c
 test_dbus_daemon_eavesdrop_LDADD = \
     libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+test_desktop_file_SOURCES = \
+    internals/desktop-file.c \
+    $(NULL)
+test_desktop_file_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+test_header_fields_SOURCES = \
+    header-fields.c \
+    $(NULL)
+test_header_fields_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
     $(GLIB_LIBS) \
     $(NULL)
 
@@ -408,10 +580,18 @@ if DBUS_ENABLE_INSTALLED_TESTS
   nobase_testmeta_DATA += $(installable_test_meta)
   nobase_testmeta_DATA += $(installable_test_meta_with_config)
 else !DBUS_ENABLE_INSTALLED_TESTS
-  noinst_PROGRAMS += $(installable_tests) $(installable_manual_tests)
+  noinst_PROGRAMS += $(installable_helpers)
+  noinst_PROGRAMS += $(installable_manual_tests)
+  noinst_PROGRAMS += $(installable_tests)
 endif !DBUS_ENABLE_INSTALLED_TESTS
 
-endif DBUS_ENABLE_MODULAR_TESTS
+else !DBUS_ENABLE_MODULAR_TESTS
+
+if DBUS_ENABLE_EMBEDDED_TESTS
+  noinst_PROGRAMS += $(installable_helpers)
+endif DBUS_ENABLE_EMBEDDED_TESTS
+
+endif !DBUS_ENABLE_MODULAR_TESTS
 
 # If we're installing the tests into a DESTDIR we can't run them
 # again using the installed copy, because we don't know how to
@@ -442,14 +622,19 @@ in_data = \
 	data/valid-config-files/finite-timeout.conf.in \
 	data/valid-config-files/forbidding.conf.in \
 	data/valid-config-files/incoming-limit.conf.in \
+	data/valid-config-files/limit-containers.conf.in \
 	data/valid-config-files/max-completed-connections.conf.in \
 	data/valid-config-files/max-connections-per-user.conf.in \
+	data/valid-config-files/max-containers.conf.in \
 	data/valid-config-files/max-match-rules-per-connection.conf.in \
 	data/valid-config-files/max-names-per-connection.conf.in \
 	data/valid-config-files/max-replies-per-connection.conf.in \
 	data/valid-config-files/multi-user.conf.in \
 	data/valid-config-files/pending-fd-timeout.conf.in \
+	data/valid-config-files/send-destination-prefix-rules.conf.in \
 	data/valid-config-files/systemd-activation.conf.in \
+	data/valid-config-files/tmp-session.conf.in \
+	data/valid-config-files-system/tmp-session-like-system.conf.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoExec.service.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoService.service.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoUser.service.in \
@@ -468,17 +653,18 @@ in_data = \
 EXTRA_DIST += $(in_data)
 
 static_data = \
-	name-test/tmp-session-like-system.conf \
 	data/auth/anonymous-client-successful.auth-script \
 	data/auth/anonymous-server-successful.auth-script \
 	data/auth/cancel.auth-script \
 	data/auth/client-out-of-mechanisms.auth-script \
 	data/auth/cookie-sha1-username.auth-script \
 	data/auth/cookie-sha1.auth-script \
+	data/auth/external-auto.auth-script \
 	data/auth/external-failed.auth-script \
 	data/auth/external-root.auth-script \
 	data/auth/external-silly.auth-script \
 	data/auth/external-successful.auth-script \
+	data/auth/external-username.auth-script \
 	data/auth/extra-bytes.auth-script \
 	data/auth/fail-after-n-attempts.auth-script \
 	data/auth/fallback.auth-script \
@@ -492,37 +678,43 @@ static_data = \
 	data/equiv-config-files/entities/basic.d/basic.conf \
 	data/equiv-config-files/entities/entities-1.conf \
 	data/equiv-config-files/entities/entities-2.conf \
-	data/incomplete-messages/missing-body.message \
+	data/invalid-config-files/apparmor-bad-attribute.conf \
+	data/invalid-config-files/apparmor-bad-mode.conf \
+	data/invalid-config-files/bad-attribute.conf \
+	data/invalid-config-files/bad-attribute-2.conf \
+	data/invalid-config-files/bad-element.conf \
+	data/invalid-config-files/bad-limit.conf \
 	data/invalid-config-files/badselinux-1.conf \
 	data/invalid-config-files/badselinux-2.conf \
 	data/invalid-config-files/circular-1.conf \
 	data/invalid-config-files/circular-2.conf \
 	data/invalid-config-files/circular-3.conf \
+	data/invalid-config-files/double-attribute.conf \
 	data/invalid-config-files/impossible-send.conf \
+	data/invalid-config-files/limit-no-name.conf \
+	data/invalid-config-files/ludicrous-limit.conf \
+	data/invalid-config-files/negative-limit.conf \
+	data/invalid-config-files/non-numeric-limit.conf \
 	data/invalid-config-files/not-well-formed.conf \
+	data/invalid-config-files/policy-bad-at-console.conf \
+	data/invalid-config-files/policy-bad-attribute.conf \
+	data/invalid-config-files/policy-bad-context.conf \
+	data/invalid-config-files/policy-bad-rule-attribute.conf \
+	data/invalid-config-files/policy-contradiction.conf \
+	data/invalid-config-files/policy-member-no-path.conf \
+	data/invalid-config-files/policy-mixed.conf \
+	data/invalid-config-files/policy-no-attributes.conf \
+	data/invalid-config-files/policy-no-rule-attribute.conf \
 	data/invalid-config-files/truncated-file.conf \
 	data/invalid-config-files/send-and-receive.conf \
-	data/invalid-messages/array-of-nil.message \
-	data/invalid-messages/array-with-mixed-types.message \
-	data/invalid-messages/bad-boolean-array.message \
-	data/invalid-messages/bad-boolean.message \
-	data/invalid-messages/bad-endian.message \
-	data/invalid-messages/bad-header-field-alignment.message \
+	data/invalid-config-files/unknown-limit.conf \
 	data/invalid-messages/boolean-has-no-value.message-raw \
 	data/invalid-messages/fixed-array-not-divisible.message-raw \
 	data/invalid-messages/fixed-array-not-divisible.message-raw.hex \
 	data/invalid-messages/issue418.message-raw \
 	data/invalid-messages/issue418.message-raw.hex \
-	data/invalid-messages/local-namespace.message \
 	data/invalid-messages/mis-nested-sig.message-raw \
 	data/invalid-messages/mis-nested-sig.message-raw.hex \
-	data/invalid-messages/no-dot-in-name.message \
-	data/invalid-messages/not-nul-header-padding.message \
-	data/invalid-messages/overlong-name.message \
-	data/invalid-messages/too-little-header-padding.message \
-	data/invalid-messages/too-much-header-padding-by-far.message \
-	data/invalid-messages/too-much-header-padding.message \
-	data/invalid-messages/too-short-dict.message \
 	data/invalid-messages/truncated-variant-sig.message-raw \
 	data/invalid-messages/truncated-variant-sig.message-raw.hex \
 	data/invalid-messages/zero-length-variant-sig.message-raw \
@@ -535,6 +727,9 @@ static_data = \
 	data/systemd-activation/com.example.ReceiveDenied.service \
 	data/systemd-activation/com.example.SendDenied.service \
 	data/systemd-activation/com.example.SendDeniedByAppArmorName.service \
+	data/systemd-activation/com.example.SendPrefixDenied.service \
+	data/systemd-activation/com.example.SendPrefixDenied.internal.service \
+	data/systemd-activation/com.example.SendPrefixDenied.SendPrefixAllowed.internal.service \
 	data/systemd-activation/com.example.SystemdActivatable1.service \
 	data/systemd-activation/com.example.SystemdActivatable2.service \
 	data/systemd-activation/org.freedesktop.systemd1.service \
@@ -544,28 +739,14 @@ static_data = \
 	data/valid-config-files/entities.conf \
 	data/valid-config-files/listen-unix-runtime.conf \
 	data/valid-config-files/many-rules.conf \
+	data/valid-config-files/minimal.conf \
 	data/valid-config-files/standard-session-dirs.conf \
 	data/valid-config-files-system/many-rules.conf \
 	data/valid-config-files-system/system.d/test.conf \
-	data/valid-messages/array-of-array-of-uint32.message \
 	data/valid-messages/byteswap-fd-index.message-raw \
 	data/valid-messages/byteswap-fd-index.message-raw.hex \
-	data/valid-messages/dict-simple.message \
-	data/valid-messages/dict.message \
-	data/valid-messages/emptiness.message \
-	data/valid-messages/lots-of-arguments.message \
 	data/valid-messages/minimal.message-raw \
 	data/valid-messages/minimal.message-raw.hex \
-	data/valid-messages/no-padding.message \
-	data/valid-messages/opposite-endian.message \
-	data/valid-messages/recursive-types.message \
-	data/valid-messages/simplest-manual.message \
-	data/valid-messages/simplest.message \
-	data/valid-messages/standard-acquire-service.message \
-	data/valid-messages/standard-hello.message \
-	data/valid-messages/standard-list-services.message \
-	data/valid-messages/standard-service-exists.message \
-	data/valid-messages/unknown-header-field.message \
 	$(NULL)
 
 EXTRA_DIST += $(static_data)
@@ -596,11 +777,13 @@ uninstalled-config-local:
 	for F in $(in_data); do \
 		$(MKDIR_P) "$${F%/*}"; \
 		sed \
+			-e 's,[@]DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL[@],$(DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL),' \
+			-e 's,[@]DBUS_SESSION_BUS_LISTEN_ADDRESS[@],$(DBUS_SESSION_BUS_LISTEN_ADDRESS),' \
 			-e 's,[@]DBUS_TEST_DATA[@],@abs_builddir@/data,' \
 			-e 's,[@]DBUS_TEST_EXEC[@],@abs_builddir@,' \
 			-e 's,[@]DBUS_USER[@],$(DBUS_USER),' \
 			-e 's,[@]EXEEXT[@],$(EXEEXT),' \
-			-e 's,[@]TEST_LAUNCH_HELPER_BINARY[@],@abs_top_builddir@/bus/dbus-daemon-launch-helper-test$(EXEEXT),' \
+			-e 's,[@]TEST_LAUNCH_HELPER_BINARY[@],@abs_top_builddir@/test/dbus-daemon-launch-helper-for-tests$(EXEEXT),' \
 			-e 's,[@]TEST_LISTEN[@],$(TEST_LISTEN),' \
 			< $(srcdir)/"$$F" > "$${F%.in}"; \
 	done
@@ -611,6 +794,8 @@ if DBUS_ENABLE_INSTALLED_TESTS
 	for F in $(in_data); do \
 		$(MKDIR_P) "installable/$${F%/*}"; \
 		sed \
+			-e 's,[@]DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL[@],$(DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL),' \
+			-e 's,[@]DBUS_SESSION_BUS_LISTEN_ADDRESS[@],$(DBUS_SESSION_BUS_LISTEN_ADDRESS),' \
 			-e 's,[@]DBUS_TEST_DATA[@],$(testexecdir)/data,' \
 			-e 's,[@]DBUS_TEST_EXEC[@],$(testexecdir),' \
 			-e 's,[@]DBUS_USER[@],$(DBUS_USER),' \
