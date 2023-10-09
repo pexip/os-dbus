@@ -3,7 +3,7 @@ AC_PREREQ([2.63])
 
 m4_define([dbus_major_version], [1])
 m4_define([dbus_minor_version], [12])
-m4_define([dbus_micro_version], [24])
+m4_define([dbus_micro_version], [28])
 m4_define([dbus_version],
           [dbus_major_version.dbus_minor_version.dbus_micro_version])
 AC_INIT([dbus],[dbus_version],[https://bugs.freedesktop.org/enter_bug.cgi?product=dbus],[dbus])
@@ -42,7 +42,7 @@ LT_CURRENT=22
 
 ## increment any time the source changes; set to
 ##  0 if you increment CURRENT
-LT_REVISION=15
+LT_REVISION=17
 
 ## increment if any interfaces have been added; set to 0
 ## if any interfaces have been changed or removed. removal has
@@ -845,7 +845,7 @@ AC_ARG_VAR([THREAD_LIBS])
 save_libs="$LIBS"
 LIBS="$LIBS $THREAD_LIBS"
 
-is_missing_pthread_function="is required when compiling D-Bus on Unix platforms, but is not in your libc or libpthread. Please open a bug on https://bugs.freedesktop.org/enter_bug.cgi?product=dbus with details of your platform."
+is_missing_pthread_function="is required when compiling D-Bus on Unix platforms, but is not in your libc or libpthread. Please open a bug on https://gitlab.freedesktop.org/dbus/dbus/-/issues/new with details of your platform."
 
 # Don't do these automatic checks if the user set THREAD_LIBS on the
 # configure command-line. If they did, we assume they're right.
