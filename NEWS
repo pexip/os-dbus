@@ -1,3 +1,57 @@
+dbus 1.12.x branch
+==================
+
+The dbus 1.12.x branch was originally released in 2017, and is maintained
+for the benefit of long-term-support OS distributions such as Debian.
+It is planned to reach end-of-life status at the end of Debian 11
+mainstream security support, in mid 2024. After it reaches end-of-life
+there will be no more 1.12.x releases, even if new security issues
+are discovered.
+
+dbus 1.12.28 (2023-06-06)
+=========================
+
+Denial-of-service fixes:
+
+• Fix an assertion failure in dbus-daemon when a privileged Monitoring
+  connection (dbus-monitor, busctl monitor, gdbus monitor or similar)
+  is active, and a message from the bus driver cannot be delivered to a
+  client connection due to <deny> rules or outgoing message quota. This
+  is a denial of service if triggered maliciously by a local attacker.
+  (dbus#457; hongjinghao, Simon McVittie)
+
+Other fixes:
+
+• Documentation:
+  · Fix syntax of a code sample in dbus-api-design
+    (dbus!396; Yen-Chin, Lee)
+
+Tests and CI enhancements:
+
+• Fix CI pipelines after freedesktop/freedesktop#540
+  (dbus!405, dbus#456; Simon McVittie)
+
+dbus 1.12.26 (2023-02-08)
+=========================
+
+Denial of service fixes:
+
+• Fix an incorrect assertion that could be used to crash dbus-daemon or
+  other users of DBusServer prior to authentication, if libdbus was compiled
+  with assertions enabled.
+  We recommend that production builds of dbus, for example in OS distributions,
+  should be compiled with checks but without assertions.
+  (dbus#421, Ralf Habacker; thanks to Evgeny Vereshchagin)
+
+Other fixes:
+
+• Documentation:
+  · Consistently use Gitlab bug reporting URL (dbus!372, Marco Trevisan)
+
+• Tests fixes:
+  · Fix the test-apparmor-activation test after dbus#416
+    (dbus!380, Dave Jones)
+
 dbus 1.12.24 (2022-10-05)
 =========================
 

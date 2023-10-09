@@ -1,3 +1,22 @@
+dbus (1.12.28-0+deb11u1pexip1) pexip; urgency=medium
+
+  * New upstream release.
+
+ -- Steve McIntyre <steve.mcintyre@pexip.com>  Mon, 09 Oct 2023 14:13:42 +0100
+
+dbus (1.12.28-0+deb11u1) bullseye; urgency=medium
+
+  * New upstream stable release 1.12.26
+    - Fixes a denial of service issue that is not relevant for the way
+      we compile dbus in Debian
+  * New upstream stable release 1.12.28
+    - Fixes a denial of service issue if the root or messagebus user is
+      monitoring messages on the system bus with the Monitoring interface
+      (dbus-monitor, busctl monitor, gdbus monitor or similar)
+      (Closes: #1037151)
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 06 Jun 2023 15:07:35 +0100
+
 dbus (1.12.24-0+deb11u1pexip1) pexip; urgency=medium
 
   * New upstream release.
