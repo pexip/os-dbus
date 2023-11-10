@@ -1,17 +1,22 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-hash.c Generic hash table utility (internal to D-Bus implementation)
- * 
- * Copyright (C) 2002  Red Hat, Inc.
- * Copyright (c) 1991-1993 The Regents of the University of California.
- * Copyright (c) 1994 Sun Microsystems, Inc.
- * 
+ *
+ * Copyright 1991-1993 The Regents of the University of California.
+ * Copyright 1994 Sun Microsystems, Inc.
+ * Copyright 2002-2005 Red Hat, Inc.
+ * Copyright 2003 Joe Shaw
+ * Copyright 2006 Sjoerd Simons
+ * Copyright 2010 Fridrich Štrba
+ * Copyright 2016 Ralf Habacker
+ * Copyright 2017 Endless Mobile, Inc.
+ *
  * Hash table implementation based on generic/tclHash.c from the Tcl
  * source code. The original Tcl license applies to portions of the
- * code from tclHash.c; the Tcl license follows this standad D-Bus 
+ * code from tclHash.c; the Tcl license follows this standad D-Bus
  * license information.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -21,13 +26,13 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
-/* 
+/*
  * The following copyright applies to code from the Tcl distribution.
  *
  * Copyright (c) 1991-1993 The Regents of the University of California.
@@ -37,7 +42,7 @@
  * California, Sun Microsystems, Inc., Scriptics Corporation, and
  * other parties.  The following terms apply to all files associated
  * with the software unless explicitly disclaimed in individual files.
- * 
+ *
  * The authors hereby grant permission to use, copy, modify,
  * distribute, and license this software and its documentation for any
  * purpose, provided that existing copyright notices are retained in
@@ -47,20 +52,20 @@
  * software may be copyrighted by their authors and need not follow
  * the licensing terms described here, provided that the new terms are
  * clearly indicated on the first page of each file where they apply.
- * 
+ *
  * IN NO EVENT SHALL THE AUTHORS OR DISTRIBUTORS BE LIABLE TO ANY
  * PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL
  * DAMAGES ARISING OUT OF THE USE OF THIS SOFTWARE, ITS DOCUMENTATION,
  * OR ANY DERIVATIVES THEREOF, EVEN IF THE AUTHORS HAVE BEEN ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
- * 
+ *
  * THE AUTHORS AND DISTRIBUTORS SPECIFICALLY DISCLAIM ANY WARRANTIES,
  * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND
  * NON-INFRINGEMENT.  THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS,
  * AND THE AUTHORS AND DISTRIBUTORS HAVE NO OBLIGATION TO PROVIDE
  * MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
- * 
+ *
  * GOVERNMENT USE: If you are acquiring this software on behalf of the
  * U.S. government, the Government shall have only "Restricted Rights"
  * in the software and related documentation as defined in the Federal
@@ -78,6 +83,7 @@
 #include "dbus-hash.h"
 #include "dbus-internals.h"
 #include "dbus-mempool.h"
+#include <dbus/dbus-test-tap.h>
 
 /**
  * @defgroup DBusHashTable Hash table
@@ -235,7 +241,7 @@ static DBusHashEntry* find_string_function      (DBusHashTable          *table,
                                                  DBusHashEntry        ***bucket,
                                                  DBusPreallocatedHash   *preallocated);
 static unsigned int   string_hash               (const char             *str);
-static void           rebuild_table             (DBusHashTable          *table);
+static dbus_bool_t    rebuild_table             (DBusHashTable          *table);
 static DBusHashEntry* alloc_entry               (DBusHashTable          *table);
 static void           remove_entry              (DBusHashTable          *table,
                                                  DBusHashEntry         **bucket,
@@ -744,8 +750,8 @@ _dbus_hash_iter_lookup (DBusHashTable *table,
                         DBusHashIter  *iter)
 {
   DBusRealHashIter *real;
-  DBusHashEntry *entry;
-  DBusHashEntry **bucket;
+  DBusHashEntry *entry = NULL;
+  DBusHashEntry **bucket = NULL;
   
   _DBUS_STATIC_ASSERT (sizeof (DBusHashIter) == sizeof (DBusRealHashIter));
   
@@ -753,8 +759,14 @@ _dbus_hash_iter_lookup (DBusHashTable *table,
 
   entry = (* table->find_function) (table, key, create_if_not_found, &bucket, NULL);
 
+  /* entry == NULL means not found, and either !create_if_not_found or OOM */
   if (entry == NULL)
     return FALSE;
+
+  _dbus_assert (bucket != NULL);
+  _dbus_assert (table->n_buckets >= 1);
+  _dbus_assert (bucket >= table->buckets);
+  _dbus_assert (bucket <= &table->buckets[table->n_buckets - 1]);
 
   if (create_if_not_found)
     {
@@ -771,6 +783,8 @@ _dbus_hash_iter_lookup (DBusHashTable *table,
   real->next_bucket = (bucket - table->buckets) + 1;
   real->n_entries_on_init = table->n_entries; 
 
+  _dbus_assert (real->next_bucket >= 0);
+  _dbus_assert (real->next_bucket <= table->n_buckets);
   _dbus_assert (&(table->buckets[real->next_bucket-1]) == real->bucket);
   
   return TRUE;
@@ -801,7 +815,33 @@ add_allocated_entry (DBusHashTable   *table,
    */
   if (table->n_entries >= table->hi_rebuild_size ||
       table->n_entries < table->lo_rebuild_size)
-    rebuild_table (table);
+    {
+      if (!rebuild_table (table))
+        return;
+
+      if (bucket)
+        {
+          /* Recalculate hash for the new table size */
+          switch (table->key_type)
+            {
+            case DBUS_HASH_STRING:
+              idx = string_hash (entry->key) & table->mask;
+              break;
+
+            case DBUS_HASH_INT:
+            case DBUS_HASH_UINTPTR:
+              idx = RANDOM_INDEX (table, entry->key);
+              break;
+
+            default:
+              idx = 0;
+              _dbus_assert_not_reached ("Unknown hash table type");
+              break;
+            }
+
+          *bucket = &(table->buckets[idx]);
+        }
+    }
 }
 
 static DBusHashEntry*
@@ -829,6 +869,7 @@ add_entry (DBusHashTable        *table,
     }
 
   add_allocated_entry (table, entry, idx, key, bucket);
+  _dbus_assert (bucket == NULL || *bucket != NULL);
 
   return entry;
 }
@@ -886,10 +927,19 @@ find_generic_function (DBusHashTable        *table,
     }
 
   if (create_if_not_found)
-    entry = add_entry (table, idx, key, bucket, preallocated);
+    {
+      entry = add_entry (table, idx, key, bucket, preallocated);
+
+      if (entry == NULL)  /* OOM */
+        return NULL;
+
+      _dbus_assert (bucket == NULL || *bucket != NULL);
+    }
   else if (preallocated)
-    _dbus_hash_table_free_preallocated_entry (table, preallocated);
-  
+    {
+      _dbus_hash_table_free_preallocated_entry (table, preallocated);
+    }
+
   return entry;
 }
 
@@ -926,7 +976,8 @@ find_direct_function (DBusHashTable        *table,
                                 preallocated);
 }
 
-static void
+/* Return FALSE if nothing happened. */
+static dbus_bool_t
 rebuild_table (DBusHashTable *table)
 {
   int old_size;
@@ -953,13 +1004,13 @@ rebuild_table (DBusHashTable *table)
           table->down_shift >= 2)
         new_buckets = table->n_buckets * 4;
       else
-        return; /* can't grow anymore */
+        return FALSE;   /* can't grow any more */
     }
   else
     {
       new_buckets = table->n_buckets / 4;
       if (new_buckets < DBUS_SMALL_HASH_TABLE)
-        return; /* don't bother shrinking this far */
+        return FALSE;   /* don't bother shrinking this far */
     }
 
   table->buckets = dbus_new0 (DBusHashEntry*, new_buckets);
@@ -969,7 +1020,7 @@ rebuild_table (DBusHashTable *table)
        * still work, albeit more slowly.
        */
       table->buckets = old_buckets;
-      return;
+      return FALSE;
     }
 
   table->n_buckets = new_buckets;
@@ -1044,6 +1095,8 @@ rebuild_table (DBusHashTable *table)
 
   if (old_buckets != table->static_buckets)
     dbus_free (old_buckets);
+
+  return TRUE;
 }
 
 /**
@@ -1539,443 +1592,3 @@ _dbus_hash_table_to_array (DBusHashTable *table, char delimiter)
 }
 
 /** @} */
-
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-#include "dbus-test.h"
-#include <stdio.h>
-
-/* If you're wondering why the hash table test takes
- * forever to run, it's because we call this function
- * in inner loops thus making things quadratic.
- */
-static int
-count_entries (DBusHashTable *table)
-{
-  DBusHashIter iter;
-  int count;
-
-  count = 0;
-  _dbus_hash_iter_init (table, &iter);
-  while (_dbus_hash_iter_next (&iter))
-    ++count;
-
-  _dbus_assert (count == _dbus_hash_table_get_n_entries (table));
-  
-  return count;
-}
-
-static inline void *
-steal (void *ptr)
-{
-  /* @ptr is passed in as void* to avoid casting in the call */
-  void **_ptr = (void **) ptr;
-  void *val;
-
-  val = *_ptr;
-  *_ptr = NULL;
-
-  return val;
-}
-
-/**
- * @ingroup DBusHashTableInternals
- * Unit test for DBusHashTable
- * @returns #TRUE on success.
- */
-dbus_bool_t
-_dbus_hash_test (void)
-{
-  int i;
-  DBusHashTable *table1;
-  DBusHashTable *table2;
-  DBusHashTable *table3;
-  DBusHashIter iter;
-#define N_HASH_KEYS 5000
-  char **keys;
-  dbus_bool_t ret = FALSE;
-  char *str_key = NULL;
-  char *str_value = NULL;
-
-  keys = dbus_new (char *, N_HASH_KEYS);
-  if (keys == NULL)
-    _dbus_assert_not_reached ("no memory");
-
-  for (i = 0; i < N_HASH_KEYS; i++)
-    {
-      keys[i] = dbus_malloc (128);
-
-      if (keys[i] == NULL)
-	_dbus_assert_not_reached ("no memory");
-    }
-
-  printf ("Computing test hash keys...\n");
-  i = 0;
-  while (i < N_HASH_KEYS)
-    {
-      int len;
-
-      len = sprintf (keys[i], "Hash key %d", i);
-      _dbus_assert (*(keys[i] + len) == '\0');
-      ++i;
-    }
-  printf ("... done.\n");
-  
-  table1 = _dbus_hash_table_new (DBUS_HASH_STRING,
-                                 dbus_free, dbus_free);
-  if (table1 == NULL)
-    goto out;
-
-  table2 = _dbus_hash_table_new (DBUS_HASH_INT,
-                                 NULL, dbus_free);
-  if (table2 == NULL)
-    goto out;
-
-  table3 = _dbus_hash_table_new (DBUS_HASH_UINTPTR,
-                                 NULL, dbus_free);
-  if (table3 == NULL)
-    goto out;
-
-  /* Insert and remove a bunch of stuff, counting the table in between
-   * to be sure it's not broken and that iteration works
-   */
-  i = 0;
-  while (i < 3000)
-    {
-      const void *out_value;
-
-      str_key = _dbus_strdup (keys[i]);
-      if (str_key == NULL)
-        goto out;
-      str_value = _dbus_strdup ("Value!");
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_insert_string (table1,
-                                           steal (&str_key),
-                                           steal (&str_value)))
-        goto out;
-
-      str_value = _dbus_strdup (keys[i]);
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_insert_int (table2,
-                                        i, steal (&str_value)))
-        goto out;
-
-      str_value = _dbus_strdup (keys[i]);
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_insert_uintptr (table3,
-                                            i, steal (&str_value)))
-        goto out;
-
-      _dbus_assert (count_entries (table1) == i + 1);
-      _dbus_assert (count_entries (table2) == i + 1);
-      _dbus_assert (count_entries (table3) == i + 1);
-
-      out_value = _dbus_hash_table_lookup_string (table1, keys[i]);
-      _dbus_assert (out_value != NULL);
-      _dbus_assert (strcmp (out_value, "Value!") == 0);
-
-      out_value = _dbus_hash_table_lookup_int (table2, i);
-      _dbus_assert (out_value != NULL);
-      _dbus_assert (strcmp (out_value, keys[i]) == 0);
-
-      out_value = _dbus_hash_table_lookup_uintptr (table3, i);
-      _dbus_assert (out_value != NULL);
-      _dbus_assert (strcmp (out_value, keys[i]) == 0);
-
-      ++i;
-    }
-
-  --i;
-  while (i >= 0)
-    {
-      _dbus_hash_table_remove_string (table1,
-                                      keys[i]);
-
-      _dbus_hash_table_remove_int (table2, i);
-
-      _dbus_hash_table_remove_uintptr (table3, i);
-
-      _dbus_assert (count_entries (table1) == i);
-      _dbus_assert (count_entries (table2) == i);
-      _dbus_assert (count_entries (table3) == i);
-
-      --i;
-    }
-
-  _dbus_hash_table_ref (table1);
-  _dbus_hash_table_ref (table2);
-  _dbus_hash_table_ref (table3);
-  _dbus_hash_table_unref (table1);
-  _dbus_hash_table_unref (table2);
-  _dbus_hash_table_unref (table3);
-  _dbus_hash_table_unref (table1);
-  _dbus_hash_table_unref (table2);
-  _dbus_hash_table_unref (table3);
-  table3 = NULL;
-
-  /* Insert a bunch of stuff then check
-   * that iteration works correctly (finds the right
-   * values, iter_set_value works, etc.)
-   */
-  table1 = _dbus_hash_table_new (DBUS_HASH_STRING,
-                                 dbus_free, dbus_free);
-  if (table1 == NULL)
-    goto out;
-
-  table2 = _dbus_hash_table_new (DBUS_HASH_INT,
-                                 NULL, dbus_free);
-  if (table2 == NULL)
-    goto out;
-
-  i = 0;
-  while (i < 5000)
-    {
-      str_key = _dbus_strdup (keys[i]);
-      if (str_key == NULL)
-        goto out;
-      str_value = _dbus_strdup ("Value!");
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_insert_string (table1,
-                                           steal (&str_key),
-                                           steal (&str_value)))
-        goto out;
-
-      str_value = _dbus_strdup (keys[i]);
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_insert_int (table2,
-                                        i, steal (&str_value)))
-        goto out;
-
-      _dbus_assert (count_entries (table1) == i + 1);
-      _dbus_assert (count_entries (table2) == i + 1);
-
-      ++i;
-    }
-
-  _dbus_hash_iter_init (table1, &iter);
-  while (_dbus_hash_iter_next (&iter))
-    {
-      const char *key;
-      const void *value;
-
-      key = _dbus_hash_iter_get_string_key (&iter);
-      value = _dbus_hash_iter_get_value (&iter);
-
-      _dbus_assert (_dbus_hash_table_lookup_string (table1, key) == value);
-
-      str_value = _dbus_strdup ("Different value!");
-      if (str_value == NULL)
-        goto out;
-
-      value = str_value;
-      _dbus_hash_iter_set_value (&iter, steal (&str_value));
-      _dbus_assert (_dbus_hash_table_lookup_string (table1, key) == value);
-    }
-
-  _dbus_hash_iter_init (table1, &iter);
-  while (_dbus_hash_iter_next (&iter))
-    {
-      _dbus_hash_iter_remove_entry (&iter);
-      _dbus_assert (count_entries (table1) == i - 1);
-      --i;
-    }
-
-  _dbus_hash_iter_init (table2, &iter);
-  while (_dbus_hash_iter_next (&iter))
-    {
-      int key;
-      const void *value;
-
-      key = _dbus_hash_iter_get_int_key (&iter);
-      value = _dbus_hash_iter_get_value (&iter);
-
-      _dbus_assert (_dbus_hash_table_lookup_int (table2, key) == value);
-
-      str_value = _dbus_strdup ("Different value!");
-      if (str_value == NULL)
-        goto out;
-
-      value = str_value;
-      _dbus_hash_iter_set_value (&iter, steal (&str_value));
-      _dbus_assert (_dbus_hash_table_lookup_int (table2, key) == value);
-    }
-
-  i = count_entries (table2);
-  _dbus_hash_iter_init (table2, &iter);
-  while (_dbus_hash_iter_next (&iter))
-    {
-      _dbus_hash_iter_remove_entry (&iter);
-      _dbus_assert (count_entries (table2) + 1 == i);
-      --i;
-    }
-
-  /* add/remove interleaved, to check that we grow/shrink the table
-   * appropriately
-   */
-  i = 0;
-  while (i < 1000)
-    {
-      str_key = _dbus_strdup (keys[i]);
-      if (str_key == NULL)
-        goto out;
-
-      str_value = _dbus_strdup ("Value!");
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_insert_string (table1,
-                                           steal (&str_key),
-                                           steal (&str_value)))
-        goto out;
-
-      ++i;
-    }
-
-  --i;
-  while (i >= 0)
-    {
-      str_key = _dbus_strdup (keys[i]);
-      if (str_key == NULL)
-        goto out;
-      str_value = _dbus_strdup ("Value!");
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_table_remove_string (table1, keys[i]))
-        goto out;
-
-      if (!_dbus_hash_table_insert_string (table1,
-                                           steal (&str_key),
-                                           steal (&str_value)))
-        goto out;
-
-      if (!_dbus_hash_table_remove_string (table1, keys[i]))
-        goto out;
-      
-      _dbus_assert (_dbus_hash_table_get_n_entries (table1) == i);
-      
-      --i;
-    }
-
-  /* nuke these tables */
-  _dbus_hash_table_unref (table1);
-  _dbus_hash_table_unref (table2);
-
-
-  /* Now do a bunch of things again using _dbus_hash_iter_lookup() to
-   * be sure that interface works.
-   */
-  table1 = _dbus_hash_table_new (DBUS_HASH_STRING,
-                                 dbus_free, dbus_free);
-  if (table1 == NULL)
-    goto out;
-
-  table2 = _dbus_hash_table_new (DBUS_HASH_INT,
-                                 NULL, dbus_free);
-  if (table2 == NULL)
-    goto out;
-
-  i = 0;
-  while (i < 3000)
-    {
-      const void *out_value;
-
-      str_key = _dbus_strdup (keys[i]);
-      if (str_key == NULL)
-        goto out;
-      str_value = _dbus_strdup ("Value!");
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_iter_lookup (table1,
-                                   steal (&str_key), TRUE, &iter))
-        goto out;
-      _dbus_assert (_dbus_hash_iter_get_value (&iter) == NULL);
-      _dbus_hash_iter_set_value (&iter, steal (&str_value));
-
-      str_value = _dbus_strdup (keys[i]);
-      if (str_value == NULL)
-        goto out;
-
-      if (!_dbus_hash_iter_lookup (table2,
-                                   _DBUS_INT_TO_POINTER (i), TRUE, &iter))
-        goto out;
-      _dbus_assert (_dbus_hash_iter_get_value (&iter) == NULL);
-      _dbus_hash_iter_set_value (&iter, steal (&str_value));
-
-      _dbus_assert (count_entries (table1) == i + 1);
-      _dbus_assert (count_entries (table2) == i + 1);
-
-      if (!_dbus_hash_iter_lookup (table1, keys[i], FALSE, &iter))
-        goto out;
-
-      out_value = _dbus_hash_iter_get_value (&iter);
-      _dbus_assert (out_value != NULL);
-      _dbus_assert (strcmp (out_value, "Value!") == 0);
-
-      /* Iterate just to be sure it works, though
-       * it's a stupid thing to do
-       */
-      while (_dbus_hash_iter_next (&iter))
-        ;
-
-      if (!_dbus_hash_iter_lookup (table2, _DBUS_INT_TO_POINTER (i), FALSE, &iter))
-        goto out;
-
-      out_value = _dbus_hash_iter_get_value (&iter);
-      _dbus_assert (out_value != NULL);
-      _dbus_assert (strcmp (out_value, keys[i]) == 0);
-
-      /* Iterate just to be sure it works, though
-       * it's a stupid thing to do
-       */
-      while (_dbus_hash_iter_next (&iter))
-        ;
-      
-      ++i;
-    }
-
-  --i;
-  while (i >= 0)
-    {
-      if (!_dbus_hash_iter_lookup (table1, keys[i], FALSE, &iter))
-        _dbus_assert_not_reached ("hash entry should have existed");
-      _dbus_hash_iter_remove_entry (&iter);
-      
-      if (!_dbus_hash_iter_lookup (table2, _DBUS_INT_TO_POINTER (i), FALSE, &iter))
-        _dbus_assert_not_reached ("hash entry should have existed");
-      _dbus_hash_iter_remove_entry (&iter);
-
-      _dbus_assert (count_entries (table1) == i);
-      _dbus_assert (count_entries (table2) == i);
-
-      --i;
-    }
-
-  _dbus_hash_table_unref (table1);
-  _dbus_hash_table_unref (table2);
-
-  ret = TRUE;
-
- out:
-  for (i = 0; i < N_HASH_KEYS; i++)
-    dbus_free (keys[i]);
-
-  dbus_free (keys);
-
-  dbus_free (str_key);
-  dbus_free (str_value);
-  
-  return ret;
-}
-
-#endif /* DBUS_ENABLE_EMBEDDED_TESTS */

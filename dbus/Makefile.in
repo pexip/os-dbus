@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 # aminclude_static.am generated automatically by Autoconf
-# from AX_AM_MACROS_STATIC on Tue Jun  6 14:02:10 BST 2023
+# from AX_AM_MACROS_STATIC on Fri Sep  1 15:31:27 BST 2023
 
 
 
@@ -103,19 +103,22 @@ host_triplet = @host@
 @DBUS_WIN_TRUE@	versioninfo.rc \
 @DBUS_WIN_TRUE@	$(NULL)
 
-@HAVE_LINUX_EPOLL_TRUE@am__append_4 = dbus-socket-set-epoll.c
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_5 = dbus-spawn-test.c
+@DBUS_WIN_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_4 = dbus-spawn-win.c
+@DBUS_WIN_FALSE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_5 = dbus-spawn-unix.c
+@DBUS_HAVE_LINUX_EPOLL_TRUE@am__append_6 = dbus-pollable-set-epoll.c
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_7 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	dbus-test-tap.c \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	dbus-test-tap.h \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+
 
 # This must be a separate convenience library, otherwise libtool notices
 # that libdbus-1 might contain C++, links it with g++ and links in libstdc++,
 # even on Unix where in fact it doesn't contain any C++. For Windows, where
 # this code is used, we don't actually need libstdc++.
-@DBUS_WIN_TRUE@am__append_6 = libdbus-init-win.la
-@DBUS_WIN_TRUE@am__append_7 = libdbus-init-win.la
-noinst_PROGRAMS = $(am__EXEEXT_1)
-
-# We can't actually run this til we've reached test/
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_8 = test-dbus
+@DBUS_WIN_TRUE@am__append_8 = libdbus-init-win.la
+@DBUS_WIN_TRUE@am__append_9 = libdbus-init-win.la
+noinst_PROGRAMS =
 subdir = dbus
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
@@ -128,8 +131,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/visibility.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(dbusinclude_HEADERS) \
@@ -138,7 +141,6 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES = Version versioninfo.rc dbus-arch-deps.h
 CONFIG_CLEAN_VPATH_FILES =
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_1 = test-dbus$(EXEEXT)
 PROGRAMS = $(noinst_PROGRAMS)
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
@@ -171,7 +173,8 @@ am__installdirs = "$(DESTDIR)$(libdir)" "$(DESTDIR)$(dbusincludedir)" \
 	"$(DESTDIR)$(dbusarchincludedir)"
 LTLIBRARIES = $(lib_LTLIBRARIES) $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
-libdbus_1_la_DEPENDENCIES = $(am__DEPENDENCIES_1) $(am__append_7)
+libdbus_1_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1) $(am__append_9)
 am__libdbus_1_la_SOURCES_DIST = dbus-address.c dbus-auth.c dbus-auth.h \
 	dbus-bus.c dbus-connection.c dbus-connection-internal.h \
 	dbus-credentials.c dbus-credentials.h dbus-errors.c \
@@ -206,7 +209,7 @@ am__libdbus_1_la_SOURCES_DIST = dbus-address.c dbus-auth.c dbus-auth.h \
 	dbus-sockets-win.h dbus-sysdeps-win.c dbus-sysdeps-win.h \
 	dbus-sysdeps-thread-win.c dbus-transport-win.c \
 	dbus-transport-win.h dbus-sysdeps.c dbus-sysdeps.h \
-	dbus-valgrind-internal.h
+	dbus-valgrind-internal.h dbus-test-tap.c dbus-test-tap.h
 @DBUS_WIN_FALSE@am__objects_1 = libdbus_1_la-dbus-uuidgen.lo \
 @DBUS_WIN_FALSE@	libdbus_1_la-dbus-server-unix.lo
 @DBUS_WIN_TRUE@am__objects_1 = libdbus_1_la-dbus-server-win.lo
@@ -244,16 +247,17 @@ am__objects_2 = libdbus_1_la-dbus-address.lo libdbus_1_la-dbus-auth.lo \
 @DBUS_WIN_TRUE@	libdbus_1_la-dbus-sysdeps-win.lo \
 @DBUS_WIN_TRUE@	libdbus_1_la-dbus-sysdeps-thread-win.lo \
 @DBUS_WIN_TRUE@	libdbus_1_la-dbus-transport-win.lo
-am__objects_6 = libdbus_1_la-dbus-dataslot.lo \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__objects_6 = libdbus_1_la-dbus-test-tap.lo
+am__objects_7 = libdbus_1_la-dbus-dataslot.lo \
 	libdbus_1_la-dbus-file.lo libdbus_1_la-dbus-hash.lo \
 	libdbus_1_la-dbus-internals.lo libdbus_1_la-dbus-list.lo \
 	libdbus_1_la-dbus-marshal-basic.lo libdbus_1_la-dbus-memory.lo \
 	libdbus_1_la-dbus-mempool.lo libdbus_1_la-dbus-pipe.lo \
 	libdbus_1_la-dbus-string.lo $(am__objects_5) \
-	libdbus_1_la-dbus-sysdeps.lo
-am_libdbus_1_la_OBJECTS = $(am__objects_2) $(am__objects_6)
-@DBUS_WIN_TRUE@am__objects_7 = versioninfo.lo
-nodist_libdbus_1_la_OBJECTS = $(am__objects_7)
+	libdbus_1_la-dbus-sysdeps.lo $(am__objects_6)
+am_libdbus_1_la_OBJECTS = $(am__objects_2) $(am__objects_7)
+@DBUS_WIN_TRUE@am__objects_8 = versioninfo.lo
+nodist_libdbus_1_la_OBJECTS = $(am__objects_8)
 libdbus_1_la_OBJECTS = $(am_libdbus_1_la_OBJECTS) \
 	$(nodist_libdbus_1_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -268,37 +272,31 @@ am__libdbus_init_win_la_SOURCES_DIST = dbus-init-win.cpp
 @DBUS_WIN_TRUE@am_libdbus_init_win_la_OBJECTS = dbus-init-win.lo
 libdbus_init_win_la_OBJECTS = $(am_libdbus_init_win_la_OBJECTS)
 @DBUS_WIN_TRUE@am_libdbus_init_win_la_rpath =
-libdbus_internal_la_DEPENDENCIES = $(am__DEPENDENCIES_1) libdbus-1.la
+libdbus_internal_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(am__DEPENDENCIES_1) libdbus-1.la
 am__libdbus_internal_la_SOURCES_DIST = dbus-asv-util.c dbus-asv-util.h \
-	dbus-auth-script.c dbus-auth-script.h dbus-auth-util.c \
-	dbus-credentials-util.c dbus-mainloop.c dbus-mainloop.h \
-	dbus-marshal-byteswap-util.c dbus-marshal-recursive-util.c \
-	dbus-marshal-validate-util.c dbus-message-factory.c \
-	dbus-message-factory.h dbus-message-util.c dbus-shell.c \
-	dbus-shell.h dbus-sysdeps-util-unix.c dbus-userdb-util.c \
-	dbus-spawn.c dbus-socket-set-epoll.c dbus-sysdeps-util-win.c \
-	dbus-spawn-win.c dbus-socket-set.h dbus-socket-set.c \
-	dbus-socket-set-poll.c dbus-spawn.h dbus-string-util.c \
-	dbus-sysdeps-util.c dbus-test.c dbus-test.h dbus-spawn-test.c
-@HAVE_LINUX_EPOLL_TRUE@am__objects_8 = dbus-socket-set-epoll.lo
-@DBUS_WIN_FALSE@am__objects_9 = dbus-sysdeps-util-unix.lo \
-@DBUS_WIN_FALSE@	dbus-userdb-util.lo dbus-spawn.lo \
-@DBUS_WIN_FALSE@	$(am__objects_8)
-@DBUS_WIN_TRUE@am__objects_9 = dbus-sysdeps-util-win.lo \
-@DBUS_WIN_TRUE@	dbus-spawn-win.lo $(am__objects_8)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__objects_10 = dbus-spawn-test.lo
-am__objects_11 = dbus-asv-util.lo dbus-auth-script.lo \
-	dbus-auth-util.lo dbus-credentials-util.lo dbus-mainloop.lo \
-	dbus-marshal-byteswap-util.lo dbus-marshal-recursive-util.lo \
-	dbus-marshal-validate-util.lo dbus-message-factory.lo \
-	dbus-message-util.lo dbus-shell.lo $(am__objects_9) \
-	dbus-socket-set.lo dbus-socket-set-poll.lo dbus-string-util.lo \
-	dbus-sysdeps-util.lo dbus-test.lo $(am__objects_10)
-am_libdbus_internal_la_OBJECTS = $(am__objects_11)
+	dbus-mainloop.c dbus-mainloop.h dbus-message-util.c \
+	dbus-shell.c dbus-shell.h dbus-sysdeps-util-unix.c \
+	dbus-userdb-util.c dbus-spawn-unix.c dbus-pollable-set-epoll.c \
+	dbus-sysdeps-util-win.c dbus-spawn-win.c dbus-pollable-set.h \
+	dbus-pollable-set.c dbus-pollable-set-poll.c dbus-spawn.h \
+	dbus-string-util.c dbus-sysdeps-util.c dbus-test.h
+@DBUS_WIN_FALSE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__objects_9 = dbus-spawn-unix.lo
+@DBUS_HAVE_LINUX_EPOLL_TRUE@am__objects_10 =  \
+@DBUS_HAVE_LINUX_EPOLL_TRUE@	dbus-pollable-set-epoll.lo
+@DBUS_WIN_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__objects_11 = dbus-spawn-win.lo
+@DBUS_WIN_FALSE@am__objects_12 = dbus-sysdeps-util-unix.lo \
+@DBUS_WIN_FALSE@	dbus-userdb-util.lo $(am__objects_9) \
+@DBUS_WIN_FALSE@	$(am__objects_10)
+@DBUS_WIN_TRUE@am__objects_12 = dbus-sysdeps-util-win.lo \
+@DBUS_WIN_TRUE@	$(am__objects_11) $(am__objects_9) \
+@DBUS_WIN_TRUE@	$(am__objects_10)
+am__objects_13 = dbus-asv-util.lo dbus-mainloop.lo \
+	dbus-message-util.lo dbus-shell.lo $(am__objects_12) \
+	dbus-pollable-set.lo dbus-pollable-set-poll.lo \
+	dbus-string-util.lo dbus-sysdeps-util.lo
+am_libdbus_internal_la_OBJECTS = $(am__objects_13)
 libdbus_internal_la_OBJECTS = $(am_libdbus_internal_la_OBJECTS)
-am_test_dbus_OBJECTS = dbus-test-main.$(OBJEXT)
-test_dbus_OBJECTS = $(am_test_dbus_OBJECTS)
-test_dbus_DEPENDENCIES = libdbus-internal.la
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -315,24 +313,16 @@ DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
 am__depfiles_remade = ./$(DEPDIR)/dbus-asv-util.Plo \
-	./$(DEPDIR)/dbus-auth-script.Plo \
-	./$(DEPDIR)/dbus-auth-util.Plo \
-	./$(DEPDIR)/dbus-credentials-util.Plo \
 	./$(DEPDIR)/dbus-init-win.Plo ./$(DEPDIR)/dbus-mainloop.Plo \
-	./$(DEPDIR)/dbus-marshal-byteswap-util.Plo \
-	./$(DEPDIR)/dbus-marshal-recursive-util.Plo \
-	./$(DEPDIR)/dbus-marshal-validate-util.Plo \
-	./$(DEPDIR)/dbus-message-factory.Plo \
-	./$(DEPDIR)/dbus-message-util.Plo ./$(DEPDIR)/dbus-shell.Plo \
-	./$(DEPDIR)/dbus-socket-set-epoll.Plo \
-	./$(DEPDIR)/dbus-socket-set-poll.Plo \
-	./$(DEPDIR)/dbus-socket-set.Plo \
-	./$(DEPDIR)/dbus-spawn-test.Plo ./$(DEPDIR)/dbus-spawn-win.Plo \
-	./$(DEPDIR)/dbus-spawn.Plo ./$(DEPDIR)/dbus-string-util.Plo \
+	./$(DEPDIR)/dbus-message-util.Plo \
+	./$(DEPDIR)/dbus-pollable-set-epoll.Plo \
+	./$(DEPDIR)/dbus-pollable-set-poll.Plo \
+	./$(DEPDIR)/dbus-pollable-set.Plo ./$(DEPDIR)/dbus-shell.Plo \
+	./$(DEPDIR)/dbus-spawn-unix.Plo ./$(DEPDIR)/dbus-spawn-win.Plo \
+	./$(DEPDIR)/dbus-string-util.Plo \
 	./$(DEPDIR)/dbus-sysdeps-util-unix.Plo \
 	./$(DEPDIR)/dbus-sysdeps-util-win.Plo \
 	./$(DEPDIR)/dbus-sysdeps-util.Plo \
-	./$(DEPDIR)/dbus-test-main.Po ./$(DEPDIR)/dbus-test.Plo \
 	./$(DEPDIR)/dbus-userdb-util.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-address.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-auth.Plo \
@@ -380,6 +370,7 @@ am__depfiles_remade = ./$(DEPDIR)/dbus-asv-util.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-win.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-wince-glue.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-sysdeps.Plo \
+	./$(DEPDIR)/libdbus_1_la-dbus-test-tap.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-threads.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-timeout.Plo \
 	./$(DEPDIR)/libdbus_1_la-dbus-transport-socket.Plo \
@@ -427,11 +418,10 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(libdbus_1_la_SOURCES) $(nodist_libdbus_1_la_SOURCES) \
-	$(libdbus_init_win_la_SOURCES) $(libdbus_internal_la_SOURCES) \
-	$(test_dbus_SOURCES)
+	$(libdbus_init_win_la_SOURCES) $(libdbus_internal_la_SOURCES)
 DIST_SOURCES = $(am__libdbus_1_la_SOURCES_DIST) \
 	$(am__libdbus_init_win_la_SOURCES_DIST) \
-	$(am__libdbus_internal_la_SOURCES_DIST) $(test_dbus_SOURCES)
+	$(am__libdbus_internal_la_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -484,7 +474,6 @@ CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
 CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
 CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
 CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
-CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
@@ -498,6 +487,7 @@ DBUS_BINDIR = @DBUS_BINDIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
+DBUS_GENERATE_MAN = @DBUS_GENERATE_MAN@
 DBUS_INT16_TYPE = @DBUS_INT16_TYPE@
 DBUS_INT32_TYPE = @DBUS_INT32_TYPE@
 DBUS_INT64_CONSTANT = @DBUS_INT64_CONSTANT@
@@ -521,12 +511,18 @@ DBUS_TEST_USER = @DBUS_TEST_USER@
 DBUS_UINT64_CONSTANT = @DBUS_UINT64_CONSTANT@
 DBUS_USER = @DBUS_USER@
 DBUS_VERSION = @DBUS_VERSION@
+DBUS_VER_FILE_TYPE = @DBUS_VER_FILE_TYPE@
+DBUS_VER_INTERNAL_NAME = @DBUS_VER_INTERNAL_NAME@
+DBUS_VER_ORIGINAL_NAME = @DBUS_VER_ORIGINAL_NAME@
 DBUS_X_CFLAGS = @DBUS_X_CFLAGS@
 DBUS_X_LIBS = @DBUS_X_LIBS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DLLTOOL = @DLLTOOL@
 DOXYGEN = @DOXYGEN@
+DOXYGEN_GENERATE_QHP = @DOXYGEN_GENERATE_QHP@
+DOXYGEN_QCH_FILE = @DOXYGEN_QCH_FILE@
+DOXYGEN_QHG_LOCATION = @DOXYGEN_QHG_LOCATION@
 DSYMUTIL = @DSYMUTIL@
 DUCKTYPE = @DUCKTYPE@
 DUMPBIN = @DUMPBIN@
@@ -601,14 +597,13 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PYTHON = @PYTHON@
-PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
-PYTHON_PLATFORM = @PYTHON_PLATFORM@
-PYTHON_PREFIX = @PYTHON_PREFIX@
-PYTHON_VERSION = @PYTHON_VERSION@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QHELPGENERATOR = @QHELPGENERATOR@
 RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
+SANITIZE_CFLAGS = @SANITIZE_CFLAGS@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -631,13 +626,10 @@ WARN_CFLAGS = @WARN_CFLAGS@
 WARN_CXXFLAGS = @WARN_CXXFLAGS@
 WARN_LDFLAGS = @WARN_LDFLAGS@
 WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
-XMKMF = @XMKMF@
 XMLTO = @XMLTO@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
-X_EXTRA_LIBS = @X_EXTRA_LIBS@
 X_LIBS = @X_LIBS@
-X_PRE_LIBS = @X_PRE_LIBS@
 YELP_BUILD = @YELP_BUILD@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -685,13 +677,10 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgconfig_prefix = @pkgconfig_prefix@
-pkgpyexecdir = @pkgpyexecdir@
-pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-pyexecdir = @pyexecdir@
-pythondir = @pythondir@
+qchdir = @qchdir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
@@ -712,7 +701,8 @@ AM_CPPFLAGS = $(CODE_COVERAGE_CPPFLAGS) -I$(top_builddir) \
 	-DDBUS_SESSION_CONFIG_FILE=\""$(dbusdatadir)/session.conf"\" \
 	-DDBUS_RUNSTATEDIR=\""$(runstatedir)"\" $(NULL) \
 	$(am__append_2)
-AM_CFLAGS = $(CODE_COVERAGE_CFLAGS) $(NULL) $(am__append_1)
+AM_CFLAGS = $(CODE_COVERAGE_CFLAGS) $(SANITIZE_CFLAGS) $(NULL) \
+	$(am__append_1)
 
 # if assertions are enabled, improve backtraces
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
@@ -769,10 +759,10 @@ nodist_libdbus_1_la_SOURCES = $(am__append_3)
 @DBUS_WIN_TRUE@	dbus-transport-win.h
 
 @DBUS_WIN_FALSE@DBUS_UTIL_arch_sources = dbus-sysdeps-util-unix.c \
-@DBUS_WIN_FALSE@	dbus-userdb-util.c dbus-spawn.c \
-@DBUS_WIN_FALSE@	$(am__append_4)
+@DBUS_WIN_FALSE@	dbus-userdb-util.c $(NULL) $(am__append_5) \
+@DBUS_WIN_FALSE@	$(am__append_6)
 @DBUS_WIN_TRUE@DBUS_UTIL_arch_sources = dbus-sysdeps-util-win.c \
-@DBUS_WIN_TRUE@	dbus-spawn-win.c $(am__append_4)
+@DBUS_WIN_TRUE@	$(am__append_4) $(am__append_5) $(am__append_6)
 @DBUS_ENABLE_LAUNCHD_FALSE@@DBUS_WIN_FALSE@launchd_source = 
 @DBUS_ENABLE_LAUNCHD_TRUE@@DBUS_WIN_FALSE@launchd_source = dbus-server-launchd.h dbus-server-launchd.c
 dbusinclude_HEADERS = \
@@ -860,47 +850,38 @@ DBUS_LIB_SOURCES = \
 ### AND is generic utility functionality used by the
 ### daemon or test programs (all symbols in here should
 ### be underscore-prefixed)
-DBUS_SHARED_SOURCES = \
-	dbus-dataslot.c				\
-	dbus-dataslot.h				\
-	dbus-file.c                 \
-	dbus-file.h                 \
-	dbus-hash.c				\
-	dbus-hash.h				\
-	dbus-internals.c			\
-	dbus-internals.h			\
-	dbus-list.c				\
-	dbus-list.h				\
-	dbus-marshal-basic.c			\
-	dbus-marshal-basic.h			\
-	dbus-memory.c				\
-	dbus-mempool.c				\
-	dbus-mempool.h				\
-	dbus-pipe.c                 \
-	dbus-pipe.h                 \
-	dbus-string.c				\
-	dbus-string.h				\
-	dbus-string-private.h			\
-	$(DBUS_SHARED_arch_sources)		\
-	dbus-sysdeps.c				\
-	dbus-sysdeps.h				\
-	dbus-valgrind-internal.h
-
+DBUS_SHARED_SOURCES = dbus-dataslot.c dbus-dataslot.h dbus-file.c \
+	dbus-file.h dbus-hash.c dbus-hash.h dbus-internals.c \
+	dbus-internals.h dbus-list.c dbus-list.h dbus-marshal-basic.c \
+	dbus-marshal-basic.h dbus-memory.c dbus-mempool.c \
+	dbus-mempool.h dbus-pipe.c dbus-pipe.h dbus-string.c \
+	dbus-string.h dbus-string-private.h \
+	$(DBUS_SHARED_arch_sources) dbus-sysdeps.c dbus-sysdeps.h \
+	dbus-valgrind-internal.h $(am__append_7)
+# else they are included in the test library instead
 
 ### source code that is generic utility functionality used
 ### by the bus daemon or test apps, but is NOT included
 ### in the D-Bus client library (all symbols in here
 ### should be underscore-prefixed but don't really need
 ### to be unless they move to DBUS_SHARED_SOURCES later)
-DBUS_UTIL_SOURCES = dbus-asv-util.c dbus-asv-util.h dbus-auth-script.c \
-	dbus-auth-script.h dbus-auth-util.c dbus-credentials-util.c \
-	dbus-mainloop.c dbus-mainloop.h dbus-marshal-byteswap-util.c \
-	dbus-marshal-recursive-util.c dbus-marshal-validate-util.c \
-	dbus-message-factory.c dbus-message-factory.h \
-	dbus-message-util.c dbus-shell.c dbus-shell.h \
-	$(DBUS_UTIL_arch_sources) dbus-socket-set.h dbus-socket-set.c \
-	dbus-socket-set-poll.c dbus-spawn.h dbus-string-util.c \
-	dbus-sysdeps-util.c dbus-test.c dbus-test.h $(am__append_5)
+DBUS_UTIL_SOURCES = \
+	dbus-asv-util.c				\
+	dbus-asv-util.h				\
+	dbus-mainloop.c				\
+	dbus-mainloop.h				\
+	dbus-message-util.c			\
+	dbus-shell.c				\
+	dbus-shell.h				\
+	$(DBUS_UTIL_arch_sources)		\
+	dbus-pollable-set.h			\
+	dbus-pollable-set.c			\
+	dbus-pollable-set-poll.c			\
+	dbus-spawn.h				\
+	dbus-string-util.c			\
+	dbus-sysdeps-util.c			\
+	dbus-test.h
+
 libdbus_1_la_SOURCES = \
 	$(DBUS_LIB_SOURCES)			\
 	$(DBUS_SHARED_SOURCES)
@@ -910,7 +891,7 @@ libdbus_internal_la_SOURCES = \
 
 BUILT_SOURCES = $(nodist_dbusarchinclude_HEADERS)
 EXTRA_DIST = dbus-arch-deps.h.in
-noinst_LTLIBRARIES = libdbus-internal.la $(am__append_6)
+noinst_LTLIBRARIES = libdbus-internal.la $(am__append_8)
 libdbus_1_la_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-Ddbus_1_EXPORTS \
@@ -918,7 +899,8 @@ libdbus_1_la_CPPFLAGS = \
 
 @HAVE_LD_VERSION_SCRIPT_FALSE@SYMBOL_EXPORT_LDFLAGS = 
 @HAVE_LD_VERSION_SCRIPT_TRUE@SYMBOL_EXPORT_LDFLAGS = -Wl,--version-script=Version
-libdbus_1_la_LIBADD = $(LIBDBUS_LIBS) $(am__append_7)
+libdbus_1_la_LIBADD = $(CODE_COVERAGE_LIBS) $(LIBDBUS_LIBS) $(NULL) \
+	$(am__append_9)
 libdbus_1_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
@@ -926,16 +908,17 @@ libdbus_1_la_LDFLAGS = \
 	-no-undefined \
 	$(NULL)
 
-libdbus_internal_la_LIBADD = $(LIBDBUS_LIBS) libdbus-1.la
+libdbus_internal_la_LIBADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(LIBDBUS_LIBS) \
+	libdbus-1.la \
+	$(NULL)
+
 @DBUS_WIN_TRUE@AM_CXXFLAGS = \
 @DBUS_WIN_TRUE@	$(CODE_COVERAGE_CXXFLAGS) \
 @DBUS_WIN_TRUE@	$(NULL)
 
 @DBUS_WIN_TRUE@libdbus_init_win_la_SOURCES = dbus-init-win.cpp
-test_dbus_SOURCES = \
-	dbus-test-main.c
-
-test_dbus_LDADD = libdbus-internal.la
 @CODE_COVERAGE_ENABLED_TRUE@GITIGNOREFILES = $(GITIGNOREFILES) $(CODE_COVERAGE_OUTPUT_FILE) $(CODE_COVERAGE_OUTPUT_DIRECTORY)
 @CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap = $(code_coverage_v_lcov_cap_$(V))
 @CODE_COVERAGE_ENABLED_TRUE@code_coverage_v_lcov_cap_ = $(code_coverage_v_lcov_cap_$(AM_DEFAULT_VERBOSITY))
@@ -967,9 +950,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am $(top_srcdir
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu dbus/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign dbus/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu dbus/Makefile
+	  $(AUTOMAKE) --foreign dbus/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -1059,10 +1042,6 @@ libdbus-init-win.la: $(libdbus_init_win_la_OBJECTS) $(libdbus_init_win_la_DEPEND
 libdbus-internal.la: $(libdbus_internal_la_OBJECTS) $(libdbus_internal_la_DEPENDENCIES) $(EXTRA_libdbus_internal_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libdbus_internal_la_OBJECTS) $(libdbus_internal_la_LIBADD) $(LIBS)
 
-test-dbus$(EXEEXT): $(test_dbus_OBJECTS) $(test_dbus_DEPENDENCIES) $(EXTRA_test_dbus_DEPENDENCIES) 
-	@rm -f test-dbus$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(test_dbus_OBJECTS) $(test_dbus_LDADD) $(LIBS)
-
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -1070,29 +1049,19 @@ distclean-compile:
 	-rm -f *.tab.c
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-asv-util.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-auth-script.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-auth-util.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-credentials-util.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-init-win.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-mainloop.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-marshal-byteswap-util.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-marshal-recursive-util.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-marshal-validate-util.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-message-factory.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-message-util.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-pollable-set-epoll.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-pollable-set-poll.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-pollable-set.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-shell.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-socket-set-epoll.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-socket-set-poll.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-socket-set.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-spawn-test.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-spawn-unix.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-spawn-win.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-spawn.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-string-util.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-sysdeps-util-unix.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-sysdeps-util-win.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-sysdeps-util.Plo@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-test-main.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-test.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-userdb-util.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-address.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-auth.Plo@am__quote@ # am--include-marker
@@ -1140,6 +1109,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-win.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-wince-glue.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-sysdeps.Plo@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-test-tap.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-threads.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-timeout.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/libdbus_1_la-dbus-transport-socket.Plo@am__quote@ # am--include-marker
@@ -1565,6 +1535,13 @@ libdbus_1_la-dbus-sysdeps.lo: dbus-sysdeps.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libdbus_1_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libdbus_1_la-dbus-sysdeps.lo `test -f 'dbus-sysdeps.c' || echo '$(srcdir)/'`dbus-sysdeps.c
 
+libdbus_1_la-dbus-test-tap.lo: dbus-test-tap.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libdbus_1_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -MT libdbus_1_la-dbus-test-tap.lo -MD -MP -MF $(DEPDIR)/libdbus_1_la-dbus-test-tap.Tpo -c -o libdbus_1_la-dbus-test-tap.lo `test -f 'dbus-test-tap.c' || echo '$(srcdir)/'`dbus-test-tap.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/libdbus_1_la-dbus-test-tap.Tpo $(DEPDIR)/libdbus_1_la-dbus-test-tap.Plo
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='dbus-test-tap.c' object='libdbus_1_la-dbus-test-tap.lo' libtool=yes @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) $(LIBTOOLFLAGS) --mode=compile $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(libdbus_1_la_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o libdbus_1_la-dbus-test-tap.lo `test -f 'dbus-test-tap.c' || echo '$(srcdir)/'`dbus-test-tap.c
+
 .cpp.o:
 @am__fastdepCXX_TRUE@	$(AM_V_CXX)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
 @am__fastdepCXX_TRUE@	$(CXXCOMPILE) -MT $@ -MD -MP -MF $$depbase.Tpo -c -o $@ $< &&\
@@ -1769,29 +1746,19 @@ clean-am: clean-generic clean-libLTLIBRARIES clean-libtool clean-local \
 
 distclean: distclean-am
 		-rm -f ./$(DEPDIR)/dbus-asv-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-auth-script.Plo
-	-rm -f ./$(DEPDIR)/dbus-auth-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-credentials-util.Plo
 	-rm -f ./$(DEPDIR)/dbus-init-win.Plo
 	-rm -f ./$(DEPDIR)/dbus-mainloop.Plo
-	-rm -f ./$(DEPDIR)/dbus-marshal-byteswap-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-marshal-recursive-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-marshal-validate-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-message-factory.Plo
 	-rm -f ./$(DEPDIR)/dbus-message-util.Plo
+	-rm -f ./$(DEPDIR)/dbus-pollable-set-epoll.Plo
+	-rm -f ./$(DEPDIR)/dbus-pollable-set-poll.Plo
+	-rm -f ./$(DEPDIR)/dbus-pollable-set.Plo
 	-rm -f ./$(DEPDIR)/dbus-shell.Plo
-	-rm -f ./$(DEPDIR)/dbus-socket-set-epoll.Plo
-	-rm -f ./$(DEPDIR)/dbus-socket-set-poll.Plo
-	-rm -f ./$(DEPDIR)/dbus-socket-set.Plo
-	-rm -f ./$(DEPDIR)/dbus-spawn-test.Plo
+	-rm -f ./$(DEPDIR)/dbus-spawn-unix.Plo
 	-rm -f ./$(DEPDIR)/dbus-spawn-win.Plo
-	-rm -f ./$(DEPDIR)/dbus-spawn.Plo
 	-rm -f ./$(DEPDIR)/dbus-string-util.Plo
 	-rm -f ./$(DEPDIR)/dbus-sysdeps-util-unix.Plo
 	-rm -f ./$(DEPDIR)/dbus-sysdeps-util-win.Plo
 	-rm -f ./$(DEPDIR)/dbus-sysdeps-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-test-main.Po
-	-rm -f ./$(DEPDIR)/dbus-test.Plo
 	-rm -f ./$(DEPDIR)/dbus-userdb-util.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-address.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-auth.Plo
@@ -1839,6 +1806,7 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-win.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-wince-glue.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-sysdeps.Plo
+	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-test-tap.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-threads.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-timeout.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-transport-socket.Plo
@@ -1895,29 +1863,19 @@ installcheck-am:
 
 maintainer-clean: maintainer-clean-am
 		-rm -f ./$(DEPDIR)/dbus-asv-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-auth-script.Plo
-	-rm -f ./$(DEPDIR)/dbus-auth-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-credentials-util.Plo
 	-rm -f ./$(DEPDIR)/dbus-init-win.Plo
 	-rm -f ./$(DEPDIR)/dbus-mainloop.Plo
-	-rm -f ./$(DEPDIR)/dbus-marshal-byteswap-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-marshal-recursive-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-marshal-validate-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-message-factory.Plo
 	-rm -f ./$(DEPDIR)/dbus-message-util.Plo
+	-rm -f ./$(DEPDIR)/dbus-pollable-set-epoll.Plo
+	-rm -f ./$(DEPDIR)/dbus-pollable-set-poll.Plo
+	-rm -f ./$(DEPDIR)/dbus-pollable-set.Plo
 	-rm -f ./$(DEPDIR)/dbus-shell.Plo
-	-rm -f ./$(DEPDIR)/dbus-socket-set-epoll.Plo
-	-rm -f ./$(DEPDIR)/dbus-socket-set-poll.Plo
-	-rm -f ./$(DEPDIR)/dbus-socket-set.Plo
-	-rm -f ./$(DEPDIR)/dbus-spawn-test.Plo
+	-rm -f ./$(DEPDIR)/dbus-spawn-unix.Plo
 	-rm -f ./$(DEPDIR)/dbus-spawn-win.Plo
-	-rm -f ./$(DEPDIR)/dbus-spawn.Plo
 	-rm -f ./$(DEPDIR)/dbus-string-util.Plo
 	-rm -f ./$(DEPDIR)/dbus-sysdeps-util-unix.Plo
 	-rm -f ./$(DEPDIR)/dbus-sysdeps-util-win.Plo
 	-rm -f ./$(DEPDIR)/dbus-sysdeps-util.Plo
-	-rm -f ./$(DEPDIR)/dbus-test-main.Po
-	-rm -f ./$(DEPDIR)/dbus-test.Plo
 	-rm -f ./$(DEPDIR)/dbus-userdb-util.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-address.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-auth.Plo
@@ -1965,6 +1923,7 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-win.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-sysdeps-wince-glue.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-sysdeps.Plo
+	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-test-tap.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-threads.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-timeout.Plo
 	-rm -f ./$(DEPDIR)/libdbus_1_la-dbus-transport-socket.Plo

@@ -325,7 +325,7 @@ teardown (Fixture *f,
 
   if (f->server != NULL)
     {
-      dbus_server_disconnect (f->server);
+      test_server_shutdown (f->ctx, f->server);
       dbus_server_unref (f->server);
       f->server = NULL;
     }
@@ -337,6 +337,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/connect/tcp", Fixture, "tcp:host=127.0.0.1", setup,
@@ -355,5 +357,7 @@ main (int argc,
       test_limit, teardown);
 #endif
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

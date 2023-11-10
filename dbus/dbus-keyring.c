@@ -4,7 +4,7 @@
  * Copyright (C) 2003, 2004  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -27,6 +27,7 @@
 #include <dbus/dbus-string.h>
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-sysdeps.h>
+#include <dbus/dbus-test-tap.h>
 
 /**
  * @defgroup DBusKeyring keyring class
@@ -309,9 +310,7 @@ add_new_key (DBusKey  **keys_p,
 
   s = (const unsigned char*) _dbus_string_get_const_data (&bytes);
       
-  id = s[0] | (s[1] << 8) | (s[2] << 16) | (s[3] << 24);
-  if (id < 0)
-    id = - id;
+  id = s[0] | (s[1] << 8) | (s[2] << 16) | ((s[3] & 0x7f) << 24);
   _dbus_assert (id >= 0);
 
   if (find_key_by_id (keys, n_keys, id) != NULL)
@@ -1024,7 +1023,7 @@ _dbus_keyring_get_hex_key (DBusKeyring       *keyring,
 #include <stdio.h>
 
 dbus_bool_t
-_dbus_keyring_test (void)
+_dbus_keyring_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 {
   DBusString context;
   DBusKeyring *ring1;
@@ -1063,9 +1062,9 @@ _dbus_keyring_test (void)
   _dbus_assert (!_dbus_keyring_validate_context (&context));
   
   if (!_dbus_string_init (&context))
-    _dbus_assert_not_reached ("no memory");
+    _dbus_test_fatal ("no memory");
   if (!_dbus_string_append_byte (&context, '\0'))
-    _dbus_assert_not_reached ("no memory");
+    _dbus_test_fatal ("no memory");
   _dbus_assert (!_dbus_keyring_validate_context (&context));
   _dbus_string_free (&context);
 
@@ -1128,7 +1127,7 @@ _dbus_keyring_test (void)
       ++i;
     }
 
-  printf (" %d keys in test\n", ring1->n_keys);
+  _dbus_test_diag (" %d keys in test", ring1->n_keys);
 
   /* Test ref/unref */
   _dbus_keyring_ref (ring1);

@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003, 2006 Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -26,6 +26,7 @@
 #include "dbus-threads-internal.h"
 #include "dbus-list.h"
 
+/* Protected by _dbus_threads_lock_platform_specific() */
 static int thread_init_generation = 0;
 
 /**
@@ -283,6 +284,7 @@ _dbus_condvar_wake_one (DBusCondVar *cond)
   _dbus_platform_condvar_wake_one (cond);
 }
 
+/* Protected by _dbus_threads_lock_platform_specific() */
 static DBusRMutex *global_locks[_DBUS_N_GLOBAL_LOCKS] = { NULL };
 
 static void
@@ -444,11 +446,5 @@ dbus_threads_init_default (void)
 /** @} */
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
-
-dbus_bool_t
-_dbus_threads_init_debug (void)
-{
-  return dbus_threads_init (NULL);
-}
 
 #endif /* DBUS_ENABLE_EMBEDDED_TESTS */

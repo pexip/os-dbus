@@ -275,6 +275,7 @@ test_corrupt (Fixture *f,
    * fd, whereas DBusLoop + DBusSocketSetEpoll doesn't. On Unix
    * we could use dup() but that isn't portable to Windows :-(
    */
+  test_connection_shutdown (f->ctx, f->server_conn);
   dbus_connection_close (f->server_conn);
   dbus_connection_unref (f->server_conn);
   f->server_conn = NULL;
@@ -362,6 +363,7 @@ test_byte_order (Fixture *f,
   dbus_message_unref (message);
 
   /* Free the DBusConnection before the GSocket, as above. */
+  test_connection_shutdown (f->ctx, f->server_conn);
   dbus_connection_close (f->server_conn);
   dbus_connection_unref (f->server_conn);
   f->server_conn = NULL;
@@ -391,7 +393,7 @@ teardown (Fixture *f,
 
   if (f->server != NULL)
     {
-      dbus_server_disconnect (f->server);
+      test_server_shutdown (f->ctx, f->server);
       dbus_server_unref (f->server);
       f->server = NULL;
     }
@@ -403,6 +405,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/corrupt/tcp", Fixture, "tcp:host=127.0.0.1", setup,
@@ -421,5 +425,7 @@ main (int argc,
       test_byte_order, teardown);
 #endif
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

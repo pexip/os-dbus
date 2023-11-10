@@ -1,8 +1,9 @@
 /* Integration tests for the dbus-daemon
  *
  * Author: Simon McVittie <simon.mcvittie@collabora.co.uk>
+ * Copyright © 2008 Red Hat, Inc.
  * Copyright © 2010-2011 Nokia Corporation
- * Copyright © 2015 Collabora Ltd.
+ * Copyright © 2015-2018 Collabora Ltd.
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -44,6 +45,8 @@
 #ifdef DBUS_UNIX
 # include <pwd.h>
 # include <unistd.h>
+# include <stdlib.h>
+# include <search.h>
 # include <sys/types.h>
 
 # ifdef HAVE_GIO_UNIX
@@ -97,12 +100,15 @@ typedef struct {
     gchar *address;
 
     DBusConnection *left_conn;
+    gboolean left_conn_shouted_signal_filter;
 
     DBusConnection *right_conn;
     GQueue held_messages;
     gboolean right_conn_echo;
     gboolean right_conn_hold;
     gboolean wait_forever_called;
+    guint activation_forking_counter;
+    guint signal_counter;
 
     gchar *tmp_runtime_dir;
     gchar *saved_runtime_dir;
@@ -152,6 +158,19 @@ hold_filter (DBusConnection *connection,
   g_queue_push_tail (&f->held_messages, dbus_message_ref (message));
 
   return DBUS_HANDLER_RESULT_HANDLED;
+}
+
+static DBusHandlerResult
+shouted_signal_filter (DBusConnection *connection,
+                       DBusMessage *message,
+                       void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, "com.example", "Shouted"))
+    f->signal_counter++;
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
 typedef struct {
@@ -206,8 +225,7 @@ setup (Fixture *f,
       f->right_conn = dbus_bus_get_private (DBUS_BUS_SESSION, &f->e);
       test_assert_no_error (&f->e);
 
-      if (!test_connection_setup (f->ctx, f->right_conn))
-        g_error ("OOM");
+      test_connection_setup (f->ctx, f->right_conn);
     }
   else
     {
@@ -234,6 +252,31 @@ add_hold_filter (Fixture *f)
 }
 
 static void
+add_shouted_signal_filter (Fixture *f)
+{
+  if (!dbus_connection_add_filter (f->left_conn, shouted_signal_filter, f, NULL))
+    g_error ("OOM");
+
+  f->left_conn_shouted_signal_filter = TRUE;
+}
+
+static void
+right_conn_emit_shouted (Fixture *f)
+{
+  DBusMessage *m;
+
+  m = dbus_message_new_signal ("/", "com.example", "Shouted");
+
+  if (m == NULL)
+    g_error ("OOM");
+
+  if (!dbus_connection_send (f->right_conn, m, NULL))
+    g_error ("OOM");
+
+  dbus_clear_message (&m);
+}
+
+static void
 pc_count (DBusPendingCall *pc,
     void *data)
 {
@@ -254,30 +297,11 @@ pc_enqueue (DBusPendingCall *pc,
 }
 
 static void
-test_echo (Fixture *f,
-    gconstpointer context)
+echo_left_to_right (Fixture *f,
+                    guint count)
 {
-  const Config *config = context;
-  guint count = 2000;
   guint sent;
   guint received = 0;
-  double elapsed;
-
-  if (f->skip)
-    return;
-
-  if (config != NULL && config->bug_ref != NULL)
-    g_test_bug (config->bug_ref);
-
-  if (g_test_perf ())
-    count = 100000;
-
-  if (config != NULL)
-    count = MAX (config->min_messages, count);
-
-  add_echo_filter (f);
-
-  g_test_timer_start ();
 
   for (sent = 0; sent < count; sent++)
     {
@@ -306,6 +330,33 @@ test_echo (Fixture *f,
 
   while (received < count)
     test_main_context_iterate (f->ctx, TRUE);
+}
+
+static void
+test_echo (Fixture *f,
+    gconstpointer context)
+{
+  const Config *config = context;
+  guint count = 2000;
+  double elapsed;
+
+  if (f->skip)
+    return;
+
+  if (config != NULL && config->bug_ref != NULL)
+    g_test_bug (config->bug_ref);
+
+  if (g_test_perf ())
+    count = 100000;
+
+  if (config != NULL)
+    count = MAX (config->min_messages, count);
+
+  add_echo_filter (f);
+
+  g_test_timer_start ();
+
+  echo_left_to_right (f, count);
 
   elapsed = g_test_timer_elapsed ();
 
@@ -343,6 +394,8 @@ test_no_reply (Fixture *f,
   if (m == NULL)
     g_error ("OOM");
 
+  /* Not using test_main_context_call_and_wait() here because we need to
+   * do things with the right connection as a side-effect */
   if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
                                         DBUS_TIMEOUT_INFINITE) ||
       pc == NULL)
@@ -363,6 +416,7 @@ test_no_reply (Fixture *f,
         test_main_context_iterate (f->ctx, TRUE);
 
       dbus_connection_remove_filter (f->right_conn, echo_filter, f);
+      test_connection_shutdown (f->ctx, f->right_conn);
       dbus_connection_close (f->right_conn);
       dbus_clear_connection (&f->right_conn);
     }
@@ -388,6 +442,20 @@ test_no_reply (Fixture *f,
   dbus_clear_message (&reply);
 }
 
+#ifdef G_OS_UNIX
+static int
+gid_cmp (const void *ap, const void *bp)
+{
+  gid_t a = *(const gid_t *)ap;
+  gid_t b = *(const gid_t *)bp;
+  if (a < b)
+    return -1;
+  if (a > b)
+    return 1;
+  return 0;
+}
+#endif
+
 static void
 test_creds (Fixture *f,
     gconstpointer context)
@@ -395,7 +463,7 @@ test_creds (Fixture *f,
   const char *unique = dbus_bus_get_unique_name (f->left_conn);
   DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionCredentials");
-  DBusPendingCall *pc;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   DBusMessageIter pair_iter;
@@ -404,7 +472,8 @@ test_creds (Fixture *f,
       SEEN_UNIX_USER = 1,
       SEEN_PID = 2,
       SEEN_WINDOWS_SID = 4,
-      SEEN_LINUX_SECURITY_LABEL = 8
+      SEEN_LINUX_SECURITY_LABEL = 8,
+      SEEN_UNIX_GROUPS = 16,
   } seen = 0;
 
   if (m == NULL)
@@ -415,25 +484,12 @@ test_creds (Fixture *f,
         DBUS_TYPE_INVALID))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_clear_message (&m);
+  g_assert_cmpstr (dbus_message_get_signature (reply), ==, "a{sv}");
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  g_assert_cmpstr (dbus_message_get_signature (m), ==, "a{sv}");
-
-  dbus_message_iter_init (m, &args_iter);
+  dbus_message_iter_init (reply, &args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
       DBUS_TYPE_ARRAY);
   g_assert_cmpuint (dbus_message_iter_get_element_type (&args_iter), ==,
@@ -465,6 +521,44 @@ test_creds (Fixture *f,
           g_test_message ("%s of this process is %u", name, u32);
           g_assert_cmpuint (u32, ==, geteuid ());
           seen |= SEEN_UNIX_USER;
+#else
+          g_assert_not_reached ();
+#endif
+        }
+      else if (g_strcmp0 (name, "UnixGroupIDs") == 0)
+        {
+#ifdef G_OS_UNIX
+          guint32 *groups;
+          gid_t egid = getegid();
+          gid_t *actual_groups;
+          int len, ret, i;
+          size_t nmemb;
+          DBusMessageIter array_iter;
+
+          g_assert (!(seen & SEEN_UNIX_GROUPS));
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&var_iter), ==,
+              DBUS_TYPE_ARRAY);
+          dbus_message_iter_recurse (&var_iter, &array_iter);
+          g_assert_cmpuint (dbus_message_iter_get_arg_type (&array_iter), ==,
+              DBUS_TYPE_UINT32);
+          dbus_message_iter_get_fixed_array (&array_iter, &groups, &len);
+          g_test_message ("%s of this process present (%d groups)", name, len);
+          g_assert_cmpint (len, >=, 1);
+
+          actual_groups = g_new0 (gid_t, len+1);
+          ret = getgroups (len, actual_groups);
+          if (ret < 0)
+            g_error ("getgroups: %s", g_strerror (errno));
+          nmemb = ret;
+          if (!lfind (&egid, actual_groups, &nmemb, sizeof (gid_t), gid_cmp))
+            actual_groups[ret++] = egid;
+          g_assert_cmpint (ret, ==, len);
+          qsort (actual_groups, len, sizeof (gid_t), gid_cmp);
+          for (i = 0; i < len; i++)
+            g_assert_true (groups[i] == actual_groups[i]);
+          g_free (actual_groups);
+
+          seen |= SEEN_UNIX_GROUPS;
 #else
           g_assert_not_reached ();
 #endif
@@ -525,6 +619,19 @@ test_creds (Fixture *f,
           g_test_message ("%s of this process is %s", name, label);
           g_assert_cmpuint (strlen (label) + 1, ==, len);
           seen |= SEEN_LINUX_SECURITY_LABEL;
+
+          /*
+           * At this point we would like to do something like:
+           *
+           * g_assert_cmpstr (label, ==, real_security_label);
+           *
+           * but there is no LSM-agnostic way to find out our real security
+           * label in a way that matches SO_PEERSEC. The closest thing
+           * available is reading /proc/self/attr/current, but that is only
+           * equal to SO_PEERSEC after applying LSM-specific
+           * canonicalization (for example for AppArmor you have to remove
+           * a trailing newline from /proc/self/attr/current).
+           */
 #else
           g_assert_not_reached ();
 #endif
@@ -545,8 +652,8 @@ test_creds (Fixture *f,
   g_assert (seen & SEEN_WINDOWS_SID);
 #endif
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -556,7 +663,7 @@ test_processid (Fixture *f,
   const char *unique = dbus_bus_get_unique_name (f->left_conn);
   DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "GetConnectionUnixProcessID");
-  DBusPendingCall *pc;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   guint32 pid;
 
@@ -568,23 +675,10 @@ test_processid (Fixture *f,
         DBUS_TYPE_INVALID))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_clear_message (&m);
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (dbus_set_error_from_message (&error, m))
+  if (dbus_set_error_from_message (&error, reply))
     {
       g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNIX_PROCESS_ID_UNKNOWN);
 
@@ -595,11 +689,11 @@ test_processid (Fixture *f,
 
       dbus_error_free (&error);
     }
-  else if (dbus_message_get_args (m, &error,
+  else if (dbus_message_get_args (reply, &error,
         DBUS_TYPE_UINT32, &pid,
         DBUS_TYPE_INVALID))
     {
-      g_assert_cmpstr (dbus_message_get_signature (m), ==, "u");
+      g_assert_cmpstr (dbus_message_get_signature (reply), ==, "u");
       test_assert_no_error (&error);
 
       g_test_message ("GetConnectionUnixProcessID returned %u", pid);
@@ -617,8 +711,8 @@ test_processid (Fixture *f,
       g_error ("Unexpected error: %s: %s", error.name, error.message);
     }
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -627,7 +721,7 @@ test_canonical_path_uae (Fixture *f,
 {
   DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_DBUS, "UpdateActivationEnvironment");
-  DBusPendingCall *pc;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
 
@@ -642,28 +736,15 @@ test_canonical_path_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  dbus_clear_message (&m);
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   /* it succeeds */
-  g_assert_cmpint (dbus_message_get_type (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==,
       DBUS_MESSAGE_TYPE_METHOD_RETURN);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 
   /* Now try with the wrong object path */
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
@@ -680,31 +761,23 @@ test_canonical_path_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  dbus_clear_message (&m);
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   /* it fails, yielding an error message with one string argument */
-  g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-  g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+  g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+  g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
       DBUS_ERROR_ACCESS_DENIED);
-  g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+  g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
+
+static Config max_connections_per_user_config = {
+    NULL, 1, "valid-config-files/max-connections-per-user.conf",
+    TEST_USER_ME, SPECIFY_ADDRESS
+};
 
 static void
 test_max_connections (Fixture *f,
@@ -713,9 +786,26 @@ test_max_connections (Fixture *f,
   DBusError error = DBUS_ERROR_INIT;
   DBusConnection *third_conn;
   DBusConnection *failing_conn;
+#ifdef DBUS_WIN
+  const Config *config = context;
+#endif
 
   if (f->skip)
     return;
+
+#ifdef DBUS_WIN
+  if (config == &max_connections_per_user_config)
+    {
+      /* <limit name="max_connections_per_user"/> is currently only
+       * implemented in terms of Unix uids. It could be implemented for
+       * Windows SIDs too, but there wouldn't be much point, because we
+       * don't support use of a multi-user dbus-daemon on Windows, so
+       * in practice all connections have the same SID. */
+      g_test_skip ("Maximum connections per Windows SID are not "
+                   "implemented");
+      return;
+    }
+#endif
 
   /* We have two connections already */
   g_assert (f->left_conn != NULL);
@@ -743,8 +833,10 @@ test_max_connections (Fixture *f,
     dbus_connection_close (failing_conn);
 
   dbus_clear_connection (&failing_conn);
+  test_connection_shutdown (f->ctx, third_conn);
   dbus_connection_close (third_conn);
   dbus_clear_connection (&third_conn);
+  dbus_error_free (&error);
 }
 
 static void
@@ -1207,7 +1299,7 @@ test_peer_get_machine_id (Fixture *f,
   char *what_i_think;
   const char *what_daemon_thinks;
   DBusMessage *m = NULL;
-  DBusPendingCall *pc = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
 
   if (f->skip)
@@ -1222,6 +1314,7 @@ test_peer_get_machine_id (Fixture *f,
           /* When running unit tests during make check or make installcheck,
            * tolerate this */
           g_test_skip ("Machine UUID not available");
+          dbus_error_free (&error);
           return;
         }
       else
@@ -1237,24 +1330,13 @@ test_peer_get_machine_id (Fixture *f,
                                     DBUS_INTERFACE_PEER,
                                     "GetMachineId");
 
-  if (m == NULL ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  if (m == NULL)
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_message_get_args (m, &error,
+  if (!dbus_message_get_args (reply, &error,
         DBUS_TYPE_STRING, &what_daemon_thinks,
         DBUS_TYPE_INVALID))
     g_error ("%s: %s", error.name, error.message);
@@ -1263,8 +1345,8 @@ test_peer_get_machine_id (Fixture *f,
   g_assert_nonnull (what_daemon_thinks);
   g_assert_cmpuint (strlen (what_daemon_thinks), ==, 32);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
   dbus_free (what_i_think);
 }
 
@@ -1272,9 +1354,8 @@ static void
 test_peer_ping (Fixture *f,
                 gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PEER, "Ping");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
 
   if (f->skip)
@@ -1283,37 +1364,25 @@ test_peer_ping (Fixture *f,
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
       DBUS_PATH_DBUS, DBUS_INTERFACE_PEER, "Ping");
 
-  if (m == NULL ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+  if (m == NULL)
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_message_get_args (m, &error, DBUS_TYPE_INVALID))
+  if (!dbus_message_get_args (reply, &error, DBUS_TYPE_INVALID))
     g_error ("%s: %s", error.name, error.message);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_get_invalid_path (Fixture *f,
                        gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      "/", DBUS_INTERFACE_PROPERTIES, "Get");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Interfaces";
@@ -1321,45 +1390,36 @@ test_get_invalid_path (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, "/",
+      DBUS_INTERFACE_PROPERTIES, "Get");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &property,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   /* That object path does not have that interface */
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_get_invalid_iface (Fixture *f,
                         gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
   const char *property = "Whatever";
@@ -1367,44 +1427,35 @@ test_get_invalid_iface (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &property,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_get_invalid (Fixture *f,
                   gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Whatever";
@@ -1412,131 +1463,104 @@ test_get_invalid (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &property,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_PROPERTY);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_get_all_invalid_iface (Fixture *f,
                             gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
 
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_get_all_invalid_path (Fixture *f,
                            gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      "/", DBUS_INTERFACE_PROPERTIES, "GetAll");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
 
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      "/", DBUS_INTERFACE_PROPERTIES, "GetAll");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   /* That object path does not have that interface */
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_set_invalid_iface (Fixture *f,
                         gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = "com.example.Nope";
   const char *property = "Whatever";
@@ -1546,6 +1570,9 @@ test_set_invalid_iface (Fixture *f,
 
   if (f->skip)
     return;
+
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
 
   if (m == NULL ||
       !dbus_message_append_args (m,
@@ -1559,40 +1586,28 @@ test_set_invalid_iface (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_set_invalid_path (Fixture *f,
                        gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      "/", DBUS_INTERFACE_PROPERTIES, "Set");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Interfaces";
@@ -1603,6 +1618,9 @@ test_set_invalid_path (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      "/", DBUS_INTERFACE_PROPERTIES, "Set");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
@@ -1615,40 +1633,28 @@ test_set_invalid_path (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_INTERFACE);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_set_invalid (Fixture *f,
                   gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Whatever";
@@ -1659,6 +1665,9 @@ test_set_invalid (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
@@ -1671,40 +1680,28 @@ test_set_invalid (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_UNKNOWN_PROPERTY);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_set (Fixture *f,
           gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusError error = DBUS_ERROR_INIT;
   const char *iface = DBUS_INTERFACE_DBUS;
   const char *property = "Features";
@@ -1715,6 +1712,9 @@ test_set (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Set");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
@@ -1727,31 +1727,20 @@ test_set (Fixture *f,
   if (!dbus_message_iter_open_container (&args_iter,
         DBUS_TYPE_VARIANT, "b", &var_iter) ||
       !dbus_message_iter_append_basic (&var_iter, DBUS_TYPE_BOOLEAN, &b) ||
-      !dbus_message_iter_close_container (&args_iter, &var_iter) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+      !dbus_message_iter_close_container (&args_iter, &var_iter))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_set_error_from_message (&error, m))
+  if (!dbus_set_error_from_message (&error, reply))
     g_error ("Unexpected success");
 
   g_assert_cmpstr (error.name, ==, DBUS_ERROR_PROPERTY_READ_ONLY);
   dbus_error_free (&error);
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1759,6 +1748,7 @@ check_features (DBusMessageIter *var_iter)
 {
   DBusMessageIter arr_iter;
   gboolean have_systemd_activation = FALSE;
+  gboolean have_header_filtering = FALSE;
 
   g_assert_cmpint (dbus_message_iter_get_arg_type (var_iter), ==,
       DBUS_TYPE_ARRAY);
@@ -1776,12 +1766,15 @@ check_features (DBusMessageIter *var_iter)
 
       g_test_message ("Feature: %s", feature);
 
-      if (g_strcmp0 (feature, "SystemdActivation") == 0)
+      if (g_strcmp0 (feature, "HeaderFiltering") == 0)
+        have_header_filtering = TRUE;
+      else if (g_strcmp0 (feature, "SystemdActivation") == 0)
         have_systemd_activation = TRUE;
 
       dbus_message_iter_next (&arr_iter);
     }
 
+  g_assert_true (have_header_filtering);
   /* We pass --systemd-activation to the daemon for this unit test on Unix
    * (it can only work in practice on Linux, but there's nothing
    * inherently Linux-specific about the protocol). */
@@ -1796,9 +1789,8 @@ static void
 test_features (Fixture *f,
                gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter var_iter;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1807,28 +1799,20 @@ test_features (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &features,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_message_iter_init (m, &args_iter))
+  if (!dbus_message_iter_init (reply, &args_iter))
     g_error ("Reply has no arguments");
 
   g_assert_cmpint (dbus_message_iter_get_arg_type (&args_iter), ==,
@@ -1840,8 +1824,8 @@ test_features (Fixture *f,
   if (dbus_message_iter_next (&args_iter))
     g_error ("Reply has too many arguments");
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
@@ -1901,9 +1885,8 @@ static void
 test_interfaces (Fixture *f,
                  gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter var_iter;
   const char *iface = DBUS_INTERFACE_DBUS;
@@ -1912,28 +1895,20 @@ test_interfaces (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "Get");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
         DBUS_TYPE_STRING, &ifaces,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  if (!dbus_message_iter_init (m, &args_iter))
+  if (!dbus_message_iter_init (reply, &args_iter))
     g_error ("Reply has no arguments");
 
   if (dbus_message_iter_get_arg_type (&args_iter) != DBUS_TYPE_VARIANT)
@@ -1945,17 +1920,16 @@ test_interfaces (Fixture *f,
   if (dbus_message_iter_next (&args_iter))
     g_error ("Reply has too many arguments");
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 static void
 test_get_all (Fixture *f,
               gconstpointer context)
 {
-  DBusMessage *m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
-      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
-  DBusPendingCall *pc = NULL;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   DBusMessageIter pair_iter;
@@ -1967,27 +1941,19 @@ test_get_all (Fixture *f,
   if (f->skip)
     return;
 
+  m = dbus_message_new_method_call (DBUS_SERVICE_DBUS,
+      DBUS_PATH_DBUS, DBUS_INTERFACE_PROPERTIES, "GetAll");
+
   if (m == NULL ||
       !dbus_message_append_args (m,
         DBUS_TYPE_STRING, &iface,
-        DBUS_TYPE_INVALID) ||
-      !dbus_connection_send_with_reply (f->left_conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
+        DBUS_TYPE_INVALID))
+    test_oom ();
 
-  dbus_clear_message (&m);
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  dbus_message_iter_init (m, &args_iter);
+  dbus_message_iter_init (reply, &args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
       DBUS_TYPE_ARRAY);
   g_assert_cmpuint (dbus_message_iter_get_element_type (&args_iter), ==,
@@ -2027,8 +1993,8 @@ test_get_all (Fixture *f,
   if (dbus_message_iter_next (&args_iter))
     g_error ("Reply has too many arguments");
 
+  dbus_clear_message (&reply);
   dbus_clear_message (&m);
-  dbus_clear_pending_call (&pc);
 }
 
 #define DESIRED_RLIMIT 65536
@@ -2120,7 +2086,489 @@ test_fd_limit (Fixture *f,
 
 #endif /* !HAVE_PRLIMIT */
 }
+
+#define ECHO_SERVICE "org.freedesktop.DBus.TestSuiteEchoService"
+#define FORKING_ECHO_SERVICE "org.freedesktop.DBus.TestSuiteForkingEchoService"
+#define ECHO_SERVICE_PATH "/org/freedesktop/TestSuite"
+#define ECHO_SERVICE_INTERFACE "org.freedesktop.TestSuite"
+
+#ifdef ENABLE_TRADITIONAL_ACTIVATION
+/*
+ * Helper for test_activation_forking: whenever the forking service is
+ * activated, start it again.
+ */
+static DBusHandlerResult
+activation_forking_signal_filter (DBusConnection *connection,
+                                  DBusMessage *message,
+                                  void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, DBUS_INTERFACE_DBUS,
+                              "NameOwnerChanged"))
+    {
+      dbus_bool_t ok;
+      const char *name;
+      const char *old_owner;
+      const char *new_owner;
+
+      ok = dbus_message_get_args (message, &f->e,
+                                  DBUS_TYPE_STRING, &name,
+                                  DBUS_TYPE_STRING, &old_owner,
+                                  DBUS_TYPE_STRING, &new_owner,
+                                  DBUS_TYPE_INVALID);
+      test_assert_no_error (&f->e);
+      g_assert_true (ok);
+
+      g_test_message ("owner of \"%s\": \"%s\" -> \"%s\"",
+                      name, old_owner, new_owner);
+
+      if (g_strcmp0 (name, FORKING_ECHO_SERVICE) != 0)
+        return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+
+      if (f->activation_forking_counter > 10)
+        {
+          g_test_message ("Activated 10 times OK, TestSuiteForkingEchoService pass");
+          return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+        }
+
+      f->activation_forking_counter++;
+
+      if (g_strcmp0 (new_owner, "") == 0)
+        {
+          /* Reactivate it, and tell it to exit immediately. */
+          DBusMessage *echo_call = NULL;
+          DBusMessage *exit_call = NULL;
+          gchar *payload = NULL;
+
+          payload = g_strdup_printf ("counter %u", f->activation_forking_counter);
+          echo_call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                                    ECHO_SERVICE_PATH,
+                                                    ECHO_SERVICE_INTERFACE,
+                                                    "Echo");
+          exit_call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                                    ECHO_SERVICE_PATH,
+                                                    ECHO_SERVICE_INTERFACE,
+                                                    "Exit");
+
+          if (echo_call == NULL ||
+              !dbus_message_append_args (echo_call,
+                                         DBUS_TYPE_STRING, &payload,
+                                         DBUS_TYPE_INVALID) ||
+              exit_call == NULL ||
+              !dbus_connection_send (connection, echo_call, NULL) ||
+              !dbus_connection_send (connection, exit_call, NULL))
+            g_error ("OOM");
+
+          dbus_clear_message (&echo_call);
+          dbus_clear_message (&exit_call);
+          g_free (payload);
+        }
+    }
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
+/*
+ * Assert that Unix services are allowed to daemonize, and this does not
+ * cause us to signal an activation failure.
+ */
+static void
+test_activation_forking (Fixture *f,
+                         gconstpointer context G_GNUC_UNUSED)
+{
+  DBusMessage *call = NULL;
+  DBusMessage *reply = NULL;
+  const char *hello = "hello world";
+
+  if (f->skip)
+    return;
+
+  if (!dbus_connection_add_filter (f->left_conn,
+                                   activation_forking_signal_filter,
+                                   f, NULL))
+    g_error ("OOM");
+
+  /* Start it up */
+  call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                       ECHO_SERVICE_PATH,
+                                       ECHO_SERVICE_INTERFACE,
+                                       "Echo");
+
+  if (call == NULL ||
+      !dbus_message_append_args (call,
+                                 DBUS_TYPE_STRING, &hello,
+                                 DBUS_TYPE_INVALID))
+    g_error ("OOM");
+
+  dbus_bus_add_match (f->left_conn,
+                      "sender='org.freedesktop.DBus'",
+                      &f->e);
+  test_assert_no_error (&f->e);
+
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, call,
+                                           DBUS_TIMEOUT_USE_DEFAULT);
+  dbus_clear_message (&call);
+  g_test_message ("TestSuiteForkingEchoService initial reply OK");
+  dbus_clear_message (&reply);
+
+  /* Now monitor for exits: when that happens, start it up again.
+   * The goal here is to try to hit any race conditions in activation. */
+  f->activation_forking_counter = 0;
+
+  call = dbus_message_new_method_call (FORKING_ECHO_SERVICE,
+                                       ECHO_SERVICE_PATH,
+                                       ECHO_SERVICE_INTERFACE,
+                                       "Exit");
+
+  if (call == NULL || !dbus_connection_send (f->left_conn, call, NULL))
+    g_error ("OOM");
+
+  dbus_clear_message (&call);
+
+  while (f->activation_forking_counter <= 10)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  dbus_connection_remove_filter (f->left_conn,
+                                 activation_forking_signal_filter, f);
+}
+
+/*
+ * Helper for test_system_signals: Receive Foo signals and add them to
+ * the held_messages queue.
+ */
+static DBusHandlerResult
+foo_signal_filter (DBusConnection *connection,
+                   DBusMessage *message,
+                   void *user_data)
+{
+  Fixture *f = user_data;
+
+  if (dbus_message_is_signal (message, ECHO_SERVICE_INTERFACE, "Foo"))
+    g_queue_push_tail (&f->held_messages, dbus_message_ref (message));
+
+  return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
+}
+
+/*
+ * Assert that the system bus(-like) configuration allows services
+ * to emit signals, even if there is no service-specific configuration
+ * to allow it.
+ *
+ * Essentially equivalent to the old test/name-test/test-wait-for-echo.py.
+ */
+static void
+test_system_signals (Fixture *f,
+                     gconstpointer context G_GNUC_UNUSED)
+{
+  DBusMessage *call = NULL;
+  DBusMessage *response = NULL;
+
+  g_test_bug ("18229");
+
+  if (f->skip)
+    return;
+
+  if (!dbus_connection_add_filter (f->left_conn, foo_signal_filter,
+                                   f, NULL))
+    g_error ("OOM");
+
+  dbus_bus_add_match (f->left_conn,
+                      "interface='" ECHO_SERVICE_INTERFACE "'",
+                      &f->e);
+  test_assert_no_error (&f->e);
+
+  call = dbus_message_new_method_call (ECHO_SERVICE,
+                                       ECHO_SERVICE_PATH,
+                                       ECHO_SERVICE_INTERFACE,
+                                       "EmitFoo");
+
+  if (call == NULL || !dbus_connection_send (f->left_conn, call, NULL))
+    g_error ("OOM");
+
+  dbus_clear_message (&call);
+
+  while (g_queue_get_length (&f->held_messages) < 1)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  g_test_message ("got signal");
+  g_assert_cmpuint (g_queue_get_length (&f->held_messages), ==, 1);
+  response = g_queue_pop_head (&f->held_messages);
+  g_assert_cmpint (dbus_message_get_type (response), ==,
+                   DBUS_MESSAGE_TYPE_SIGNAL);
+  g_assert_cmpstr (dbus_message_get_interface (response), ==,
+                   ECHO_SERVICE_INTERFACE);
+  g_assert_cmpstr (dbus_message_get_path (response), ==,
+                   ECHO_SERVICE_PATH);
+  g_assert_cmpstr (dbus_message_get_signature (response), ==, "d");
+  g_assert_cmpstr (dbus_message_get_member (response), ==, "Foo");
+  dbus_clear_message (&response);
+
+  dbus_connection_remove_filter (f->left_conn, foo_signal_filter, f);
+}
 #endif
+#endif
+
+static void
+take_well_known_name (DBusConnection *conn,
+                      const char *name,
+                      DBusError *error,
+                      int ownership_type)
+{
+  int ret = dbus_bus_request_name (conn, name, 0, error);
+  test_assert_no_error (error);
+  g_assert_cmpint (ret, ==, ownership_type);
+}
+
+static void
+drop_well_known_name (DBusConnection *conn,
+                      const char *name,
+                      DBusError *error)
+{
+  int ret = dbus_bus_release_name (conn, name, error);
+  test_assert_no_error (error);
+  g_assert_cmpint (ret, ==, DBUS_RELEASE_NAME_REPLY_RELEASED);
+}
+
+static void
+helper_send_destination_prefix_check (Fixture *f,
+                                      const char *name,
+                                      const char *interface,
+                                      const char *member,
+                                      dbus_bool_t allowed,
+                                      const char *additional_name,
+                                      int ownership_type)
+{
+  DBusMessage *call = NULL;
+  DBusMessage *reply = NULL;
+
+  take_well_known_name (f->right_conn, name, &f->e, ownership_type);
+
+  if (additional_name)
+    take_well_known_name (f->right_conn, additional_name, &f->e, ownership_type);
+
+  call = dbus_message_new_method_call (dbus_bus_get_unique_name (f->right_conn),
+                                       "/",
+                                       interface,
+                                       member);
+
+  if (call == NULL)
+    g_error ("OOM");
+
+  reply = test_main_context_call_and_wait (f->ctx, f->left_conn, call,
+                                           DBUS_TIMEOUT_USE_DEFAULT);
+  dbus_clear_message (&call);
+  g_test_message ("reply from %s(%d):%s OK", name, ownership_type, member);
+  if (allowed)
+    {
+      g_test_message ("checking reply from %s for correct method_return", name);
+      g_assert_cmpint (dbus_message_get_type (reply), ==,
+                       DBUS_MESSAGE_TYPE_METHOD_RETURN);
+    }
+  else
+    {
+      g_test_message ("checking reply from %s for correct access_denied", name);
+      g_assert_cmpint (dbus_message_get_type (reply), ==,
+                       DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
+                       DBUS_ERROR_ACCESS_DENIED);
+    }
+  dbus_clear_message (&reply);
+
+  drop_well_known_name (f->right_conn, name, &f->e);
+
+  if (additional_name)
+    drop_well_known_name (f->right_conn, additional_name, &f->e);
+}
+
+static void
+helper_send_destination_prefix (Fixture *f,
+                                const char *name,
+                                const char *interface,
+                                const char *member,
+                                dbus_bool_t allowed,
+                                const char *additional_name)
+{
+  /* check with primary ownership */
+  helper_send_destination_prefix_check (f, name, interface, member, allowed, additional_name, DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER);
+
+  /* check with queued ownership */
+  take_well_known_name (f->left_conn, name, &f->e, DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER);
+  if (additional_name)
+    take_well_known_name (f->left_conn, additional_name, &f->e, DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER);
+
+  helper_send_destination_prefix_check (f, name, interface, member, allowed, additional_name, DBUS_REQUEST_NAME_REPLY_IN_QUEUE);
+
+  drop_well_known_name (f->left_conn, name, &f->e);
+  if (additional_name)
+    drop_well_known_name (f->left_conn, additional_name, &f->e);
+}
+
+static void
+test_send_destination_prefix (Fixture *f,
+                              gconstpointer context G_GNUC_UNUSED)
+{
+  if (f->skip)
+    return;
+
+  add_echo_filter (f);
+
+  /*
+   * Names are constructed with prefix foo.bar.test.dest_prefix followed by some of the tokens:
+   * - a - allow send_destination for this name
+   * - d - deny send_destination for this name
+   * - ap - allow send_destination_prefix for this name
+   * - dp - deny send_destination_prefix for this name
+   * - f, f1, f2, f3 - fillers for generating names down the name hierarchy
+   * - apf, dpf, ao, do - just some neighbour names
+   * - m - names with 'm' have rules for interface and member
+   * - apxdp, dpxap - names that have contradicting rules, e.g. for apxdp there are "allow send_destination_prefix"
+   *   rules first, followed by "deny send_destination_prefix" rules
+   */
+
+  /* basic checks - base allow */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap",           "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f.f.f.f.f", "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.apf",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.apf.f.f.f.f",  "com.example.Anything", "Anything", FALSE, NULL);
+  /* basic checks - base deny */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp",           "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f.f.f.f.f", "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dpf",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dpf.f.f.f.f",  "com.example.Anything", "Anything", FALSE, NULL);
+  /* With interface and method in the policy:
+   * everything is allowed, except foo.bar.a.CallDeny and whole foo.bar.d minus foo.bar.d.CallAllow.*/
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.a", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.a", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.a", "NonExistent", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.d", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.d", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.d", "NonExistent", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m", "foo.bar.none", "NonExistent", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.a", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.a", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.a", "NonExistent", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.d", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.d", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.d", "NonExistent", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.m.f.f.f.f.f", "foo.bar.none", "NonExistent", TRUE, NULL);
+  /* With interface and method in the policy:
+   * everything is denied, except foo.bar.d.CallAllow and whole foo.bar.a minus foo.bar.a.CallDeny */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.a", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.a", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.a", "NonExistent", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.d", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.d", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.d", "NonExistent", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m", "foo.bar.none", "NonExistent", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.a", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.a", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.a", "NonExistent", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.d", "CallDeny", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.d", "CallAllow", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.d", "NonExistent", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.m.f.f.f.f.f", "foo.bar.none", "NonExistent", FALSE, NULL);
+  /* multiple names owned - everything is allowed */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ao",   "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.ap.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f", "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.ao");
+  /* multiple names owned - mixed allow/deny, but denied wins */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ap.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.dp.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.do",     "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ap.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.do");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ao",     "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.dp.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ao");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f.f", "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ao.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ao.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.dp.f.f");
+  /* multiple names owned - mixed allow/deny, but allowed wins */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f",       "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.ao.ao");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ao.ao",      "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f",       "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f1.ap.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.f", "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f");
+  /* multiple names owned - everything is denied */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.do.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.do.f",   "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.dp.f");
+  /* holes in default allow */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.d",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp",         "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp.f.f.f.f", "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp.f.f.f.f", "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ao");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp.f.f.f.f", "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ap");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ao",               "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ap.f1.dp.f.f.f.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap",               "com.example.Anything", "Anything", FALSE, "foo.bar.test.dest_prefix.ap.f1.dp.f.f.f.f");
+  /* holes in holes in default allow */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.d.ap",          "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.d.ap.f.f.f.f",  "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp.ap",         "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp.ap.f.f.f.f", "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f1.dp.ap.a",       "com.example.Anything", "Anything", TRUE, NULL);
+  /* redefinitions in default allow */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp",               "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.f.f.f.f",       "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp",            "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp.f.f.f.f",    "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp.ap",         "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp.ap.f.f.f.f", "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp.ap.d",       "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp.a",           "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.dp.ap.f.a",      "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.f.f.f.ap",       "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f2.apxdp.f.f.f.ap.f.f.f", "com.example.Anything", "Anything", TRUE, NULL);
+  /* cancelled definitions in default allow */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap",                  "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.f.f.f.f",          "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap",               "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap.f.f.f",         "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap.dp",            "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap.dp.f.f.f.f",    "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap.dp.ap",         "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap.dp.ap.f.f.f.f", "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ap.f3.dpxap.ap.dp.a",          "com.example.Anything", "Anything", TRUE, NULL);
+  /* holes in default deny */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.a",          "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.a.f.f.f.f",  "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap",         "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.f.f.f.f", "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.f.f.f",   "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.do");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.do",               "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f1.ap.f.f.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.f.f.f",   "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.do.f.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.do.f.f",           "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f1.ap.f.f.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.f.f",     "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f.f.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f.f.f",         "com.example.Anything", "Anything", TRUE, "foo.bar.test.dest_prefix.dp.f1.ap.f.f");
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.ao",               "com.example.Anything", "Anything", TRUE, NULL);
+  /* holes in holes in default deny */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.a.dp",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.a.dp.f.f.f.f",  "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.dp",         "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.dp.f.f.f.f", "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.d",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f1.ap.d.f.f.f.f",  "com.example.Anything", "Anything", TRUE, NULL);
+  /* redefinitions in default deny */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap",                "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.f.f.f.f",        "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap",             "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.f.f.f.f",     "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.dp",          "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.dp.f.f.f.f",  "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.dp.a",        "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.dp.a.f.f.f",  "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.d",           "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.d.f.f.f",     "com.example.Anything", "Anything", TRUE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.ap.dp.f.d",      "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.f.f.f.dp",       "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f2.dpxap.f.f.f.dp.f.f.f", "com.example.Anything", "Anything", FALSE, NULL);
+  /* cancelled definitions in default deny */
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp",                  "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.f.f.f.f",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp",               "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.f.f.f.f",       "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.ap",            "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.ap.f.f.f.f",    "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.ap.dp",         "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.ap.dp.f.f.f.f", "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.ap.d",          "com.example.Anything", "Anything", FALSE, NULL);
+  helper_send_destination_prefix (f, "foo.bar.test.dest_prefix.dp.f3.apxdp.dp.ap.d.f.f.f.f",  "com.example.Anything", "Anything", FALSE, NULL);
+}
 
 static void
 teardown (Fixture *f,
@@ -2130,10 +2578,21 @@ teardown (Fixture *f,
   g_clear_error (&f->ge);
 
   if (f->left_conn != NULL)
-    dbus_connection_close (f->left_conn);
+    {
+      if (f->left_conn_shouted_signal_filter)
+        {
+          dbus_connection_remove_filter (f->left_conn, shouted_signal_filter, f);
+          f->left_conn_shouted_signal_filter = FALSE;
+        }
+
+      test_connection_shutdown (f->ctx, f->left_conn);
+      dbus_connection_close (f->left_conn);
+    }
 
   if (f->right_conn != NULL)
     {
+      GList *link;
+
       if (f->right_conn_echo)
         {
           dbus_connection_remove_filter (f->right_conn, echo_filter, f);
@@ -2146,9 +2605,12 @@ teardown (Fixture *f,
           f->right_conn_hold = FALSE;
         }
 
-      g_queue_foreach (&f->held_messages, (GFunc) dbus_message_unref, NULL);
+      for (link = f->held_messages.head; link != NULL; link = link->next)
+        dbus_message_unref (link->data);
+
       g_queue_clear (&f->held_messages);
 
+      test_connection_shutdown (f->ctx, f->right_conn);
       dbus_connection_close (f->right_conn);
     }
 
@@ -2209,11 +2671,6 @@ static Config max_completed_connections_config = {
     TEST_USER_ME, SPECIFY_ADDRESS
 };
 
-static Config max_connections_per_user_config = {
-    NULL, 1, "valid-config-files/max-connections-per-user.conf",
-    TEST_USER_ME, SPECIFY_ADDRESS
-};
-
 static Config max_replies_per_connection_config = {
     NULL, 1, "valid-config-files/max-replies-per-connection.conf",
     TEST_USER_ME, SPECIFY_ADDRESS
@@ -2246,14 +2703,98 @@ static Config as_another_user_config = {
     NULL, 1, "valid-config-files/as-another-user.conf",
     /* We start the dbus-daemon as root and drop privileges, like the
      * real system bus does */
-    TEST_USER_ROOT, SPECIFY_ADDRESS
+    TEST_USER_ROOT_DROP_TO_MESSAGEBUS, SPECIFY_ADDRESS
+};
+
+#ifdef ENABLE_TRADITIONAL_ACTIVATION
+static Config tmp_session_config = {
+    NULL, 1, "valid-config-files/tmp-session.conf",
+    TEST_USER_ME, SPECIFY_ADDRESS
+};
+
+static Config nearly_system_config = {
+    NULL, 1, "valid-config-files-system/tmp-session-like-system.conf",
+    TEST_USER_ME, SPECIFY_ADDRESS
 };
 #endif
+#endif
+
+static Config send_destination_prefix_config = {
+    NULL, 1, "valid-config-files/send-destination-prefix-rules.conf",
+    TEST_USER_ME, SPECIFY_ADDRESS
+};
+
+static void
+test_match_remove_fails (Fixture *f,
+                         gconstpointer context G_GNUC_UNUSED)
+{
+  const char *match_rule = "type='signal'";
+
+  if (f->skip)
+    return;
+
+  /* Unlike in test_match_remove_succeeds(), we never added this */
+  dbus_bus_remove_match (f->left_conn, match_rule, &f->e);
+  g_assert_cmpstr (f->e.name, ==, DBUS_ERROR_MATCH_RULE_NOT_FOUND);
+}
+
+static void
+test_match_remove_succeeds (Fixture *f,
+                            gconstpointer context G_GNUC_UNUSED)
+{
+  const char *match_rule = "type='signal'";
+
+  if (f->skip)
+    return;
+
+  add_shouted_signal_filter (f);
+
+  /* We use this to make sure that a method call from the "left" connection
+   * will get a reply from the "right", to sync up */
+  add_echo_filter (f);
+
+  /* Emit a signal from the "right" connection, and assert that the "left"
+   * does not receive it yet */
+  f->signal_counter = 0;
+  right_conn_emit_shouted (f);
+  /* Because messages are totally-ordered, if the "left" connection was
+   * going to receive the signal, it would receive it before it got
+   * the reply from this async call to the "right" connection */
+  echo_left_to_right (f, 1);
+  g_assert_cmpuint (f->signal_counter, ==, 0);
+
+  dbus_bus_add_match (f->left_conn, match_rule, &f->e);
+  test_assert_no_error (&f->e);
+
+  f->signal_counter = 0;
+
+  /* Emit a signal from the "right" connection, and assert that the "left"
+   * receives it */
+  right_conn_emit_shouted (f);
+
+  while (f->signal_counter < 1)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  dbus_bus_remove_match (f->left_conn, match_rule, &f->e);
+  test_assert_no_error (&f->e);
+
+  /* Emit a signal from the "right" connection, and assert that the "left"
+   * does not receive it this time */
+  f->signal_counter = 0;
+  right_conn_emit_shouted (f);
+  /* Because messages are totally-ordered, if the "left" connection was
+   * going to receive the signal, it would receive it before it got
+   * the reply from this async call to the "right" connection */
+  echo_left_to_right (f, 1);
+  g_assert_cmpuint (f->signal_counter, ==, 0);
+}
 
 int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/echo/session", Fixture, NULL, setup, test_echo, teardown);
@@ -2282,6 +2823,10 @@ main (int argc,
   g_test_add ("/limits/max-names-per-connection", Fixture,
       &max_names_per_connection_config,
       setup, test_max_names_per_connection, teardown);
+  g_test_add ("/match/remove/fails", Fixture, NULL,
+      setup, test_match_remove_fails, teardown);
+  g_test_add ("/match/remove/succeeds", Fixture, NULL,
+      setup, test_match_remove_succeeds, teardown);
   g_test_add ("/peer/ping", Fixture, NULL, setup, test_peer_ping, teardown);
   g_test_add ("/peer/get-machine-id", Fixture, NULL,
       setup, test_peer_get_machine_id, teardown);
@@ -2329,7 +2874,19 @@ main (int argc,
               setup, test_fd_limit, teardown);
   g_test_add ("/fd-limit/system", Fixture, &as_another_user_config,
               setup, test_fd_limit, teardown);
+
+#ifdef ENABLE_TRADITIONAL_ACTIVATION
+  g_test_add ("/activation/forking", Fixture, &tmp_session_config,
+              setup, test_activation_forking, teardown);
+  g_test_add ("/system-policy/allow-signals", Fixture, &nearly_system_config,
+              setup, test_system_signals, teardown);
+#endif
 #endif
 
-  return g_test_run ();
+  g_test_add ("/system-policy/send-destination/prefix", Fixture, &send_destination_prefix_config,
+              setup, test_send_destination_prefix, teardown);
+
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

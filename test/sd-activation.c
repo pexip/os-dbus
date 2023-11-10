@@ -516,14 +516,45 @@ test_activation (Fixture *f,
     g_error ("OOM");
   dbus_connection_send (f->systemd, m, NULL);
   dbus_message_unref (m);
+
+  /* A fourth activation: for name from send_destination_prefix namespace */
+  m = dbus_message_new_signal ("/foo", "com.example.bar", "UnicastSignal4");
+  if (!dbus_message_set_destination (m, "com.example.SendPrefixDenied.SendPrefixAllowed.internal"))
+    g_error ("OOM");
+  dbus_connection_send (f->caller, m, NULL);
+  dbus_message_unref (m);
+
+  /* systemd is already ready for it. */
+  while (f->systemd_message == NULL)
+    test_main_context_iterate (f->ctx, TRUE);
+
+  m = f->systemd_message;
+  f->systemd_message = NULL;
+  assert_signal (m, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
+      "org.freedesktop.systemd1.Activator", "ActivationRequest", "s",
+      "org.freedesktop.systemd1");
+
+  /* Check ActivationRequest for the required name. */
+  /* If it is correct, then it passed through policy checking, and the test is over. */
+  do
+    {
+      const char *name;
+      DBusError error;
+
+      dbus_error_init (&error);
+      dbus_message_get_args (m, &error, DBUS_TYPE_STRING, &name, DBUS_TYPE_INVALID);
+      test_assert_no_error (&error);
+      g_assert_cmpstr (name, ==, "dbus-com.example.SendPrefixDenied.SendPrefixAllowed.internal.service");
+    } while (0);
+  dbus_message_unref (m);
 }
 
 static void
 test_uae (Fixture *f,
     gconstpointer context)
 {
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter, arr_iter, entry_iter;
   const char *s;
 
@@ -544,24 +575,13 @@ test_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->caller, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_message_unref (m);
-  m = NULL;
+  assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   /* The fake systemd connects to the bus. */
   f->systemd = test_connect_to_bus (f->ctx, f->address);
@@ -593,7 +613,7 @@ test_uae (Fixture *f,
   dbus_message_iter_next (&args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
       DBUS_TYPE_INVALID);
-  dbus_message_unref (m);
+  dbus_clear_message (&m);
 
   m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
       DBUS_INTERFACE_DBUS, "UpdateActivationEnvironment");
@@ -629,24 +649,13 @@ test_uae (Fixture *f,
       g_error ("OOM");
   }
 
-  if (!dbus_connection_send_with_reply (f->caller, m, &pc,
-        DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-    g_error ("OOM");
+  reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
-  dbus_message_unref (m);
-  m = NULL;
+  assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-        &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
-
-  assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 
   while (f->systemd_message == NULL)
     test_main_context_iterate (f->ctx, TRUE);
@@ -680,7 +689,7 @@ test_uae (Fixture *f,
   dbus_message_iter_next (&args_iter);
   g_assert_cmpuint (dbus_message_iter_get_arg_type (&args_iter), ==,
       DBUS_TYPE_INVALID);
-  dbus_message_unref (m);
+  dbus_clear_message (&m);
 }
 
 static void
@@ -875,30 +884,17 @@ test_transient_services (Fixture *f,
       m = dbus_message_new_method_call (config->bus_name,
                                         "/foo", "com.example.bar", "Activate");
 
-      if (m == NULL ||
-          !dbus_connection_send_with_reply (f->caller, m, &pc,
-            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-        g_error ("OOM");
-
-      dbus_message_unref (m);
-      m = NULL;
+      if (m == NULL)
+        test_oom ();
 
       /* It fails. */
-
-      if (dbus_pending_call_get_completed (pc))
-        test_pending_call_store_reply (pc, &m);
-      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-            &m, NULL))
-        g_error ("OOM");
-
-      while (m == NULL)
-        test_main_context_iterate (f->ctx, TRUE);
-
-      assert_error_reply (m, DBUS_SERVICE_DBUS, f->caller_name,
+      reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+          DBUS_TIMEOUT_USE_DEFAULT);
+      assert_error_reply (reply, DBUS_SERVICE_DBUS, f->caller_name,
           DBUS_ERROR_SERVICE_UNKNOWN);
 
-      dbus_message_unref (m);
-      m = NULL;
+      dbus_clear_message (&reply);
+      dbus_clear_message (&m);
 
       /* Now generate a transient D-Bus service file for it. The directory
        * should have been created during dbus-daemon startup, so we don't have to
@@ -910,26 +906,15 @@ test_transient_services (Fixture *f,
       m = dbus_message_new_method_call (DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
                                         DBUS_INTERFACE_DBUS, "ReloadConfig");
 
-      if (m == NULL ||
-          !dbus_connection_send_with_reply (f->caller, m, &pc,
-            DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
-        g_error ("OOM");
+      if (m == NULL)
+        test_oom ();
 
-      dbus_message_unref (m);
-      m = NULL;
+      reply = test_main_context_call_and_wait (f->ctx, f->caller, m,
+          DBUS_TIMEOUT_USE_DEFAULT);
+      assert_method_reply (reply, DBUS_SERVICE_DBUS, f->caller_name, "");
 
-      if (dbus_pending_call_get_completed (pc))
-        test_pending_call_store_reply (pc, &m);
-      else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-            &m, NULL))
-        g_error ("OOM");
-
-      while (m == NULL)
-        test_main_context_iterate (f->ctx, TRUE);
-
-      assert_method_reply (m, DBUS_SERVICE_DBUS, f->caller_name, "");
-      dbus_message_unref (m);
-      m = NULL;
+      dbus_clear_message (&reply);
+      dbus_clear_message (&m);
     }
 
   /* The service is present now. */
@@ -941,14 +926,15 @@ test_transient_services (Fixture *f,
         DBUS_TIMEOUT_USE_DEFAULT) || pc == NULL)
     g_error ("OOM");
 
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&m);
 
   if (dbus_pending_call_get_completed (pc))
     test_pending_call_store_reply (pc, &reply);
   else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
         &reply, NULL))
     g_error ("OOM");
+
+  dbus_clear_pending_call (&pc);
 
   /* The mock systemd is told to start the service. */
   while (f->systemd_message == NULL)
@@ -959,8 +945,7 @@ test_transient_services (Fixture *f,
   assert_signal (m, DBUS_SERVICE_DBUS, DBUS_PATH_DBUS,
       "org.freedesktop.systemd1.Activator", "ActivationRequest", "s",
       "org.freedesktop.systemd1");
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&m);
 
   /* The activatable service connects and gets its name. */
   f->activated = test_connect_to_bus (f->ctx, f->address);
@@ -987,18 +972,15 @@ test_transient_services (Fixture *f,
       !dbus_connection_send (f->activated, send_reply, NULL))
     g_error ("OOM");
 
-  dbus_message_unref (send_reply);
-  send_reply = NULL;
-  dbus_message_unref (m);
-  m = NULL;
+  dbus_clear_message (&send_reply);
+  dbus_clear_message (&m);
 
   /* The caller receives the reply. */
   while (reply == NULL)
     test_main_context_iterate (f->ctx, TRUE);
 
   assert_method_reply (reply, f->activated_name, f->caller_name, "");
-  dbus_message_unref (reply);
-  reply = NULL;
+  dbus_clear_message (&reply);
 }
 
 static void
@@ -1013,6 +995,7 @@ teardown (Fixture *f,
       if (f->caller_filter_added)
         dbus_connection_remove_filter (f->caller, caller_filter, f);
 
+      test_connection_shutdown (f->ctx, f->caller);
       dbus_connection_close (f->caller);
       dbus_connection_unref (f->caller);
       f->caller = NULL;
@@ -1023,6 +1006,7 @@ teardown (Fixture *f,
       if (f->systemd_filter_added)
         dbus_connection_remove_filter (f->systemd, systemd_filter, f);
 
+      test_connection_shutdown (f->ctx, f->systemd);
       dbus_connection_close (f->systemd);
       dbus_connection_unref (f->systemd);
       f->systemd = NULL;
@@ -1033,6 +1017,7 @@ teardown (Fixture *f,
       if (f->activated_filter_added)
         dbus_connection_remove_filter (f->activated, activated_filter, f);
 
+      test_connection_shutdown (f->ctx, f->activated);
       dbus_connection_close (f->activated);
       dbus_connection_unref (f->activated);
       f->activated = NULL;
@@ -1077,7 +1062,9 @@ static const Config deny_send_tests[] =
     { "com.example.SendDeniedByNonexistentAppArmorLabel" },
     { "com.example.SendDeniedByAppArmorName" },
 #endif
-    { "com.example.SendDenied" }
+    { "com.example.SendDenied" },
+    { "com.example.SendPrefixDenied" },
+    { "com.example.SendPrefixDenied.internal" }
 };
 
 static const Config deny_receive_tests[] =
@@ -1105,6 +1092,7 @@ main (int argc,
     char **argv)
 {
   gsize i;
+  int ret;
 
   test_init (&argc, &argv);
 
@@ -1138,5 +1126,7 @@ main (int argc,
   g_test_add ("/sd-activation/transient-services/in-advance", Fixture,
       &transient_service_in_advance, setup, test_transient_services, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

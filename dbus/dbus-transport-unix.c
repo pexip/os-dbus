@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003, 2004  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -407,32 +407,3 @@ _dbus_transport_open_platform_specific (DBusAddressEntry  *entry,
 }
 
 /** @} */
-
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-
-dbus_bool_t
-_dbus_transport_unix_test (void)
-{
-  DBusConnection *c;
-  DBusError error;
-  dbus_bool_t ret;
-  const char *address;
-
-  dbus_error_init (&error);
-
-  c = dbus_connection_open ("unixexec:argv0=false,argv1=foobar,path=/bin/false", &error);
-  _dbus_assert (c != NULL);
-  _dbus_assert (!dbus_error_is_set (&error));
-
-  address = _dbus_connection_get_address (c);
-  _dbus_assert (address != NULL);
-
-  /* Let's see if the address got parsed, reordered and formatted correctly */
-  ret = strcmp (address, "unixexec:path=/bin/false,argv0=false,argv1=foobar") == 0;
-
-  dbus_connection_unref (c);
-
-  return ret;
-}
-
-#endif

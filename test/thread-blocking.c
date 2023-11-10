@@ -233,6 +233,8 @@ test_threads (Fixture *f,
       f->client_caller_threads[i] = g_thread_new (name,
                                                   client_caller_thread_cb,
                                                   f);
+
+      g_free (name);
     }
 
   /* Wait for all caller threads to exit */
@@ -290,10 +292,14 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/thread-blocking", Fixture, NULL, setup, test_threads,
               teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

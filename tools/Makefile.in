@@ -90,11 +90,11 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = dbus-launch$(EXEEXT) dbus-monitor$(EXEEXT) \
-	dbus-send$(EXEEXT) dbus-test-tool$(EXEEXT) \
+	dbus-run-session$(EXEEXT) dbus-send$(EXEEXT) \
+	dbus-test-tool$(EXEEXT) \
 	dbus-update-activation-environment$(EXEEXT) $(am__EXEEXT_1)
 @DBUS_UNIX_TRUE@am__append_1 = \
 @DBUS_UNIX_TRUE@	dbus-cleanup-sockets \
-@DBUS_UNIX_TRUE@	dbus-run-session \
 @DBUS_UNIX_TRUE@	dbus-uuidgen \
 @DBUS_UNIX_TRUE@	$(NULL)
 
@@ -110,8 +110,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/visibility.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(dist_examples_SCRIPTS) \
@@ -121,7 +121,6 @@ CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 @DBUS_UNIX_TRUE@am__EXEEXT_1 = dbus-cleanup-sockets$(EXEEXT) \
-@DBUS_UNIX_TRUE@	dbus-run-session$(EXEEXT) \
 @DBUS_UNIX_TRUE@	dbus-uuidgen$(EXEEXT)
 am__installdirs = "$(DESTDIR)$(bindir)" "$(DESTDIR)$(examplesdir)"
 PROGRAMS = $(bin_PROGRAMS)
@@ -142,28 +141,28 @@ am__dbus_launch_SOURCES_DIST = dbus-launch.c dbus-launch-x11.c \
 @DBUS_WIN_TRUE@	dbus_launch-dbus-launch-win.$(OBJEXT)
 dbus_launch_OBJECTS = $(am_dbus_launch_OBJECTS)
 am__DEPENDENCIES_1 =
-@DBUS_WIN_FALSE@dbus_launch_DEPENDENCIES =  \
-@DBUS_WIN_FALSE@	$(top_builddir)/dbus/libdbus-1.la \
-@DBUS_WIN_FALSE@	$(am__DEPENDENCIES_1)
+dbus_launch_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-1.la $(am__DEPENDENCIES_1)
 am_dbus_monitor_OBJECTS = dbus-monitor.$(OBJEXT) \
 	dbus-print-message.$(OBJEXT) tool-common.$(OBJEXT)
 dbus_monitor_OBJECTS = $(am_dbus_monitor_OBJECTS)
-dbus_monitor_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la \
-	$(am__DEPENDENCIES_1)
-am__dbus_run_session_SOURCES_DIST = dbus-run-session.c
-@DBUS_WIN_FALSE@am_dbus_run_session_OBJECTS =  \
-@DBUS_WIN_FALSE@	dbus-run-session.$(OBJEXT)
+dbus_monitor_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-1.la $(am__DEPENDENCIES_1)
+am_dbus_run_session_OBJECTS = dbus-run-session.$(OBJEXT) \
+	tool-common.$(OBJEXT)
 dbus_run_session_OBJECTS = $(am_dbus_run_session_OBJECTS)
-@DBUS_WIN_FALSE@dbus_run_session_DEPENDENCIES =  \
-@DBUS_WIN_FALSE@	$(top_builddir)/dbus/libdbus-1.la
+dbus_run_session_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-internal.la
 am_dbus_send_OBJECTS = dbus-print-message.$(OBJEXT) \
 	dbus-send.$(OBJEXT) tool-common.$(OBJEXT)
 dbus_send_OBJECTS = $(am_dbus_send_OBJECTS)
-dbus_send_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+dbus_send_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-1.la
 am_dbus_test_tool_OBJECTS = dbus-echo.$(OBJEXT) dbus-spam.$(OBJEXT) \
 	tool-common.$(OBJEXT) test-tool.$(OBJEXT)
 dbus_test_tool_OBJECTS = $(am_dbus_test_tool_OBJECTS)
-dbus_test_tool_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+dbus_test_tool_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-1.la
 am_dbus_update_activation_environment_OBJECTS =  \
 	dbus-update-activation-environment.$(OBJEXT) \
 	tool-common.$(OBJEXT)
@@ -173,10 +172,11 @@ dbus_update_activation_environment_OBJECTS =  \
 	$(am_dbus_update_activation_environment_OBJECTS) \
 	$(nodist_dbus_update_activation_environment_OBJECTS)
 dbus_update_activation_environment_DEPENDENCIES =  \
-	$(top_builddir)/dbus/libdbus-1.la
+	$(am__DEPENDENCIES_1) $(top_builddir)/dbus/libdbus-1.la
 am_dbus_uuidgen_OBJECTS = dbus-uuidgen.$(OBJEXT)
 dbus_uuidgen_OBJECTS = $(am_dbus_uuidgen_OBJECTS)
-dbus_uuidgen_DEPENDENCIES = $(top_builddir)/dbus/libdbus-1.la
+dbus_uuidgen_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+	$(top_builddir)/dbus/libdbus-1.la
 am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
 am__vpath_adj = case $$p in \
     $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
@@ -259,7 +259,7 @@ SOURCES = $(dbus_cleanup_sockets_SOURCES) $(dbus_launch_SOURCES) \
 	$(dbus_uuidgen_SOURCES)
 DIST_SOURCES = $(dbus_cleanup_sockets_SOURCES) \
 	$(am__dbus_launch_SOURCES_DIST) $(dbus_monitor_SOURCES) \
-	$(am__dbus_run_session_SOURCES_DIST) $(dbus_send_SOURCES) \
+	$(dbus_run_session_SOURCES) $(dbus_send_SOURCES) \
 	$(dbus_test_tool_SOURCES) \
 	$(dbus_update_activation_environment_SOURCES) \
 	$(dbus_uuidgen_SOURCES)
@@ -312,7 +312,6 @@ CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
 CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
 CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
 CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
-CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
@@ -326,6 +325,7 @@ DBUS_BINDIR = @DBUS_BINDIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
+DBUS_GENERATE_MAN = @DBUS_GENERATE_MAN@
 DBUS_INT16_TYPE = @DBUS_INT16_TYPE@
 DBUS_INT32_TYPE = @DBUS_INT32_TYPE@
 DBUS_INT64_CONSTANT = @DBUS_INT64_CONSTANT@
@@ -349,12 +349,18 @@ DBUS_TEST_USER = @DBUS_TEST_USER@
 DBUS_UINT64_CONSTANT = @DBUS_UINT64_CONSTANT@
 DBUS_USER = @DBUS_USER@
 DBUS_VERSION = @DBUS_VERSION@
+DBUS_VER_FILE_TYPE = @DBUS_VER_FILE_TYPE@
+DBUS_VER_INTERNAL_NAME = @DBUS_VER_INTERNAL_NAME@
+DBUS_VER_ORIGINAL_NAME = @DBUS_VER_ORIGINAL_NAME@
 DBUS_X_CFLAGS = @DBUS_X_CFLAGS@
 DBUS_X_LIBS = @DBUS_X_LIBS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DLLTOOL = @DLLTOOL@
 DOXYGEN = @DOXYGEN@
+DOXYGEN_GENERATE_QHP = @DOXYGEN_GENERATE_QHP@
+DOXYGEN_QCH_FILE = @DOXYGEN_QCH_FILE@
+DOXYGEN_QHG_LOCATION = @DOXYGEN_QHG_LOCATION@
 DSYMUTIL = @DSYMUTIL@
 DUCKTYPE = @DUCKTYPE@
 DUMPBIN = @DUMPBIN@
@@ -429,14 +435,13 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PYTHON = @PYTHON@
-PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
-PYTHON_PLATFORM = @PYTHON_PLATFORM@
-PYTHON_PREFIX = @PYTHON_PREFIX@
-PYTHON_VERSION = @PYTHON_VERSION@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QHELPGENERATOR = @QHELPGENERATOR@
 RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
+SANITIZE_CFLAGS = @SANITIZE_CFLAGS@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -459,13 +464,10 @@ WARN_CFLAGS = @WARN_CFLAGS@
 WARN_CXXFLAGS = @WARN_CXXFLAGS@
 WARN_LDFLAGS = @WARN_LDFLAGS@
 WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
-XMKMF = @XMKMF@
 XMLTO = @XMLTO@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
-X_EXTRA_LIBS = @X_EXTRA_LIBS@
 X_LIBS = @X_LIBS@
-X_PRE_LIBS = @X_PRE_LIBS@
 YELP_BUILD = @YELP_BUILD@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -513,13 +515,10 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgconfig_prefix = @pkgconfig_prefix@
-pkgpyexecdir = @pkgpyexecdir@
-pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-pyexecdir = @pyexecdir@
-pythondir = @pythondir@
+qchdir = @qchdir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
@@ -533,6 +532,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 AM_CPPFLAGS = \
 	-I$(top_srcdir) \
+	$(CODE_COVERAGE_CPPFLAGS) \
 	$(DBUS_STATIC_BUILD_CPPFLAGS) \
 	$(DBUS_X_CFLAGS) \
 	-DDBUS_COMPILATION \
@@ -541,6 +541,7 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 
@@ -574,21 +575,25 @@ dbus_monitor_SOURCES = \
 @DBUS_WIN_TRUE@	dbus-launch-win.c			\
 @DBUS_WIN_TRUE@	dbus-launch.h
 
-@DBUS_WIN_FALSE@dbus_launch_CPPFLAGS = \
-@DBUS_WIN_FALSE@	$(AM_CPPFLAGS) \
-@DBUS_WIN_FALSE@	$(NULL)
+dbus_launch_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(NULL)
 
-@DBUS_WIN_FALSE@dbus_launch_LDADD = \
-@DBUS_WIN_FALSE@	$(top_builddir)/dbus/libdbus-1.la \
-@DBUS_WIN_FALSE@	$(DBUS_X_LIBS) \
-@DBUS_WIN_FALSE@	$(NULL)
+dbus_launch_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(DBUS_X_LIBS) \
+	$(NULL)
 
-@DBUS_WIN_FALSE@dbus_run_session_SOURCES = \
-@DBUS_WIN_FALSE@	dbus-run-session.c
+dbus_run_session_SOURCES = \
+	dbus-run-session.c \
+	tool-common.c \
+	tool-common.h
 
-@DBUS_WIN_FALSE@dbus_run_session_LDADD = \
-@DBUS_WIN_FALSE@	$(top_builddir)/dbus/libdbus-1.la \
-@DBUS_WIN_FALSE@	$(NULL)
+dbus_run_session_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-internal.la \
+	$(NULL)
 
 dbus_cleanup_sockets_SOURCES = \
 	dbus-cleanup-sockets.c
@@ -597,15 +602,18 @@ dbus_uuidgen_SOURCES = \
 	dbus-uuidgen.c
 
 dbus_send_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(NULL)
 
 dbus_monitor_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(NETWORK_libs) \
 	$(NULL)
 
 dbus_uuidgen_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(NULL)
 
@@ -623,14 +631,22 @@ dbus_test_tool_SOURCES = \
 	test-tool.h \
 	$(NULL)
 
-dbus_test_tool_LDADD = $(top_builddir)/dbus/libdbus-1.la
+dbus_test_tool_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(NULL)
+
 dbus_update_activation_environment_SOURCES = \
 	dbus-update-activation-environment.c \
 	tool-common.c \
 	tool-common.h \
 	$(NULL)
 
-dbus_update_activation_environment_LDADD = $(top_builddir)/dbus/libdbus-1.la
+dbus_update_activation_environment_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/dbus/libdbus-1.la \
+	$(NULL)
+
 @DBUS_WIN_TRUE@SUFFIXES = .rc
 @DBUS_WIN_TRUE@nodist_dbus_update_activation_environment_SOURCES = disable-uac.rc
 EXTRA_DIST = run-with-tmp-session-bus.sh strtoll.c strtoull.c Win32.Manifest
@@ -651,9 +667,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu tools/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign tools/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu tools/Makefile
+	  $(AUTOMAKE) --foreign tools/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -1142,6 +1158,7 @@ uninstall-am: uninstall-binPROGRAMS uninstall-dist_examplesSCRIPTS
 
 .PRECIOUS: Makefile
 
+	$(NULL)
 
 @DBUS_WIN_TRUE@.rc.o:
 @DBUS_WIN_TRUE@	$(RC) $< -o $@

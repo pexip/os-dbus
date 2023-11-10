@@ -4,7 +4,7 @@
  * Copyright (C) 2003  CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -55,6 +55,9 @@ dbus_bool_t bus_driver_send_service_owner_changed  (const char     *service_name
 dbus_bool_t bus_driver_generate_introspect_string  (DBusString *xml,
                                                     dbus_bool_t canonical_path,
                                                     DBusMessage *message);
+dbus_bool_t bus_driver_fill_connection_credentials (DBusCredentials *credentials,
+                                                    DBusConnection  *conn,
+                                                    DBusMessageIter *asv_iter);
 
 BusDriverFound bus_driver_get_conn_helper (DBusConnection  *connection,
                                            DBusMessage     *message,

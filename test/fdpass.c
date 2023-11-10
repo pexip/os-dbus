@@ -50,14 +50,6 @@
 
 #include "test-utils-glib.h"
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-#include <dbus/dbus-message-internal.h>
-#else
-typedef struct _DBusInitialFDs DBusInitialFDs;
-#define _dbus_check_fdleaks_enter() NULL
-#define _dbus_check_fdleaks_leave(fds) do {} while (0)
-#endif
-
 /* Arbitrary; included here to avoid relying on the default */
 #define MAX_MESSAGE_UNIX_FDS 20
 /* This test won't work on Linux unless this is true. */
@@ -842,6 +834,7 @@ teardown (Fixture *f,
 {
   if (f->left_client_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->left_client_conn);
       dbus_connection_close (f->left_client_conn);
       dbus_connection_unref (f->left_client_conn);
       f->left_client_conn = NULL;
@@ -849,6 +842,7 @@ teardown (Fixture *f,
 
   if (f->right_client_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->right_client_conn);
       dbus_connection_close (f->right_client_conn);
       dbus_connection_unref (f->right_client_conn);
       f->right_client_conn = NULL;
@@ -856,6 +850,7 @@ teardown (Fixture *f,
 
   if (f->left_server_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->left_server_conn);
       dbus_connection_close (f->left_server_conn);
       dbus_connection_unref (f->left_server_conn);
       f->left_server_conn = NULL;
@@ -863,6 +858,7 @@ teardown (Fixture *f,
 
   if (f->right_server_conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->right_server_conn);
       dbus_connection_close (f->right_server_conn);
       dbus_connection_unref (f->right_server_conn);
       f->right_server_conn = NULL;
@@ -870,7 +866,7 @@ teardown (Fixture *f,
 
   if (f->server != NULL)
     {
-      dbus_server_disconnect (f->server);
+      test_server_shutdown (f->ctx, f->server);
       dbus_server_unref (f->server);
       f->server = NULL;
     }
@@ -883,14 +879,18 @@ teardown (Fixture *f,
     g_error ("%s", g_strerror (errno));
 #endif
 
+  /* TODO: It would be nice if we could ask GLib which test-case
+   * we're currently in */
   if (f->initial_fds != NULL)
-    _dbus_check_fdleaks_leave (f->initial_fds);
+    _dbus_check_fdleaks_leave (f->initial_fds, "next test-case");
 }
 
 int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
 #ifdef HAVE_GETRLIMIT
@@ -954,5 +954,7 @@ main (int argc,
   g_test_add ("/odd-limit/plus2", Fixture, GINT_TO_POINTER (+2), setup,
       test_odd_limit, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

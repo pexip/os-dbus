@@ -4,7 +4,7 @@
  * Copyright (C) 2003  CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -218,10 +218,8 @@ _dbus_timeout_list_free (DBusTimeoutList *timeout_list)
   _dbus_timeout_list_set_functions (timeout_list,
 				    NULL, NULL, NULL, NULL, NULL);
 
-  _dbus_list_foreach (&timeout_list->timeouts,
-		      (DBusForeachFunction) _dbus_timeout_unref,
-		      NULL);
-  _dbus_list_clear (&timeout_list->timeouts);
+  _dbus_list_clear_full (&timeout_list->timeouts,
+                         (DBusFreeFunction) _dbus_timeout_unref);
 
   dbus_free (timeout_list);
 }

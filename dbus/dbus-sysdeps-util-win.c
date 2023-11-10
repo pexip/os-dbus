@@ -1,11 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-sysdeps-util.c Would be in dbus-sysdeps.c, but not used in libdbus
- * 
+ *
  * Copyright (C) 2002, 2003, 2004, 2005  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -426,6 +426,7 @@ _dbus_directory_open (const DBusString *filename,
     {
       if (!_dbus_string_append (&filespec, "*"))
         {
+          _dbus_string_free (&filespec);
           dbus_set_error (error, DBUS_ERROR_NO_MEMORY,
                           "Could not append filename wildcard");
           return NULL;
@@ -435,6 +436,7 @@ _dbus_directory_open (const DBusString *filename,
     {
       if (!_dbus_string_append (&filespec, "\\*"))
         {
+          _dbus_string_free (&filespec);
           dbus_set_error (error, DBUS_ERROR_NO_MEMORY,
                           "Could not append filename wildcard 2");
           return NULL;
@@ -464,7 +466,7 @@ _dbus_directory_open (const DBusString *filename,
                           "Failed to read directory \"%s\": %s",
                           _dbus_string_get_const_data (filename), emsg);
           _dbus_win_free_error_string (emsg);
-          dbus_free ( iter );
+          dbus_free (iter);
           _dbus_string_free (&filespec);
           return NULL;
         }
@@ -647,6 +649,13 @@ dbus_bool_t _dbus_windows_user_is_process_owner (const char *windows_sid)
   unix emulation functions - should be removed sometime in the future
  =====================================================================*/
 
+static void
+set_unix_uid_unsupported (DBusError *error)
+{
+  dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
+                  "UNIX user IDs not supported on Windows");
+}
+
 /**
  * Checks to see if the UNIX user ID is at the console.
  * Should always fail on Windows (set the error to
@@ -660,8 +669,7 @@ dbus_bool_t
 _dbus_unix_user_is_at_console (dbus_uid_t         uid,
                                DBusError         *error)
 {
-  dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
-                  "UNIX user IDs not supported on Windows\n");
+  set_unix_uid_unsupported (error);
   return FALSE;
 }
 
@@ -705,13 +713,16 @@ _dbus_parse_unix_user_from_config (const DBusString  *username,
  * @param uid the UID
  * @param group_ids return location for array of group IDs
  * @param n_group_ids return location for length of returned array
+ * @param error error location
  * @returns #TRUE if the UID existed and we got some credentials
  */
 dbus_bool_t
 _dbus_unix_groups_from_uid (dbus_uid_t            uid,
                             dbus_gid_t          **group_ids,
-                            int                  *n_group_ids)
+                            int                  *n_group_ids,
+                            DBusError            *error)
 {
+  set_unix_uid_unsupported (error);
   return FALSE;
 }
 
@@ -1398,7 +1409,8 @@ _dbus_command_for_pid (unsigned long  pid,
                        int            max_len,
                        DBusError     *error)
 {
-  // FIXME
+  dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
+                  "_dbus_command_for_pid() not implemented on Windows");
   return FALSE;
 }
 
@@ -1654,27 +1666,22 @@ _dbus_get_session_config_file (DBusString *str)
   return _dbus_get_config_file_name(str, "session.conf");
 }
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-
-#define ANONYMOUS_SID "S-1-5-7"
-#define LOCAL_SYSTEM_SID "S-1-5-18"
-
-dbus_bool_t
-_dbus_test_append_different_uid (DBusString *uid)
+void
+_dbus_daemon_report_ready (void)
 {
-  char *sid = NULL;
-  dbus_bool_t ret;
-
-  if (!_dbus_getsid (&sid, _dbus_getpid ()))
-    return FALSE;
-
-  if (strcmp (sid, ANONYMOUS_SID) == 0)
-    ret = _dbus_string_append (uid, LOCAL_SYSTEM_SID);
-  else
-    ret = _dbus_string_append (uid, ANONYMOUS_SID);
-
-  LocalFree (sid);
-  return ret;
 }
 
-#endif
+void
+_dbus_daemon_report_reloading (void)
+{
+}
+
+void
+_dbus_daemon_report_reloaded (void)
+{
+}
+
+void
+_dbus_daemon_report_stopping (void)
+{
+}

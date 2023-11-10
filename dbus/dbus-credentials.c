@@ -4,7 +4,7 @@
  * Copyright (C) 2007 Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,13 +14,14 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
 #include <config.h>
+#include <stdlib.h>
 #include <string.h>
 #include "dbus-credentials.h"
 #include "dbus-internals.h"
@@ -48,6 +49,8 @@
 struct DBusCredentials {
   int refcount;
   dbus_uid_t unix_uid;
+  dbus_gid_t *unix_gids;
+  size_t n_unix_gids;
   dbus_pid_t pid;
   char *windows_sid;
   char *linux_security_label;
@@ -78,6 +81,8 @@ _dbus_credentials_new (void)
   
   creds->refcount = 1;
   creds->unix_uid = DBUS_UID_UNSET;
+  creds->unix_gids = NULL;
+  creds->n_unix_gids = 0;
   creds->pid = DBUS_PID_UNSET;
   creds->windows_sid = NULL;
   creds->linux_security_label = NULL;
@@ -88,7 +93,7 @@ _dbus_credentials_new (void)
 }
 
 /**
- * Creates a new object with credentials (user ID and process ID) from the current process.
+ * Creates a new object with the most important credentials (user ID and process ID) from the current process.
  * @returns the new object or #NULL if no memory
  */
 DBusCredentials*
@@ -134,6 +139,7 @@ _dbus_credentials_unref (DBusCredentials    *credentials)
   credentials->refcount -= 1;
   if (credentials->refcount == 0)
     {
+      dbus_free (credentials->unix_gids);
       dbus_free (credentials->windows_sid);
       dbus_free (credentials->linux_security_label);
       dbus_free (credentials->adt_audit_data);
@@ -170,6 +176,63 @@ _dbus_credentials_add_unix_uid(DBusCredentials    *credentials,
   credentials->unix_uid = uid;
   return TRUE;
 
+}
+
+static int
+cmp_gidp (const void *a_, const void *b_)
+{
+  const dbus_gid_t *a = a_;
+  const dbus_gid_t *b = b_;
+
+  if (*a < *b)
+    return -1;
+
+  if (*a > *b)
+    return 1;
+
+  return 0;
+}
+
+/**
+ * Add UNIX group IDs to the credentials, replacing any group IDs that
+ * might already have been present.
+ *
+ * @param credentials the object
+ * @param gids the group IDs, which will be freed by the DBusCredentials object
+ * @param n_gids the number of group IDs
+ */
+void
+_dbus_credentials_take_unix_gids (DBusCredentials *credentials,
+                                  dbus_gid_t      *gids,
+                                  size_t           n_gids)
+{
+  /* So we can compare arrays via a simple memcmp */
+  qsort (gids, n_gids, sizeof (dbus_gid_t), cmp_gidp);
+
+  dbus_free (credentials->unix_gids);
+  credentials->unix_gids = gids;
+  credentials->n_unix_gids = n_gids;
+}
+
+/**
+ * Get the Unix group IDs.
+ *
+ * @param credentials the object
+ * @param gids the group IDs, which will be freed by the DBusCredentials object
+ * @param n_gids the number of group IDs
+ */
+dbus_bool_t
+_dbus_credentials_get_unix_gids (DBusCredentials   *credentials,
+                                 const dbus_gid_t **gids,
+                                 size_t            *n_gids)
+{
+  if (gids != NULL)
+    *gids = credentials->unix_gids;
+
+  if (n_gids != NULL)
+    *n_gids = credentials->n_unix_gids;
+
+  return (credentials->unix_gids != NULL);
 }
 
 /**
@@ -261,6 +324,8 @@ _dbus_credentials_include (DBusCredentials    *credentials,
       return credentials->pid != DBUS_PID_UNSET;
     case DBUS_CREDENTIAL_UNIX_USER_ID:
       return credentials->unix_uid != DBUS_UID_UNSET;
+    case DBUS_CREDENTIAL_UNIX_GROUP_IDS:
+      return credentials->unix_gids != NULL;
     case DBUS_CREDENTIAL_WINDOWS_SID:
       return credentials->windows_sid != NULL;
     case DBUS_CREDENTIAL_LINUX_SECURITY_LABEL:
@@ -368,6 +433,10 @@ _dbus_credentials_are_superset (DBusCredentials    *credentials,
      possible_subset->pid == credentials->pid) &&
     (possible_subset->unix_uid == DBUS_UID_UNSET ||
      possible_subset->unix_uid == credentials->unix_uid) &&
+    (possible_subset->unix_gids == NULL ||
+     (possible_subset->n_unix_gids == credentials->n_unix_gids &&
+      memcmp (possible_subset->unix_gids, credentials->unix_gids,
+              sizeof (dbus_gid_t) * credentials->n_unix_gids) == 0)) &&
     (possible_subset->windows_sid == NULL ||
      (credentials->windows_sid && strcmp (possible_subset->windows_sid,
                                           credentials->windows_sid) == 0)) &&
@@ -393,6 +462,8 @@ _dbus_credentials_are_empty (DBusCredentials    *credentials)
   return
     credentials->pid == DBUS_PID_UNSET &&
     credentials->unix_uid == DBUS_UID_UNSET &&
+    credentials->unix_gids == NULL &&
+    credentials->n_unix_gids == 0 &&
     credentials->windows_sid == NULL &&
     credentials->linux_security_label == NULL &&
     credentials->adt_audit_data == NULL;
@@ -430,6 +501,9 @@ _dbus_credentials_add_credentials (DBusCredentials    *credentials,
                                       other_credentials) &&
     _dbus_credentials_add_credential (credentials,
                                       DBUS_CREDENTIAL_UNIX_USER_ID,
+                                      other_credentials) &&
+    _dbus_credentials_add_credential (credentials,
+                                      DBUS_CREDENTIAL_UNIX_GROUP_IDS,
                                       other_credentials) &&
     _dbus_credentials_add_credential (credentials,
                                       DBUS_CREDENTIAL_ADT_AUDIT_DATA_ID,
@@ -471,6 +545,22 @@ _dbus_credentials_add_credential (DBusCredentials    *credentials,
       if (!_dbus_credentials_add_unix_uid (credentials, other_credentials->unix_uid))
         return FALSE;
     }
+  else if (which == DBUS_CREDENTIAL_UNIX_GROUP_IDS &&
+           other_credentials->unix_gids != NULL)
+    {
+      dbus_gid_t *gids;
+
+      gids = dbus_new (dbus_gid_t, other_credentials->n_unix_gids);
+
+      if (gids == NULL)
+        return FALSE;
+
+      memcpy (gids, other_credentials->unix_gids,
+              sizeof (dbus_gid_t) * other_credentials->n_unix_gids);
+
+      _dbus_credentials_take_unix_gids (credentials, gids,
+                                        other_credentials->n_unix_gids);
+    }
   else if (which == DBUS_CREDENTIAL_WINDOWS_SID &&
            other_credentials->windows_sid != NULL)
     {
@@ -504,6 +594,9 @@ _dbus_credentials_clear (DBusCredentials    *credentials)
 {
   credentials->pid = DBUS_PID_UNSET;
   credentials->unix_uid = DBUS_UID_UNSET;
+  dbus_free (credentials->unix_gids);
+  credentials->unix_gids = NULL;
+  credentials->n_unix_gids = 0;
   dbus_free (credentials->windows_sid);
   credentials->windows_sid = NULL;
   dbus_free (credentials->linux_security_label);
@@ -588,16 +681,28 @@ _dbus_credentials_to_string_append (DBusCredentials    *credentials,
         goto oom;
       join = TRUE;
     }
-  else
-    join = FALSE;
+
+  if (credentials->unix_gids != NULL)
+    {
+      size_t i;
+
+      for (i = 0; i < credentials->n_unix_gids; i++)
+        {
+          if (!_dbus_string_append_printf (string, "%sgid=" DBUS_GID_FORMAT,
+                                           join ? " " : "",
+                                           credentials->unix_gids[i]))
+            goto oom;
+
+          join = TRUE;
+        }
+    }
+
   if (credentials->windows_sid != NULL)
     {
       if (!_dbus_string_append_printf (string, "%ssid=%s", join ? " " : "", credentials->windows_sid))
         goto oom;
       join = TRUE;
     }
-  else
-    join = FALSE;
 
   if (credentials->linux_security_label != NULL)
     {

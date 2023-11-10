@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 # aminclude_static.am generated automatically by Autoconf
-# from AX_AM_MACROS_STATIC on Tue Jun  6 14:02:10 BST 2023
+# from AX_AM_MACROS_STATIC on Fri Sep  1 15:31:27 BST 2023
 
 VPATH = @srcdir@
 am__is_gnu_make = { \
@@ -103,8 +103,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/visibility.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am $(top_srcdir)/configure \
@@ -221,7 +221,7 @@ am__DIST_COMMON = $(srcdir)/Doxyfile.in $(srcdir)/Makefile.in \
 	$(top_srcdir)/bus/tmpfiles.d/dbus.conf.in \
 	$(top_srcdir)/cmake/DBus1Config.pkgconfig.in \
 	$(top_srcdir)/cmake/DBus1ConfigVersion.cmake.in AUTHORS \
-	COPYING ChangeLog INSTALL NEWS README build-aux/compile \
+	COPYING INSTALL NEWS README build-aux/compile \
 	build-aux/config.guess build-aux/config.sub build-aux/depcomp \
 	build-aux/install-sh build-aux/ltmain.sh build-aux/missing
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
@@ -259,9 +259,9 @@ am__relativize = \
     dir1=`echo "$$dir1" | sed -e "$$sed_rest"`; \
   done; \
   reldir="$$dir2"
-DIST_ARCHIVES = $(distdir).tar.gz
 GZIP_ENV = --best
-DIST_TARGETS = dist-gzip
+DIST_ARCHIVES = $(distdir).tar.xz
+DIST_TARGETS = dist-xz
 # Exists only to be overridden by the user if desired.
 AM_DISTCHECK_DVI_TARGET = dvi
 distuninstallcheck_listfiles = find . -type f -print
@@ -292,7 +292,6 @@ CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
 CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
 CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
 CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
-CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
@@ -306,6 +305,7 @@ DBUS_BINDIR = @DBUS_BINDIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
+DBUS_GENERATE_MAN = @DBUS_GENERATE_MAN@
 DBUS_INT16_TYPE = @DBUS_INT16_TYPE@
 DBUS_INT32_TYPE = @DBUS_INT32_TYPE@
 DBUS_INT64_CONSTANT = @DBUS_INT64_CONSTANT@
@@ -329,12 +329,18 @@ DBUS_TEST_USER = @DBUS_TEST_USER@
 DBUS_UINT64_CONSTANT = @DBUS_UINT64_CONSTANT@
 DBUS_USER = @DBUS_USER@
 DBUS_VERSION = @DBUS_VERSION@
+DBUS_VER_FILE_TYPE = @DBUS_VER_FILE_TYPE@
+DBUS_VER_INTERNAL_NAME = @DBUS_VER_INTERNAL_NAME@
+DBUS_VER_ORIGINAL_NAME = @DBUS_VER_ORIGINAL_NAME@
 DBUS_X_CFLAGS = @DBUS_X_CFLAGS@
 DBUS_X_LIBS = @DBUS_X_LIBS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DLLTOOL = @DLLTOOL@
 DOXYGEN = @DOXYGEN@
+DOXYGEN_GENERATE_QHP = @DOXYGEN_GENERATE_QHP@
+DOXYGEN_QCH_FILE = @DOXYGEN_QCH_FILE@
+DOXYGEN_QHG_LOCATION = @DOXYGEN_QHG_LOCATION@
 DSYMUTIL = @DSYMUTIL@
 DUCKTYPE = @DUCKTYPE@
 DUMPBIN = @DUMPBIN@
@@ -409,14 +415,13 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PYTHON = @PYTHON@
-PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
-PYTHON_PLATFORM = @PYTHON_PLATFORM@
-PYTHON_PREFIX = @PYTHON_PREFIX@
-PYTHON_VERSION = @PYTHON_VERSION@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QHELPGENERATOR = @QHELPGENERATOR@
 RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
+SANITIZE_CFLAGS = @SANITIZE_CFLAGS@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -439,13 +444,10 @@ WARN_CFLAGS = @WARN_CFLAGS@
 WARN_CXXFLAGS = @WARN_CXXFLAGS@
 WARN_LDFLAGS = @WARN_LDFLAGS@
 WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
-XMKMF = @XMKMF@
 XMLTO = @XMLTO@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
-X_EXTRA_LIBS = @X_EXTRA_LIBS@
 X_LIBS = @X_LIBS@
-X_PRE_LIBS = @X_PRE_LIBS@
 YELP_BUILD = @YELP_BUILD@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -493,13 +495,10 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgconfig_prefix = @pkgconfig_prefix@
-pkgpyexecdir = @pkgpyexecdir@
-pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-pyexecdir = @pyexecdir@
-pythondir = @pythondir@
+qchdir = @qchdir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
@@ -523,9 +522,7 @@ EXTRA_DIST = \
 	CONTRIBUTING.md		\
 	dbus-1.pc.in		\
 	cleanup-man-pages.sh    \
-        ChangeLog.pre-1-0       \
         NEWS.pre-1-0            \
-	ChangeLog.pre-1-2       \
         NEWS.pre-1-2		\
 	README.cmake		\
 	README.valgrind		\
@@ -533,21 +530,14 @@ EXTRA_DIST = \
 	README.wince		\
 	README.cygwin		\
 	README.launchd		\
-	cmake/CMakeLists.txt \
-	cmake/ConfigureChecks.cmake \
-	cmake/DBus1Config.cmake.in \
-	cmake/DBus1Config.pkgconfig.in \
-	cmake/DBus1ConfigVersion.cmake.in \
-	cmake/bus \
-	cmake/bus-test.bat.cmake \
-	cmake/config.h.cmake \
-	cmake/dbus \
-	cmake/dbus-env.bat.cmake \
-	cmake/doc \
-	cmake/i686-w64-mingw32.cmake \
-	cmake/modules \
-	cmake/test \
-	cmake/tools \
+	CMakeLists.txt \
+	bus/CMakeLists.txt \
+	dbus/CMakeLists.txt \
+	doc/CMakeLists.txt \
+	test/CMakeLists.txt \
+	test/name-test/CMakeLists.txt \
+	tools/CMakeLists.txt \
+	cmake \
 	$(NULL)
 
 DISTCHECK_CONFIGURE_FLAGS = \
@@ -582,15 +572,15 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am $(top_srcdir
 	@for dep in $?; do \
 	  case '$(am__configure_deps)' in \
 	    *$$dep*) \
-	      echo ' cd $(srcdir) && $(AUTOMAKE) --gnu'; \
-	      $(am__cd) $(srcdir) && $(AUTOMAKE) --gnu \
+	      echo ' cd $(srcdir) && $(AUTOMAKE) --foreign'; \
+	      $(am__cd) $(srcdir) && $(AUTOMAKE) --foreign \
 		&& exit 0; \
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu Makefile
+	  $(AUTOMAKE) --foreign Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -882,7 +872,6 @@ dist-bzip2: distdir
 dist-lzip: distdir
 	tardir=$(distdir) && $(am__tar) | lzip -c $${LZIP_OPT--9} >$(distdir).tar.lz
 	$(am__post_remove_distdir)
-
 dist-xz: distdir
 	tardir=$(distdir) && $(am__tar) | XZ_OPT=$${XZ_OPT--e} xz -c >$(distdir).tar.xz
 	$(am__post_remove_distdir)
@@ -1135,7 +1124,7 @@ uninstall-am: uninstall-cmakeconfigDATA uninstall-pkgconfigDATA
 all-local: Doxyfile
 
 update-authors:
-	git shortlog -s -e | cut -c 8- | sort > AUTHORS
+	( cd $(srcdir) && git shortlog -s -e ) | cut -c 8- | sort > $(srcdir)/AUTHORS
 
 # Code coverage
 #

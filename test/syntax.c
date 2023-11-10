@@ -281,6 +281,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/syntax/path", Fixture, &paths, setup, test_syntax, teardown);
@@ -299,5 +301,7 @@ main (int argc,
   g_test_add ("/syntax/utf8", Fixture, &strings,
       setup, test_syntax, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

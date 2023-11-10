@@ -26,6 +26,7 @@
 #include "test.h"
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-mainloop.h>
+#include <dbus/dbus-test-tap.h>
 #include <dbus/dbus-timeout.h>
 
 struct BusExpireList
@@ -316,7 +317,7 @@ time_add_milliseconds (long *tv_sec,
 }
 
 dbus_bool_t
-bus_expire_list_test (const DBusString *test_data_dir)
+bus_expire_list_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 {
   DBusLoop *loop;
   BusExpireList *list;
@@ -362,7 +363,7 @@ bus_expire_list_test (const DBusString *test_data_dir)
   item->item.added_tv_sec = tv_sec;
   item->item.added_tv_usec = tv_usec;
   if (!bus_expire_list_add (list, &item->item))
-    _dbus_assert_not_reached ("out of memory");
+    _dbus_test_fatal ("out of memory");
 
   next_interval =
     do_expiration_with_monotonic_time (list, tv_sec_not_expired,

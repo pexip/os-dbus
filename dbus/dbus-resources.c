@@ -4,7 +4,7 @@
  * Copyright (C) 2003  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -273,7 +273,11 @@ _dbus_counter_adjust_unix_fd (DBusCounter *counter,
 long
 _dbus_counter_get_size_value (DBusCounter *counter)
 {
-  return counter->size_value;
+  long result;
+  _dbus_rmutex_lock (counter->mutex);
+  result = counter->size_value;
+  _dbus_rmutex_unlock (counter->mutex);
+  return result;
 }
 
 /**
@@ -285,7 +289,11 @@ _dbus_counter_get_size_value (DBusCounter *counter)
 long
 _dbus_counter_get_unix_fd_value (DBusCounter *counter)
 {
-  return counter->unix_fd_value;
+  long result;
+  _dbus_rmutex_lock (counter->mutex);
+  result = counter->unix_fd_value;
+  _dbus_rmutex_unlock (counter->mutex);
+  return result;
 }
 
 /**

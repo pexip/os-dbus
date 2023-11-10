@@ -1,10 +1,10 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-userdb.c User database abstraction
- * 
+ *
  * Copyright (C) 2003, 2004  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -29,6 +29,13 @@
 #include "dbus-protocol.h"
 #include "dbus-credentials.h"
 #include <string.h>
+
+/* It isn't obvious from its name, but this file is part of the Unix
+ * system-dependent part of libdbus. Windows has a parallel
+ * implementation of some of it in dbus-sysdeps-win.c. */
+#if defined(DBUS_WIN) || !defined(DBUS_UNIX)
+#error "This file only makes sense on Unix OSs"
+#endif
 
 /**
  * @addtogroup DBusInternalsUtils
@@ -252,6 +259,7 @@ _dbus_user_database_lookup (DBusUserDatabase *db,
     }
 }
 
+/* Protected by _DBUS_LOCK_system_users */
 static dbus_bool_t database_locked = FALSE;
 static DBusUserDatabase *system_db = NULL;
 static DBusString process_username;
@@ -448,48 +456,6 @@ _dbus_homedir_from_current_process (const DBusString  **homedir)
 /**
  * Gets the home directory for the given user.
  *
- * @param username the username
- * @param homedir string to append home directory to
- * @returns #TRUE if user existed and we appended their homedir
- */
-dbus_bool_t
-_dbus_homedir_from_username (const DBusString *username,
-                             DBusString       *homedir)
-{
-  DBusUserDatabase *db;
-  const DBusUserInfo *info;
-
-  /* FIXME: this can't distinguish ENOMEM from other errors */
-  if (!_dbus_user_database_lock_system ())
-    return FALSE;
-
-  db = _dbus_user_database_get_system ();
-  if (db == NULL)
-    {
-      _dbus_user_database_unlock_system ();
-      return FALSE;
-    }
-
-  if (!_dbus_user_database_get_username (db, username,
-                                         &info, NULL))
-    {
-      _dbus_user_database_unlock_system ();
-      return FALSE;
-    }
-
-  if (!_dbus_string_append (homedir, info->homedir))
-    {
-      _dbus_user_database_unlock_system ();
-      return FALSE;
-    }
-  
-  _dbus_user_database_unlock_system ();
-  return TRUE;
-}
-
-/**
- * Gets the home directory for the given user.
- *
  * @param uid the uid
  * @param homedir string to append home directory to
  * @returns #TRUE if user existed and we appended their homedir
@@ -554,25 +520,57 @@ _dbus_homedir_from_uid (dbus_uid_t         uid,
  * @returns #TRUE if the username existed and we got some credentials
  */
 dbus_bool_t
-_dbus_credentials_add_from_user (DBusCredentials  *credentials,
-                                 const DBusString *username)
+_dbus_credentials_add_from_user (DBusCredentials         *credentials,
+                                 const DBusString        *username,
+                                 DBusCredentialsAddFlags  flags,
+                                 DBusError               *error)
 {
   DBusUserDatabase *db;
   const DBusUserInfo *info;
+  unsigned long uid = DBUS_UID_UNSET;
 
-  /* FIXME: this can't distinguish ENOMEM from other errors */
+  /* Fast-path for the common case: if the "username" is all-numeric,
+   * then it's a Unix uid. This is true regardless of whether that uid
+   * exists in NSS or /etc/passwd or equivalent. */
+  if (_dbus_is_a_number (username, &uid))
+    {
+      _DBUS_STATIC_ASSERT (sizeof (uid) == sizeof (dbus_uid_t));
+
+      if (_dbus_credentials_add_unix_uid (credentials, uid))
+        {
+          return TRUE;
+        }
+      else
+        {
+          _DBUS_SET_OOM (error);
+          return FALSE;
+        }
+    }
+
+  /* If we aren't allowed to look in NSS or /etc/passwd, fail now. */
+  if (!(flags & DBUS_CREDENTIALS_ADD_FLAGS_USER_DATABASE))
+    {
+      dbus_set_error (error, DBUS_ERROR_INVALID_ARGS,
+                      "Expected a numeric Unix uid");
+      return FALSE;
+    }
+
   if (!_dbus_user_database_lock_system ())
-    return FALSE;
+    {
+      _DBUS_SET_OOM (error);
+      return FALSE;
+    }
 
   db = _dbus_user_database_get_system ();
   if (db == NULL)
     {
       _dbus_user_database_unlock_system ();
+      _DBUS_SET_OOM (error);
       return FALSE;
     }
 
   if (!_dbus_user_database_get_username (db, username,
-                                         &info, NULL))
+                                         &info, error))
     {
       _dbus_user_database_unlock_system ();
       return FALSE;
@@ -581,6 +579,7 @@ _dbus_credentials_add_from_user (DBusCredentials  *credentials,
   if (!_dbus_credentials_add_unix_uid(credentials, info->uid))
     {
       _dbus_user_database_unlock_system ();
+      _DBUS_SET_OOM (error);
       return FALSE;
     }
   

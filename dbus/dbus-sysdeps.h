@@ -1,11 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-sysdeps.h Wrappers around system/libc features (internal to D-Bus implementation)
- * 
+ *
  * Copyright (C) 2002, 2003  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -74,12 +74,15 @@
 # define BROKEN_POLL
 #endif
 
-/* AIX sys/poll.h does #define events reqevents, and other
- * wonderousness, so must include sys/poll before declaring
- * DBusPollFD
- */ 
+/* Normally we'd only include this in dbus-sysdeps-unix.c.
+ * However, the member names in DBusPollFD are (deliberately) the same as
+ * in POSIX struct pollfd, and AIX's poll() implementation is known to
+ * do things like "#define events reqevents", which would break that approach.
+ * Defend against that by ensuring that if it's renamed anywhere, it's renamed
+ * everywhere.
+ */
 #ifdef HAVE_POLL
-#include <sys/poll.h>
+#include <poll.h>
 #endif
 
 #ifdef DBUS_WINCE
@@ -158,15 +161,18 @@ typedef struct { SOCKET sock; } DBusSocket;
 # define DBUS_SOCKET_FORMAT "Iu"
 # define DBUS_SOCKET_INIT { INVALID_SOCKET }
 
+_DBUS_WARN_UNUSED_RESULT
 static inline SOCKET
 _dbus_socket_printable (DBusSocket s) { return s.sock; }
 
+_DBUS_WARN_UNUSED_RESULT
 static inline dbus_bool_t
 _dbus_socket_is_valid (DBusSocket s) { return s.sock != INVALID_SOCKET; }
 
 static inline void
 _dbus_socket_invalidate (DBusSocket *s) { s->sock = INVALID_SOCKET; }
 
+_DBUS_WARN_UNUSED_RESULT
 static inline int
 _dbus_socket_get_int (DBusSocket s) { return (int)s.sock; }
 
@@ -176,20 +182,24 @@ typedef struct { int fd; } DBusSocket;
 # define DBUS_SOCKET_FORMAT "d"
 # define DBUS_SOCKET_INIT { -1 }
 
+_DBUS_WARN_UNUSED_RESULT
 static inline int
 _dbus_socket_printable (DBusSocket s) { return s.fd; }
 
+_DBUS_WARN_UNUSED_RESULT
 static inline dbus_bool_t
 _dbus_socket_is_valid (DBusSocket s) { return s.fd >= 0; }
 
 static inline void
 _dbus_socket_invalidate (DBusSocket *s) { s->fd = -1; }
 
+_DBUS_WARN_UNUSED_RESULT
 static inline int
 _dbus_socket_get_int (DBusSocket s) { return s.fd; }
 
 #endif /* not DBUS_WIN */
 
+_DBUS_WARN_UNUSED_RESULT
 static inline DBusSocket
 _dbus_socket_get_invalid (void)
 {
@@ -256,6 +266,7 @@ int _dbus_listen_tcp_socket   (const char     *host,
                                const char     *port,
                                const char     *family,
                                DBusString     *retport,
+                               const char    **retfamily,
                                DBusSocket    **fds_p,
                                DBusError      *error);
 DBusSocket _dbus_accept       (DBusSocket      listen_fd);
@@ -266,8 +277,17 @@ dbus_bool_t _dbus_read_credentials_socket (DBusSocket        client_fd,
 dbus_bool_t _dbus_send_credentials_socket (DBusSocket       server_fd,
                                            DBusError       *error);
 
-dbus_bool_t _dbus_credentials_add_from_user            (DBusCredentials  *credentials,
-                                                        const DBusString *username);
+typedef enum
+{
+  DBUS_CREDENTIALS_ADD_FLAGS_USER_DATABASE = (1 << 0),
+  DBUS_CREDENTIALS_ADD_FLAGS_NONE = 0
+} DBusCredentialsAddFlags;
+
+dbus_bool_t _dbus_credentials_add_from_user            (DBusCredentials         *credentials,
+                                                        const DBusString        *username,
+                                                        DBusCredentialsAddFlags  flags,
+                                                        DBusError               *error);
+
 dbus_bool_t _dbus_credentials_add_from_current_process (DBusCredentials  *credentials);
 DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_append_user_from_current_process     (DBusString        *str);
@@ -278,7 +298,8 @@ dbus_bool_t _dbus_parse_unix_group_from_config  (const DBusString  *groupname,
                                                  dbus_gid_t        *gid_p);
 dbus_bool_t _dbus_unix_groups_from_uid          (dbus_uid_t         uid,
                                                  dbus_gid_t       **group_ids,
-                                                 int               *n_group_ids);
+                                                 int               *n_group_ids,
+                                                 DBusError         *error);
 dbus_bool_t _dbus_unix_user_is_at_console       (dbus_uid_t         uid,
                                                  DBusError         *error);
 dbus_bool_t _dbus_unix_user_is_process_owner    (dbus_uid_t         uid);
@@ -286,10 +307,6 @@ dbus_bool_t _dbus_windows_user_is_process_owner (const char        *windows_sid)
 
 dbus_bool_t _dbus_append_keyring_directory_for_credentials (DBusString      *directory,
                                                             DBusCredentials *credentials);
-
-dbus_bool_t _dbus_daemon_is_session_bus_address_published (const char *scope);
-
-dbus_bool_t _dbus_daemon_publish_session_bus_address (const char* address, const char* shm_name);
 
 void _dbus_daemon_unpublish_session_bus_address (void);
 
@@ -318,6 +335,10 @@ DBUS_PRIVATE_EXPORT
 dbus_int32_t _dbus_atomic_dec (DBusAtomic *atomic);
 DBUS_PRIVATE_EXPORT
 dbus_int32_t _dbus_atomic_get (DBusAtomic *atomic);
+DBUS_PRIVATE_EXPORT
+void         _dbus_atomic_set_zero    (DBusAtomic *atomic);
+DBUS_PRIVATE_EXPORT
+void         _dbus_atomic_set_nonzero (DBusAtomic *atomic);
 
 #ifdef DBUS_WIN
 
@@ -479,7 +500,7 @@ const char* _dbus_get_tmpdir      (void);
 /**
  * Random numbers 
  */
-_DBUS_GNUC_WARN_UNUSED_RESULT
+_DBUS_WARN_UNUSED_RESULT
 dbus_bool_t _dbus_generate_random_bytes_buffer (char       *buffer,
                                                 int         n_bytes,
                                                 DBusError  *error);
@@ -495,6 +516,8 @@ DBUS_PRIVATE_EXPORT
 const char* _dbus_error_from_errno (int error_number);
 DBUS_PRIVATE_EXPORT
 const char* _dbus_error_from_system_errno (void);
+
+int         _dbus_get_low_level_socket_errno         (void);
 
 int         _dbus_save_socket_errno                  (void);
 void        _dbus_restore_socket_errno               (int saved_errno);
@@ -595,20 +618,6 @@ void _dbus_logv (DBusSystemLogSeverity  severity,
                  const char            *msg,
                  va_list args) _DBUS_GNUC_PRINTF (2, 0);
 
-/* Define DBUS_VA_COPY() to do the right thing for copying va_list variables.
- * config.h may have already defined DBUS_VA_COPY as va_copy or __va_copy.
- */
-#if !defined (DBUS_VA_COPY)
-#  if defined (__GNUC__) && defined (__PPC__) && (defined (_CALL_SYSV) || defined (_WIN32))
-#    define DBUS_VA_COPY(ap1, ap2)   (*(ap1) = *(ap2))
-#  elif defined (DBUS_VA_COPY_AS_ARRAY)
-#    define DBUS_VA_COPY(ap1, ap2)   memcpy ((ap1), (ap2), sizeof (va_list))
-#  else /* va_list is a pointer */
-#    define DBUS_VA_COPY(ap1, ap2)   ((ap1) = (ap2))
-#  endif /* va_list is a pointer */
-#endif /* !DBUS_VA_COPY */
-
-
 /**
  * Casts a primitive C type to a byte array and then indexes
  * a particular byte of the array.
@@ -703,15 +712,28 @@ dbus_bool_t     _dbus_rlimit_restore_fd_limit              (DBusRLimit   *saved,
                                                             DBusError    *error);
 void            _dbus_rlimit_free                          (DBusRLimit   *lim);
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-_DBUS_GNUC_WARN_UNUSED_RESULT
-dbus_bool_t _dbus_test_append_different_uid (DBusString *uid);
+void            _dbus_daemon_report_ready                  (void);
+void            _dbus_daemon_report_reloading              (void);
+void            _dbus_daemon_report_reloaded               (void);
+void            _dbus_daemon_report_stopping               (void);
 
-#ifdef DBUS_UNIX
-_DBUS_GNUC_WARN_UNUSED_RESULT
-dbus_bool_t _dbus_test_append_different_username (DBusString *username);
-#endif
-#endif  /* DBUS_ENABLE_EMBEDDED_TESTS */
+dbus_bool_t _dbus_inet_sockaddr_to_string (const void *sockaddr_pointer,
+                                           size_t len,
+                                           char *string,
+                                           size_t string_len,
+                                           const char **family_name,
+                                           dbus_uint16_t *port,
+                                           DBusError *error);
+void _dbus_set_error_with_inet_sockaddr (DBusError *error,
+                                         const void *sockaddr_pointer,
+                                         size_t len,
+                                         const char *description,
+                                         int saved_errno);
+void _dbus_combine_tcp_errors (DBusList **sources,
+                               const char *summary,
+                               const char *host,
+                               const char *port,
+                               DBusError *dest);
 
 /** @} */
 

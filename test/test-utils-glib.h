@@ -29,6 +29,7 @@
 
 #include <dbus/dbus.h>
 
+#include <gio/gio.h>
 #include <glib.h>
 
 #include "test-utils.h"
@@ -44,8 +45,8 @@
  * be run as an arbitrary non-root user, as above.
  *
  * Certain tests can usefully be run again, as root. When this is done,
- * tests using TEST_USER_ROOT, TEST_USER_MESSAGEBUS and/or TEST_USER_OTHER
- * can exercise situations that only arise when there's more than one uid.
+ * tests using a TestUser other than TEST_USER_ME can exercise situations
+ * that only arise when there's more than one uid.
  */
 typedef enum {
     /* Whatever user happens to be running the regression test;
@@ -57,6 +58,11 @@ typedef enum {
      * from configure.ac, usually 'messagebus' but perhaps 'dbus' or
      * '_dbus'. */
     TEST_USER_MESSAGEBUS,
+    /* Run as uid 0, expecting to drop privileges to the user who would
+     * normally run the system bus (so we must skip the test if that user
+     * doesn't exist). Only valid for test_get_dbus_daemon(), not for
+     * test_connect_to_bus_as_user(). */
+    TEST_USER_ROOT_DROP_TO_MESSAGEBUS,
     /* An unprivileged user who is neither root nor DBUS_USER.
      * This is DBUS_TEST_USER from configure.ac, usually 'nobody'. */
     TEST_USER_OTHER
@@ -74,9 +80,16 @@ gchar *test_get_dbus_daemon (const gchar *config_file,
 
 DBusConnection *test_connect_to_bus (TestMainContext *ctx,
     const gchar *address);
-DBusConnection *test_connect_to_bus_as_user (TestMainContext *ctx,
+DBusConnection *test_try_connect_to_bus (TestMainContext *ctx,
+    const gchar *address,
+    GError **error);
+DBusConnection *test_try_connect_to_bus_as_user (TestMainContext *ctx,
     const char *address,
-    TestUser user);
+    TestUser user,
+    GError **error);
+GDBusConnection *test_try_connect_gdbus_as_user (const char *address,
+    TestUser user,
+    GError **error);
 
 void test_kill_pid (GPid pid);
 
@@ -90,6 +103,13 @@ void test_rmdir_if_exists (const gchar *path);
 void test_mkdir (const gchar *path, gint mode);
 
 void test_timeout_reset (guint factor);
+
+void test_oom (void) _DBUS_GNUC_NORETURN;
+
+DBusMessage *test_main_context_call_and_wait (TestMainContext *ctx,
+    DBusConnection *connection,
+    DBusMessage *call,
+    int timeout);
 
 #if !GLIB_CHECK_VERSION(2, 44, 0)
 #define g_steal_pointer(x) backported_g_steal_pointer (x)
@@ -106,6 +126,18 @@ backported_g_steal_pointer (gpointer pointer_to_pointer)
 }
 #endif
 
+#ifndef g_assert_nonnull
+#define g_assert_nonnull(a) g_assert (a != NULL)
+#endif
+
 gboolean test_check_tcp_works (void);
+
+void test_store_result_cb (GObject *source_object,
+                           GAsyncResult *result,
+                           gpointer user_data);
+
+void test_incomplete (const gchar *message);
+
+gchar *test_get_helper_executable (const gchar *exe);
 
 #endif
