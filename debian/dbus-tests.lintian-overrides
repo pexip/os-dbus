@@ -2,5 +2,5 @@
 dbus-tests: capitalization-error-in-description dbus D-Bus
 
 # intentional
-dbus-tests: breakout-link usr/lib/dbus-1.0/debug-build/libexec/installed-tests/* -> usr/share/dbus-1/*
-dbus-tests: breakout-link usr/lib/dbus-1.0/installed-tests/* -> usr/share/dbus-1/*
+dbus-tests: custom-library-search-path usr/lib/dbus-1.0/debug-build/bin/* RUNPATH usr/lib/dbus-1.0/debug-build/lib/
+dbus-tests: custom-library-search-path usr/lib/dbus-1.0/debug-build/libexec/* RUNPATH usr/lib/dbus-1.0/debug-build/lib/

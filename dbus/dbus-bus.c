@@ -5,7 +5,7 @@
  * Copyright (C) 2003  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -83,17 +83,18 @@ typedef struct
 } BusData;
 
 /** The slot we have reserved to store BusData.
+ * Protected by _DBUS_LOCK_connection_slots.
  */
 static dbus_int32_t bus_data_slot = -1;
 
 /** Number of bus types */
 #define N_BUS_TYPES 3
 
+/* Protected by _DBUS_LOCK_bus, except during shutdown, which can't safely
+ * be done in a threaded application anyway. */
 static DBusConnection *bus_connections[N_BUS_TYPES];
 static char *bus_connection_addresses[N_BUS_TYPES] = { NULL, NULL, NULL };
-
 static DBusBusType activation_bus_type = DBUS_BUS_STARTER;
-
 static dbus_bool_t initialized = FALSE;
 
 static void

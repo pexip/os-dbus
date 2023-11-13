@@ -474,7 +474,8 @@ assert_message_as_expected (DBusMessage *m)
 
 /* Return TRUE on success or OOM, as per DBusTestMemoryFunction signature */
 static dbus_bool_t
-test_once (void *data)
+test_once (void        *data,
+           dbus_bool_t  have_memory)
 {
   gboolean *really_succeeded = data;
   Fixture fixture = { NULL, NULL };
@@ -545,7 +546,7 @@ test_simple (void)
 {
   gboolean really_succeeded = FALSE;
 
-  if (!test_once (&really_succeeded))
+  if (!test_once (&really_succeeded, TRUE))
     g_error ("Test failed");
 
   if (!really_succeeded)
@@ -553,7 +554,7 @@ test_simple (void)
 }
 
 static void
-test_oom (void)
+test_oom_handling (void)
 {
   if (!_dbus_test_oom_handling ("DBusVariant", test_once, NULL))
     g_error ("Test failed");
@@ -563,10 +564,14 @@ int
 main (int argc,
       char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add_func ("/variant/simple", test_simple);
-  g_test_add_func ("/variant/oom", test_oom);
+  g_test_add_func ("/variant/oom", test_oom_handling);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

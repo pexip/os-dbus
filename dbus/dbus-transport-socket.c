@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003, 2004, 2006  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -1293,35 +1293,40 @@ _dbus_transport_new_for_socket (DBusSocket        fd,
                                 const DBusString *address)
 {
   DBusTransportSocket *socket_transport;
-  
+  DBusString invalid = _DBUS_STRING_INIT_INVALID;
+
   socket_transport = dbus_new0 (DBusTransportSocket, 1);
   if (socket_transport == NULL)
     return NULL;
 
+  /* So they can be "freed" without error */
+  socket_transport->encoded_outgoing = invalid;
+  socket_transport->encoded_incoming = invalid;
+
   if (!_dbus_string_init (&socket_transport->encoded_outgoing))
-    goto failed_0;
+    goto failed;
 
   if (!_dbus_string_init (&socket_transport->encoded_incoming))
-    goto failed_1;
+    goto failed;
   
   socket_transport->write_watch = _dbus_watch_new (_dbus_socket_get_pollable (fd),
                                                  DBUS_WATCH_WRITABLE,
                                                  FALSE,
                                                  NULL, NULL, NULL);
   if (socket_transport->write_watch == NULL)
-    goto failed_2;
+    goto failed;
   
   socket_transport->read_watch = _dbus_watch_new (_dbus_socket_get_pollable (fd),
                                                 DBUS_WATCH_READABLE,
                                                 FALSE,
                                                 NULL, NULL, NULL);
   if (socket_transport->read_watch == NULL)
-    goto failed_3;
+    goto failed;
 
   if (!_dbus_transport_init_base (&socket_transport->base,
                                   &socket_vtable,
                                   server_guid, address))
-    goto failed_4;
+    goto failed;
 
 #ifdef HAVE_UNIX_FD_PASSING
   _dbus_auth_set_unix_fd_possible(socket_transport->base.auth, _dbus_socket_can_pass_unix_fd(fd));
@@ -1336,17 +1341,21 @@ _dbus_transport_new_for_socket (DBusSocket        fd,
   
   return (DBusTransport*) socket_transport;
 
- failed_4:
-  _dbus_watch_invalidate (socket_transport->read_watch);
-  _dbus_watch_unref (socket_transport->read_watch);
- failed_3:
-  _dbus_watch_invalidate (socket_transport->write_watch);
-  _dbus_watch_unref (socket_transport->write_watch);
- failed_2:
+failed:
+  if (socket_transport->read_watch != NULL)
+    {
+      _dbus_watch_invalidate (socket_transport->read_watch);
+      _dbus_watch_unref (socket_transport->read_watch);
+    }
+
+  if (socket_transport->write_watch != NULL)
+    {
+      _dbus_watch_invalidate (socket_transport->write_watch);
+      _dbus_watch_unref (socket_transport->write_watch);
+    }
+
   _dbus_string_free (&socket_transport->encoded_incoming);
- failed_1:
   _dbus_string_free (&socket_transport->encoded_outgoing);
- failed_0:
   dbus_free (socket_transport);
   return NULL;
 }
@@ -1494,4 +1503,3 @@ _dbus_transport_open_socket(DBusAddressEntry  *entry,
 }
 
 /** @} */
-

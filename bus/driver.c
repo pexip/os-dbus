@@ -26,6 +26,7 @@
 #include "activation.h"
 #include "apparmor.h"
 #include "connection.h"
+#include "containers.h"
 #include "driver.h"
 #include "dispatch.h"
 #include "services.h"
@@ -51,14 +52,14 @@ nonnull (const char *maybe_null,
 }
 
 static DBusConnection *
-bus_driver_get_owner_of_name (DBusConnection *connection,
+bus_driver_get_owner_of_name (DBusConnection *observer,
                               const char     *name)
 {
   BusRegistry *registry;
   BusService *serv;
   DBusString str;
 
-  registry = bus_connection_get_registry (connection);
+  registry = bus_connection_get_registry (observer);
   _dbus_string_init_const (&str, name);
   serv = bus_registry_lookup (registry, &str);
 
@@ -109,6 +110,28 @@ bus_driver_get_conn_helper (DBusConnection  *connection,
   return BUS_DRIVER_FOUND_PEER;
 }
 
+static dbus_bool_t
+bus_driver_check_caller_is_not_container (DBusConnection *connection,
+                                          BusTransaction *transaction,
+                                          DBusMessage    *message,
+                                          DBusError      *error)
+{
+  if (bus_containers_connection_is_contained (connection, NULL, NULL, NULL))
+    {
+      const char *method = dbus_message_get_member (message);
+
+      bus_context_log_and_set_error (bus_transaction_get_context (transaction),
+          DBUS_SYSTEM_LOG_SECURITY, error, DBUS_ERROR_ACCESS_DENIED,
+          "rejected attempt to call %s by connection %s (%s) in "
+          "container", method,
+          nonnull (bus_connection_get_name (connection), "(inactive)"),
+          bus_connection_get_loginfo (connection));
+      return FALSE;
+    }
+
+  return TRUE;
+}
+
 /*
  * Log a security warning and set error unless the uid of the connection
  * is either the uid of this process, or on Unix, uid 0 (root).
@@ -128,7 +151,16 @@ bus_driver_check_caller_is_privileged (DBusConnection *connection,
 {
 #ifdef DBUS_UNIX
   unsigned long uid;
+#elif defined(DBUS_WIN)
+  char *windows_sid = NULL;
+  dbus_bool_t ret = FALSE;
+#endif
 
+  if (!bus_driver_check_caller_is_not_container (connection, transaction,
+                                                 message, error))
+    return FALSE;
+
+#ifdef DBUS_UNIX
   if (!dbus_connection_get_unix_user (connection, &uid))
     {
       const char *method = dbus_message_get_member (message);
@@ -168,9 +200,6 @@ bus_driver_check_caller_is_privileged (DBusConnection *connection,
 
   return TRUE;
 #elif defined(DBUS_WIN)
-  char *windows_sid = NULL;
-  dbus_bool_t ret = FALSE;
-
   if (!dbus_connection_get_windows_user (connection, &windows_sid))
     {
       const char *method = dbus_message_get_member (message);
@@ -1380,6 +1409,7 @@ bus_driver_handle_remove_match (DBusConnection *connection,
   const char *text;
   DBusString str;
   BusMatchmaker *matchmaker;
+  DBusList *link;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -1400,17 +1430,21 @@ bus_driver_handle_remove_match (DBusConnection *connection,
   if (rule == NULL)
     goto failed;
 
-  /* Send the ack before we remove the rule, since the ack is undone
-   * on transaction cancel, but rule removal isn't.
-   */
+  matchmaker = bus_connection_get_matchmaker (connection);
+
+  /* Check whether the rule exists and prepare to remove it, but don't
+   * actually do it yet. */
+  link = bus_matchmaker_prepare_remove_rule_by_value (matchmaker, rule, error);
+  if (link == NULL)
+    goto failed;
+
+  /* We do this before actually removing the rule, because removing the
+   * rule cannot be undone if we run out of memory here. */
   if (!bus_driver_send_ack_reply (connection, transaction, message, error))
     goto failed;
 
-  matchmaker = bus_connection_get_matchmaker (connection);
-
-  if (!bus_matchmaker_remove_rule_by_value (matchmaker, rule, error))
-    goto failed;
-
+  /* The rule exists, so now we can do things we can't undo. */
+  bus_matchmaker_commit_remove_rule_by_value (matchmaker, rule, link);
   bus_match_rule_unref (rule);
 
   return TRUE;
@@ -1452,7 +1486,7 @@ bus_driver_handle_get_service_owner (DBusConnection *connection,
   if (service == NULL &&
       _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
     {
-      /* ORG_FREEDESKTOP_DBUS owns itself */
+      /* DBUS_SERVICE_DBUS owns itself */
       base_name = DBUS_SERVICE_DBUS;
     }
   else if (service == NULL)
@@ -1539,7 +1573,7 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
   if (service == NULL &&
       _dbus_string_equal_c_str (&str, DBUS_SERVICE_DBUS))
     {
-      /* ORG_FREEDESKTOP_DBUS owns itself */
+      /* DBUS_SERVICE_DBUS owns itself */
       if (! _dbus_list_append (&base_names, (char *) dbus_service_name))
         goto oom;
     }
@@ -1552,10 +1586,11 @@ bus_driver_handle_list_queued_owners (DBusConnection *connection,
     }
   else
     {
-      if (!bus_service_list_queued_owners (service,
-                                           &base_names,
-                                           error))
-        goto failed;
+      if (!bus_service_list_queued_owners (service, &base_names))
+        {
+          BUS_SET_OOM (error);
+          goto failed;
+        }
     }
 
   _dbus_assert (base_names != NULL);
@@ -1874,6 +1909,144 @@ bus_driver_handle_get_connection_selinux_security_context (DBusConnection *conne
   return FALSE;
 }
 
+/*
+ * Write the unix group ids of credentials @credentials, if available, into
+ * the a{sv} @asv_iter. Return #FALSE on OOM.
+ */
+static dbus_bool_t
+bus_driver_credentials_fill_unix_gids (DBusCredentials *credentials,
+                                       DBusMessageIter *asv_iter)
+{
+  const dbus_gid_t *gids = NULL;
+  size_t n_gids = 0;
+
+  if (!_dbus_credentials_get_unix_gids (credentials, &gids, &n_gids))
+    return TRUE;
+
+  if (sizeof (dbus_gid_t) == sizeof (dbus_uint32_t))
+    {
+      return _dbus_asv_add_fixed_array (asv_iter, "UnixGroupIDs",
+                                        DBUS_TYPE_UINT32, gids, n_gids);
+    }
+  else
+    {
+      /* we can't represent > 32-bit uids; if your system needs them, please
+       * add UnixGroupIDs64 to the spec or something */
+      dbus_uint32_t *gids_u32;
+      size_t i;
+      dbus_bool_t result;
+
+      gids_u32 = dbus_new (dbus_uint32_t, n_gids);
+      if (gids_u32 == NULL)
+        return FALSE;
+
+      for (i = 0; i < n_gids; i++)
+        {
+          if (gids[i] > _DBUS_UINT32_MAX)
+            {
+              /* At least one gid is unrepresentable, so behave as though
+               * we didn't know the group IDs at all (not an error, just
+               * success with less information) */
+              dbus_free (gids_u32);
+              return TRUE;
+            }
+          gids_u32[i] = gids[i];
+        }
+
+      result = _dbus_asv_add_fixed_array (asv_iter, "UnixGroupIDs",
+                                          DBUS_TYPE_UINT32, gids_u32, n_gids);
+
+      dbus_free (gids_u32);
+
+      return result;
+    }
+}
+
+/*
+ * Write the credentials of connection @conn (or the bus daemon itself,
+ * if @conn is #NULL) into the a{sv} @asv_iter. Return #FALSE on OOM.
+ */
+dbus_bool_t
+bus_driver_fill_connection_credentials (DBusCredentials *credentials,
+                                        DBusConnection  *conn,
+                                        DBusMessageIter *asv_iter)
+{
+  dbus_uid_t uid = DBUS_UID_UNSET;
+  dbus_pid_t pid = DBUS_PID_UNSET;
+  const char *windows_sid = NULL;
+  const char *linux_security_label = NULL;
+#ifdef DBUS_ENABLE_CONTAINERS
+  const char *path;
+#endif
+
+  if (credentials == NULL && conn != NULL)
+    credentials = _dbus_connection_get_credentials (conn);
+
+  if (credentials != NULL)
+    {
+      pid = _dbus_credentials_get_pid (credentials);
+      uid = _dbus_credentials_get_unix_uid (credentials);
+      windows_sid = _dbus_credentials_get_windows_sid (credentials);
+      linux_security_label =
+        _dbus_credentials_get_linux_security_label (credentials);
+    }
+
+  /* we can't represent > 32-bit pids; if your system needs them, please
+   * add ProcessID64 to the spec or something */
+  if (pid <= _DBUS_UINT32_MAX && pid != DBUS_PID_UNSET &&
+      !_dbus_asv_add_uint32 (asv_iter, "ProcessID", pid))
+    return FALSE;
+
+  /* we can't represent > 32-bit uids; if your system needs them, please
+   * add UnixUserID64 to the spec or something */
+  if (uid <= _DBUS_UINT32_MAX && uid != DBUS_UID_UNSET &&
+      !_dbus_asv_add_uint32 (asv_iter, "UnixUserID", uid))
+    return FALSE;
+
+  if (credentials != NULL &&
+      !bus_driver_credentials_fill_unix_gids (credentials, asv_iter))
+    return FALSE;
+
+  if (windows_sid != NULL)
+    {
+      DBusString str;
+      dbus_bool_t result;
+
+      _dbus_string_init_const (&str, windows_sid);
+      result = _dbus_validate_utf8 (&str, 0, _dbus_string_get_length (&str));
+      _dbus_string_free (&str);
+      if (result)
+        {
+          if (!_dbus_asv_add_string (asv_iter, "WindowsSID", windows_sid))
+            return FALSE;
+        }
+    }
+
+  if (linux_security_label != NULL)
+    {
+      /* use the GVariant bytestring convention for strings of unknown
+       * encoding: include the \0 in the payload, for zero-copy reading */
+      if (!_dbus_asv_add_byte_array (asv_iter, "LinuxSecurityLabel",
+                                     linux_security_label,
+                                     strlen (linux_security_label) + 1))
+        return FALSE;
+    }
+
+#ifdef DBUS_ENABLE_CONTAINERS
+  /* This has to come from the connection, not the credentials */
+  if (conn != NULL &&
+      bus_containers_connection_is_contained (conn, &path, NULL, NULL))
+    {
+      if (!_dbus_asv_add_object_path (asv_iter,
+                                      DBUS_INTERFACE_CONTAINERS1 ".Instance",
+                                      path))
+        return FALSE;
+    }
+#endif
+
+  return TRUE;
+}
+
 static dbus_bool_t
 bus_driver_handle_get_connection_credentials (DBusConnection *connection,
                                               BusTransaction *transaction,
@@ -1881,11 +2054,10 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
                                               DBusError      *error)
 {
   DBusConnection *conn;
+  DBusCredentials *credentials = NULL;
   DBusMessage *reply;
   DBusMessageIter reply_iter;
   DBusMessageIter array_iter;
-  unsigned long ulong_uid, ulong_pid;
-  char *s;
   const char *service;
   BusDriverFound found;
 
@@ -1899,16 +2071,18 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
   switch (found)
     {
       case BUS_DRIVER_FOUND_SELF:
-        ulong_pid = _dbus_getpid ();
-        ulong_uid = _dbus_getuid ();
+        conn = NULL;
+        /* FIXME: Obtain the security label for the bus daemon itself,
+         * if we can (this doesn't include it, both for performance
+         * reasons and because LSMs don't guarantee that there is a way
+         * to get the same string that would have come from SO_PEERSEC) */
+        credentials = _dbus_credentials_new_from_current_process ();
         break;
 
       case BUS_DRIVER_FOUND_PEER:
-        if (!dbus_connection_get_unix_process_id (conn, &ulong_pid))
-          ulong_pid = DBUS_PID_UNSET;
-        if (!dbus_connection_get_unix_user (conn, &ulong_uid))
-          ulong_uid = DBUS_UID_UNSET;
+        _dbus_assert (conn != NULL);
         break;
+
       case BUS_DRIVER_FOUND_ERROR:
         /* fall through */
       default:
@@ -1916,65 +2090,10 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
     }
 
   reply = _dbus_asv_new_method_return (message, &reply_iter, &array_iter);
-  if (reply == NULL)
-    goto oom;
 
-  /* we can't represent > 32-bit pids; if your system needs them, please
-   * add ProcessID64 to the spec or something */
-  if (ulong_pid <= _DBUS_UINT32_MAX && ulong_pid != DBUS_PID_UNSET &&
-      !_dbus_asv_add_uint32 (&array_iter, "ProcessID", ulong_pid))
-    goto oom;
-
-  /* we can't represent > 32-bit uids; if your system needs them, please
-   * add UnixUserID64 to the spec or something */
-  if (ulong_uid <= _DBUS_UINT32_MAX && ulong_uid != DBUS_UID_UNSET &&
-      !_dbus_asv_add_uint32 (&array_iter, "UnixUserID", ulong_uid))
-    goto oom;
-
-  /* FIXME: Obtain the Windows user of the bus daemon itself */
-  if (found == BUS_DRIVER_FOUND_PEER &&
-      dbus_connection_get_windows_user (conn, &s))
-    {
-      DBusString str;
-      dbus_bool_t result;
-
-      if (s == NULL)
-        goto oom;
-
-      _dbus_string_init_const (&str, s);
-      result = _dbus_validate_utf8 (&str, 0, _dbus_string_get_length (&str));
-      _dbus_string_free (&str);
-      if (result)
-        {
-          if (!_dbus_asv_add_string (&array_iter, "WindowsSID", s))
-            {
-              dbus_free (s);
-              goto oom;
-            }
-        }
-      dbus_free (s);
-    }
-
-  /* FIXME: Obtain the security label for the bus daemon itself */
-  if (found == BUS_DRIVER_FOUND_PEER &&
-      _dbus_connection_get_linux_security_label (conn, &s))
-    {
-      if (s == NULL)
-        goto oom;
-
-      /* use the GVariant bytestring convention for strings of unknown
-       * encoding: include the \0 in the payload, for zero-copy reading */
-      if (!_dbus_asv_add_byte_array (&array_iter, "LinuxSecurityLabel",
-                                     s, strlen (s) + 1))
-        {
-          dbus_free (s);
-          goto oom;
-        }
-
-      dbus_free (s);
-    }
-
-  if (!_dbus_asv_close (&reply_iter, &array_iter))
+  if (reply == NULL ||
+      !bus_driver_fill_connection_credentials (credentials, conn, &array_iter) ||
+      !_dbus_asv_close (&reply_iter, &array_iter))
     goto oom;
 
   if (! bus_transaction_send_from_driver (transaction, connection, reply))
@@ -1987,7 +2106,7 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
     }
 
   dbus_message_unref (reply);
-
+  _dbus_clear_credentials (&credentials);
   return TRUE;
 
  oom:
@@ -2002,6 +2121,7 @@ bus_driver_handle_get_connection_credentials (DBusConnection *connection,
       dbus_message_unref (reply);
     }
 
+  _dbus_clear_credentials (&credentials);
   return FALSE;
 }
 
@@ -2204,6 +2324,7 @@ bus_driver_handle_become_monitor (DBusConnection *connection,
   /* Special case: a zero-length array becomes [""] */
   if (n_match_rules == 0)
     {
+      dbus_free (match_rules);
       match_rules = dbus_malloc (2 * sizeof (char *));
 
       if (match_rules == NULL)
@@ -2255,10 +2376,7 @@ bus_driver_handle_become_monitor (DBusConnection *connection,
   ret = TRUE;
 
 out:
-  if (ret)
-    _DBUS_ASSERT_ERROR_IS_CLEAR (error);
-  else
-    _DBUS_ASSERT_ERROR_IS_SET (error);
+  _DBUS_ASSERT_ERROR_XOR_BOOL (error, ret);
 
   for (iter = _dbus_list_get_first_link (&rules);
       iter != NULL;
@@ -2368,8 +2486,14 @@ typedef enum
 
   /* If set, callers must be privileged. On Unix, the uid of the connection
    * must either be the uid of this process, or 0 (root). On Windows,
-   * the SID of the connection must be the SID of this process. */
+   * the SID of the connection must be the SID of this process.
+   *
+   * This flag effectively implies METHOD_FLAG_NO_CONTAINERS, because
+   * containers are never privileged. */
   METHOD_FLAG_PRIVILEGED = (1 << 1),
+
+  /* If set, callers must not be associated with a container instance. */
+  METHOD_FLAG_NO_CONTAINERS = (1 << 2),
 
   METHOD_FLAG_NONE = 0
 } MethodFlags;
@@ -2517,6 +2641,29 @@ static const MessageHandler introspectable_message_handlers[] = {
   { NULL, NULL, NULL, NULL }
 };
 
+#ifdef DBUS_ENABLE_CONTAINERS
+static const MessageHandler containers_message_handlers[] = {
+  { "AddServer", "ssa{sv}a{sv}", "oays", bus_containers_handle_add_server,
+    METHOD_FLAG_NO_CONTAINERS },
+  { "StopInstance", "o", "", bus_containers_handle_stop_instance,
+    METHOD_FLAG_NO_CONTAINERS },
+  { "StopListening", "o", "", bus_containers_handle_stop_listening,
+    METHOD_FLAG_NO_CONTAINERS },
+  { "GetConnectionInstance", "s", "oa{sv}ssa{sv}",
+    bus_containers_handle_get_connection_instance,
+    METHOD_FLAG_NONE },
+  { "GetInstanceInfo", "o", "a{sv}ssa{sv}", bus_containers_handle_get_instance_info,
+    METHOD_FLAG_NONE },
+  { "RequestHeader", "", "", bus_containers_handle_request_header,
+    METHOD_FLAG_NONE },
+  { NULL, NULL, NULL, NULL }
+};
+static const PropertyHandler containers_property_handlers[] = {
+  { "SupportedArguments", "as", bus_containers_supported_arguments_getter },
+  { NULL, NULL, NULL }
+};
+#endif
+
 static const MessageHandler monitoring_message_handlers[] = {
   { "BecomeMonitor", "asu", "", bus_driver_handle_become_monitor,
     METHOD_FLAG_PRIVILEGED },
@@ -2526,9 +2673,9 @@ static const MessageHandler monitoring_message_handlers[] = {
 #ifdef DBUS_ENABLE_VERBOSE_MODE
 static const MessageHandler verbose_message_handlers[] = {
   { "EnableVerbose", "", "", bus_driver_handle_enable_verbose,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { "DisableVerbose", "", "", bus_driver_handle_disable_verbose,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { NULL, NULL, NULL, NULL }
 };
 #endif
@@ -2536,11 +2683,11 @@ static const MessageHandler verbose_message_handlers[] = {
 #ifdef DBUS_ENABLE_STATS
 static const MessageHandler stats_message_handlers[] = {
   { "GetStats", "", "a{sv}", bus_stats_handle_get_stats,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { "GetConnectionStats", "s", "a{sv}", bus_stats_handle_get_connection_stats,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { "GetAllMatchRules", "", "a{sas}", bus_stats_handle_get_all_match_rules,
-    METHOD_FLAG_NONE },
+    METHOD_FLAG_NO_CONTAINERS },
   { NULL, NULL, NULL, NULL }
 };
 #endif
@@ -2590,6 +2737,8 @@ static InterfaceHandler interface_handlers[] = {
     "    </signal>\n"
     "    <signal name=\"NameAcquired\">\n"
     "      <arg type=\"s\"/>\n"
+    "    </signal>\n"
+    "    <signal name=\"ActivatableServicesChanged\">\n"
     "    </signal>\n",
     /* Not in the Interfaces property because if you can get the properties
      * of the o.fd.DBus interface, then you certainly have the o.fd.DBus
@@ -2620,6 +2769,13 @@ static InterfaceHandler interface_handlers[] = {
 #ifdef DBUS_ENABLE_STATS
   { BUS_INTERFACE_STATS, stats_message_handlers, NULL,
     INTERFACE_FLAG_NONE },
+#endif
+#ifdef DBUS_ENABLE_CONTAINERS
+  { DBUS_INTERFACE_CONTAINERS1, containers_message_handlers,
+    "    <signal name=\"InstanceRemoved\">\n"
+    "      <arg type=\"o\" name=\"path\"/>\n"
+    "    </signal>\n",
+    INTERFACE_FLAG_NONE, containers_property_handlers },
 #endif
   { DBUS_INTERFACE_PEER, peer_message_handlers, NULL,
     /* Not in the Interfaces property because it's a pseudo-interface
@@ -2913,12 +3069,25 @@ bus_driver_handle_message (DBusConnection *connection,
 
           _dbus_verbose ("Found driver handler for %s\n", name);
 
-          if ((mh->flags & METHOD_FLAG_PRIVILEGED) &&
-              !bus_driver_check_caller_is_privileged (connection, transaction,
-                                                      message, error))
+          if (mh->flags & METHOD_FLAG_PRIVILEGED)
             {
-              _DBUS_ASSERT_ERROR_IS_SET (error);
-              return FALSE;
+              if (!bus_driver_check_caller_is_privileged (connection,
+                                                          transaction, message,
+                                                          error))
+                {
+                  _DBUS_ASSERT_ERROR_IS_SET (error);
+                  return FALSE;
+                }
+            }
+          else if (mh->flags & METHOD_FLAG_NO_CONTAINERS)
+            {
+              if (!bus_driver_check_caller_is_not_container (connection,
+                                                             transaction,
+                                                             message, error))
+                {
+                  _DBUS_ASSERT_ERROR_IS_SET (error);
+                  return FALSE;
+                }
             }
 
           if (!(is_canonical_path || (mh->flags & METHOD_FLAG_ANY_PATH)))
@@ -2984,23 +3153,35 @@ features_getter (BusContext      *context,
                  DBusMessageIter *variant_iter)
 {
   DBusMessageIter arr_iter;
+  const char *s;
 
   if (!dbus_message_iter_open_container (variant_iter, DBUS_TYPE_ARRAY,
                                          DBUS_TYPE_STRING_AS_STRING,
                                          &arr_iter))
     return FALSE;
 
+  s = "ActivatableServicesChanged";
+
+  if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
+    goto abandon;
+
+
   if (bus_apparmor_enabled ())
     {
-      const char *s = "AppArmor";
+      s = "AppArmor";
 
       if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
         goto abandon;
     }
 
+  s = "HeaderFiltering";
+
+  if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
+    goto abandon;
+
   if (bus_selinux_enabled ())
     {
-      const char *s = "SELinux";
+      s = "SELinux";
 
       if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
         goto abandon;
@@ -3008,7 +3189,7 @@ features_getter (BusContext      *context,
 
   if (bus_context_get_systemd_activation (context))
     {
-      const char *s = "SystemdActivation";
+      s = "SystemdActivation";
 
       if (!dbus_message_iter_append_basic (&arr_iter, DBUS_TYPE_STRING, &s))
         goto abandon;

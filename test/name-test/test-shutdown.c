@@ -1,5 +1,6 @@
 
 #include <config.h>
+#include <dbus/dbus-valgrind-internal.h>
 #include "../test-utils.h"
 
 static DBusLoop *loop;
@@ -20,15 +21,19 @@ open_destroy_shared_session_bus_connection (void)
   DBusConnection *connection;
   char *session_addr_no_guid;
   char *comma;
-  
+
   dbus_error_init (&error);
 
   session_addr_no_guid = strdup (getenv ("DBUS_SESSION_BUS_ADDRESS"));
   comma = strchr (session_addr_no_guid, ',');
-  if (comma == NULL)
-    die ("Couldn't find GUID in session bus address");
+
+#ifdef DBUS_WIN
+  _dbus_assert (comma == NULL);
+#else
+  _dbus_assert (comma != NULL);
   *comma = '\0';
-    
+#endif
+
   connection = dbus_connection_open (session_addr_no_guid, &error);
   free (session_addr_no_guid);
   if (connection == NULL)
@@ -38,8 +43,7 @@ open_destroy_shared_session_bus_connection (void)
   if (loop == NULL)
     die ("No memory\n");
   
-  if (!test_connection_setup (loop, connection))
-    die ("No memory\n");
+  test_connection_setup (loop, connection);
 
   test_connection_shutdown (loop, connection);
  
@@ -54,6 +58,12 @@ main (int    argc,
       char **argv)
 {
   int test_num = 0;
+
+  if (RUNNING_ON_VALGRIND)
+    {
+      printf ("1..0 # SKIP Not ready to run under valgrind yet\n");
+      return 0;
+    }
 
   open_destroy_shared_session_bus_connection ();
 

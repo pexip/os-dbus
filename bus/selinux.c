@@ -4,7 +4,7 @@
  * Author: Matthew Rickard <mjricka@epoch.ncsc.mil>
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -49,6 +49,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <grp.h>
+#include <dbus/dbus-watch.h>
 #endif /* HAVE_SELINUX */
 #ifdef HAVE_LIBAUDIT
 #include <libaudit.h>
@@ -64,45 +65,20 @@ static dbus_bool_t selinux_enabled = FALSE;
 /* Store an avc_entry_ref to speed AVC decisions. */
 static struct avc_entry_ref aeref;
 
+/* Store the avc netlink fd. */
+static int avc_netlink_fd = -1;
+
+/* Watch to listen for SELinux status changes via netlink. */
+static DBusWatch *avc_netlink_watch_obj = NULL;
+static DBusLoop *avc_netlink_loop_obj = NULL;
+
 /* Store the SID of the bus itself to use as the default. */
 static security_id_t bus_sid = SECSID_WILD;
 
-/* Thread to listen for SELinux status changes via netlink. */
-static pthread_t avc_notify_thread;
-
 /* Prototypes for AVC callback functions.  */
-static void log_callback (const char *fmt, ...) _DBUS_GNUC_PRINTF (1, 2);
-static void log_audit_callback (void *data, security_class_t class, char *buf, size_t bufleft);
-static void *avc_create_thread (void (*run) (void));
-static void avc_stop_thread (void *thread);
-static void *avc_alloc_lock (void);
-static void avc_get_lock (void *lock);
-static void avc_release_lock (void *lock);
-static void avc_free_lock (void *lock);
+static int log_callback (int type, const char *fmt, ...) _DBUS_GNUC_PRINTF (2, 3);
+static int log_audit_callback (void *data, security_class_t class, char *buf, size_t bufleft);
 
-/* AVC callback structures for use in avc_init.  */
-static const struct avc_memory_callback mem_cb =
-{
-  .func_malloc = dbus_malloc,
-  .func_free = dbus_free
-};
-static const struct avc_log_callback log_cb =
-{
-  .func_log = log_callback,
-  .func_audit = log_audit_callback
-};
-static const struct avc_thread_callback thread_cb =
-{
-  .func_create_thread = avc_create_thread,
-  .func_stop_thread = avc_stop_thread
-};
-static const struct avc_lock_callback lock_cb =
-{
-  .func_alloc_lock = avc_alloc_lock,
-  .func_get_lock = avc_get_lock,
-  .func_release_lock = avc_release_lock,
-  .func_free_lock = avc_free_lock
-};
 #endif /* HAVE_SELINUX */
 
 /**
@@ -115,12 +91,12 @@ static const struct avc_lock_callback lock_cb =
  */
 #ifdef HAVE_SELINUX
 
-static void 
-log_callback (const char *fmt, ...) 
+static int
+log_callback (int type, const char *fmt, ...)
 {
   va_list ap;
 #ifdef HAVE_LIBAUDIT
-  int audit_fd;
+  int audit_fd, audit_type;
 #endif
 
   va_start(ap, fmt);
@@ -136,11 +112,34 @@ log_callback (const char *fmt, ...)
      * syslog if OOM, like the equivalent AppArmor code does. */
     char buf[PATH_MAX*2];
 
-    /* FIXME: need to change this to show real user */
-    vsnprintf(buf, sizeof(buf), fmt, ap);
-    audit_log_user_avc_message(audit_fd, AUDIT_USER_AVC, buf, NULL, NULL,
+    switch (type)
+      {
+      case SELINUX_AVC:
+        audit_type = AUDIT_USER_AVC;
+        break;
+#if defined(SELINUX_POLICYLOAD) && defined(AUDIT_USER_MAC_POLICY_LOAD)
+      case SELINUX_POLICYLOAD:
+        audit_type = AUDIT_USER_MAC_POLICY_LOAD;
+        break;
+#endif
+#if defined(SELINUX_SETENFORCE) && defined(AUDIT_USER_MAC_STATUS)
+      case SELINUX_SETENFORCE:
+        audit_type = AUDIT_USER_MAC_STATUS;
+        break;
+#endif
+      default:
+        /* Not auditable */
+        audit_type = 0;
+        break;
+      }
+
+    if (audit_type > 0) {
+      /* FIXME: need to change this to show real user */
+      vsnprintf(buf, sizeof(buf), fmt, ap);
+      audit_log_user_avc_message(audit_fd, audit_type, buf, NULL, NULL,
                              NULL, getuid());
-    goto out;
+      goto out;
+    }
   }
 #endif /* HAVE_LIBAUDIT */
 
@@ -150,6 +149,8 @@ log_callback (const char *fmt, ...)
 out:
 #endif
   va_end(ap);
+
+  return 0;
 }
 
 /**
@@ -157,20 +158,16 @@ out:
  * this could have changed.  Send a SIGHUP to reload all configs.
  */
 static int
-policy_reload_callback (u_int32_t event, security_id_t ssid, 
-                        security_id_t tsid, security_class_t tclass, 
-                        access_vector_t perms, access_vector_t *out_retained)
+policy_reload_callback (int seqno)
 {
-  if (event == AVC_CALLBACK_RESET)
-    return raise (SIGHUP);
-  
-  return 0;
+  _dbus_verbose ("SELinux policy reload callback called, sending SIGHUP\n");
+  return raise (SIGHUP);
 }
 
 /**
  * Log any auxiliary data 
  */
-static void
+static int
 log_audit_callback (void *data, security_class_t class, char *buf, size_t bufleft)
 {
   DBusString *audmsg = data;
@@ -188,73 +185,20 @@ log_audit_callback (void *data, security_class_t class, char *buf, size_t buflef
       if (bufleft > (size_t) _dbus_string_get_length(&s))
         _dbus_string_copy_to_buffer_with_nul (&s, buf, bufleft);
     }
+
+  return 0;
 }
 
-/**
- * Create thread to notify the AVC of enforcing and policy reload
- * changes via netlink.
- *
- * @param run the thread run function
- * @return pointer to the thread
- */
-static void *
-avc_create_thread (void (*run) (void))
+static dbus_bool_t
+handle_avc_netlink_watch (DBusWatch *passed_watch, unsigned int flags, void *data)
 {
-  int rc;
-
-  rc = pthread_create (&avc_notify_thread, NULL, (void *(*) (void *)) run, NULL);
-  if (rc != 0)
+  if (avc_netlink_check_nb () < 0)
     {
-      _dbus_warn ("Failed to start AVC thread: %s", _dbus_strerror (rc));
-      exit (1);
+      _dbus_warn ("Failed to check the netlink socket for pending messages and process them: %s", _dbus_strerror (errno));
+      return FALSE;
     }
-  return &avc_notify_thread;
-}
 
-/* Stop AVC netlink thread.  */
-static void
-avc_stop_thread (void *thread)
-{
-  pthread_cancel (*(pthread_t *) thread);
-}
-
-/* Allocate a new AVC lock.  */
-static void *
-avc_alloc_lock (void)
-{
-  pthread_mutex_t *avc_mutex;
-
-  avc_mutex = dbus_new (pthread_mutex_t, 1);
-  if (avc_mutex == NULL)
-    {
-      _dbus_warn ("Could not create mutex: %s", _dbus_strerror (errno));
-      exit (1);
-    }
-  pthread_mutex_init (avc_mutex, NULL);
-
-  return avc_mutex;
-}
-
-/* Acquire an AVC lock.  */
-static void
-avc_get_lock (void *lock)
-{
-  pthread_mutex_lock (lock);
-}
-
-/* Release an AVC lock.  */
-static void
-avc_release_lock (void *lock)
-{
-  pthread_mutex_unlock (lock);
-}
-
-/* Free an AVC lock.  */
-static void
-avc_free_lock (void *lock)
-{
-  pthread_mutex_destroy (lock);
-  dbus_free (lock);
+  return TRUE;
 }
 #endif /* HAVE_SELINUX */
 
@@ -311,31 +255,13 @@ bus_selinux_pre_init (void)
 #endif
 }
 
-/*
- * Private Flask definitions; the order of these constants must
- * exactly match that of the structure array below!
- */
-/* security dbus class constants */
-#define SECCLASS_DBUS       1
-
-/* dbus's per access vector constants */
-#define DBUS__ACQUIRE_SVC   1
-#define DBUS__SEND_MSG      2
-
-#ifdef HAVE_SELINUX
-static struct security_class_mapping dbus_map[] = {
-  { "dbus", { "acquire_svc", "send_msg", NULL } },
-  { NULL }
-};
-#endif /* HAVE_SELINUX */
-
 /**
  * Establish dynamic object class and permission mapping and
  * initialize the user space access vector cache (AVC) for D-Bus and set up
  * logging callbacks.
  */
 dbus_bool_t
-bus_selinux_full_init (void)
+bus_selinux_full_init (BusContext *context, DBusError *error)
 {
 #ifdef HAVE_SELINUX
   char *bus_context;
@@ -350,17 +276,12 @@ bus_selinux_full_init (void)
 
   _dbus_verbose ("SELinux is enabled in this kernel.\n");
 
-  if (selinux_set_mapping (dbus_map) < 0)
-    {
-      _dbus_warn ("Failed to set up security class mapping (selinux_set_mapping():%s).",
-                   strerror (errno));
-      return FALSE; 
-    }
-
   avc_entry_ref_init (&aeref);
-  if (avc_init ("avc", &mem_cb, &log_cb, &thread_cb, &lock_cb) < 0)
+  if (avc_open (NULL, 0) < 0)
     {
-      _dbus_warn ("Failed to start Access Vector Cache (AVC).");
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Failed to start Access Vector Cache (AVC): %s",
+                      _dbus_strerror (errno));
       return FALSE;
     }
   else
@@ -368,34 +289,82 @@ bus_selinux_full_init (void)
       _dbus_verbose ("Access Vector Cache (AVC) started.\n");
     }
 
-  if (avc_add_callback (policy_reload_callback, AVC_CALLBACK_RESET,
-                       NULL, NULL, 0, 0) < 0)
+  avc_netlink_fd = avc_netlink_acquire_fd ();
+  if (avc_netlink_fd < 0)
     {
-      _dbus_warn ("Failed to add policy reload callback: %s",
-                  _dbus_strerror (errno));
-      avc_destroy ();
-      return FALSE;
+       dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Cannot acquire AVC netlink fd: %s",
+                      _dbus_strerror (errno));
+       goto error;
     }
+
+  _dbus_fd_set_close_on_exec (avc_netlink_fd);
+
+  avc_netlink_loop_obj = bus_context_get_loop (context);
+  /* avc_netlink_loop_obj is a global variable */
+  _dbus_loop_ref (avc_netlink_loop_obj);
+
+  avc_netlink_watch_obj = _dbus_watch_new (avc_netlink_fd, DBUS_WATCH_READABLE, TRUE,
+                                           handle_avc_netlink_watch, NULL, NULL);
+  if (avc_netlink_watch_obj == NULL)
+    {
+      BUS_SET_OOM (error);
+      goto error;
+    }
+
+  if (!_dbus_loop_add_watch (avc_netlink_loop_obj, avc_netlink_watch_obj))
+    {
+      _dbus_watch_invalidate (avc_netlink_watch_obj);
+      _dbus_clear_watch (&avc_netlink_watch_obj);
+      avc_netlink_watch_obj = NULL;
+      BUS_SET_OOM (error);
+      goto error;
+    }
+
+  selinux_set_callback (SELINUX_CB_POLICYLOAD, (union selinux_callback) policy_reload_callback);
+  selinux_set_callback (SELINUX_CB_AUDIT, (union selinux_callback) log_audit_callback);
+  selinux_set_callback (SELINUX_CB_LOG, (union selinux_callback) log_callback);
 
   bus_context = NULL;
   bus_sid = SECSID_WILD;
 
   if (getcon (&bus_context) < 0)
     {
-      _dbus_verbose ("Error getting context of bus: %s\n",
-                     _dbus_strerror (errno));
-      return FALSE;
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Error getting context of bus: %s",
+                      _dbus_strerror (errno));
+      goto error;
     }
       
   if (avc_context_to_sid (bus_context, &bus_sid) < 0)
     {
-      _dbus_verbose ("Error getting SID from bus context: %s\n",
-                     _dbus_strerror (errno));
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Error getting SID from bus context: %s",
+                      _dbus_strerror (errno));
       freecon (bus_context);
-      return FALSE;
+      goto error;
     }
 
   freecon (bus_context);
+
+  return TRUE;
+
+error:
+  if (avc_netlink_watch_obj)
+    {
+      _dbus_loop_remove_watch (avc_netlink_loop_obj, avc_netlink_watch_obj);
+      _dbus_watch_invalidate (avc_netlink_watch_obj);
+      _dbus_clear_watch (&avc_netlink_watch_obj);
+    }
+  _dbus_clear_loop (&avc_netlink_loop_obj);
+  if (avc_netlink_fd >= 0)
+    {
+      avc_netlink_release_fd ();
+      avc_netlink_fd = -1;
+    }
+  avc_destroy ();
+  _DBUS_ASSERT_ERROR_IS_SET (error);
+  return FALSE;
   
 #endif /* HAVE_SELINUX */
   return TRUE;
@@ -421,19 +390,53 @@ bus_selinux_full_init (void)
 static dbus_bool_t
 bus_selinux_check (BusSELinuxID        *sender_sid,
                    BusSELinuxID        *override_sid,
-                   security_class_t     target_class,
-                   access_vector_t      requested,
-		   DBusString          *auxdata)
+                   const char          *target_class,
+                   const char          *requested,
+                   DBusString          *auxdata)
 {
+  int saved_errno;
+  security_class_t security_class;
+  access_vector_t requested_access;
+
   if (!selinux_enabled)
     return TRUE;
+
+  security_class = string_to_security_class (target_class);
+  if (security_class == 0)
+    {
+      saved_errno = errno;
+      log_callback (SELINUX_ERROR, "Unknown class %s", target_class);
+      if (security_deny_unknown () == 0)
+        {
+          return TRUE;
+	}
+
+      _dbus_verbose ("Unknown class %s\n", target_class);
+      errno = saved_errno;
+      return FALSE;
+    }
+
+  requested_access = string_to_av_perm (security_class, requested);
+  if (requested_access == 0)
+    {
+      saved_errno = errno;
+      log_callback (SELINUX_ERROR, "Unknown permission %s for class %s", requested, target_class);
+      if (security_deny_unknown () == 0)
+        {
+          return TRUE;
+	}
+
+      _dbus_verbose ("Unknown permission %s for class %s\n", requested, target_class);
+      errno = saved_errno;
+      return FALSE;
+    }
 
   /* Make the security check.  AVC checks enforcing mode here as well. */
   if (avc_has_perm (SELINUX_SID_FROM_BUS (sender_sid),
                     override_sid ?
                     SELINUX_SID_FROM_BUS (override_sid) :
                     bus_sid,
-                    target_class, requested, &aeref, auxdata) < 0)
+                    security_class, requested_access, &aeref, auxdata) < 0)
     {
     switch (errno)
       {
@@ -500,8 +503,8 @@ bus_selinux_allows_acquire_service (DBusConnection     *connection,
   
   ret = bus_selinux_check (connection_sid,
 			   service_sid,
-			   SECCLASS_DBUS,
-			   DBUS__ACQUIRE_SVC,
+			   "dbus",
+			   "acquire_svc",
 			   &auxdata);
 
   _dbus_string_free (&auxdata);
@@ -629,8 +632,8 @@ bus_selinux_allows_send (DBusConnection     *sender,
 
   ret = bus_selinux_check (sender_sid, 
 			   recipient_sid,
-			   SECCLASS_DBUS, 
-			   DBUS__SEND_MSG,
+			   "dbus",
+			   "send_msg",
 			   &auxdata);
 
   _dbus_string_free (&auxdata);
@@ -975,6 +978,20 @@ bus_selinux_shutdown (void)
     return;
 
   _dbus_verbose ("AVC shutdown\n");
+
+  if (avc_netlink_watch_obj)
+    {
+      _dbus_loop_remove_watch (avc_netlink_loop_obj, avc_netlink_watch_obj);
+      _dbus_watch_invalidate (avc_netlink_watch_obj);
+      _dbus_clear_watch (&avc_netlink_watch_obj);
+    }
+  _dbus_clear_loop (&avc_netlink_loop_obj);
+
+  if (avc_netlink_fd >= 0)
+    {
+      avc_netlink_release_fd ();
+      avc_netlink_fd = -1;
+    }
 
   if (bus_sid != SECSID_WILD)
     {

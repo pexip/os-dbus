@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -34,6 +34,12 @@
 #include <dbus/dbus-threads-internal.h>
 
 DBUS_BEGIN_DECLS
+
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+#define DBUS_EMBEDDED_TESTS_EXPORT DBUS_PRIVATE_EXPORT
+#else
+#define DBUS_EMBEDDED_TESTS_EXPORT /* nothing */
+#endif
 
 DBUS_PRIVATE_EXPORT
 void _dbus_warn               (const char *format,
@@ -98,7 +104,7 @@ void _dbus_warn_return_if_fail (const char *function,
 DBUS_PRIVATE_EXPORT
 void _dbus_verbose_real       (const char *file, const int line, const char *function, 
                                const char *format,...) _DBUS_GNUC_PRINTF (4, 5);
-#  define _dbus_verbose(fmt,...) _dbus_verbose_real( __FILE__,__LINE__,__FUNCTION__,fmt, ## __VA_ARGS__)
+#  define _dbus_verbose(fmt,...) _dbus_verbose_real( __FILE__,__LINE__,_DBUS_FUNCTION_NAME,fmt, ## __VA_ARGS__)
 #else
 DBUS_PRIVATE_EXPORT
 void _dbus_verbose_real       (const char *format,
@@ -113,17 +119,12 @@ DBUS_PRIVATE_EXPORT
 dbus_bool_t _dbus_get_verbose (void);
 DBUS_PRIVATE_EXPORT
 void _dbus_set_verbose (dbus_bool_t state);
+void _dbus_verbose_raw (const char *s);
 
 #  define _dbus_verbose_reset _dbus_verbose_reset_real
 #  define _dbus_is_verbose _dbus_is_verbose_real
 #else
-#  ifdef HAVE_ISO_VARARGS
-#    define _dbus_verbose(...) do { } while (0)
-#  elif defined (HAVE_GNUC_VARARGS)
-#    define _dbus_verbose(format...) do { } while (0)
-#  else
-static void _dbus_verbose(const char * x,...) {;}
-#  endif
+#  define _dbus_verbose(...) do { } while (0)
 #  define _dbus_verbose_reset() do { } while (0)
 #  define _dbus_is_verbose() FALSE 
 #endif /* !DBUS_ENABLE_VERBOSE_MODE */
@@ -200,30 +201,71 @@ void _dbus_real_assert_not_reached (const char *explanation,
     ((intptr_t) ((unsigned char*) &((struct_type*) 0)->member))
 #endif
 
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__cplusplus)
+#define _DBUS_ALIGNOF(type) _Alignof(type)
+#else
 #define _DBUS_ALIGNOF(type) \
     (_DBUS_STRUCT_OFFSET (struct { char _1; type _2; }, _2))
+#endif
 
-#ifdef DBUS_DISABLE_CHECKS
+#if defined(DBUS_DISABLE_CHECKS) || defined(DBUS_DISABLE_ASSERT)
 /* this is an assert and not an error, but in the typical --disable-checks case (you're trying
  * to really minimize code size), disabling these assertions makes sense.
  */
 #define _DBUS_ASSERT_ERROR_IS_SET(error) do { } while (0)
 #define _DBUS_ASSERT_ERROR_IS_CLEAR(error) do { } while (0)
+#define _DBUS_ASSERT_ERROR_XOR_BOOL(error, retval) do { } while (0)
 #else
 static inline void
-_dbus_assert_error_is_set (const DBusError *error)
+_dbus_assert_error_is_set (const DBusError *error,
+                           const char      *file,
+                           int              line,
+                           const char      *func)
 {
-    _dbus_assert (error == NULL || dbus_error_is_set (error));
+  _dbus_real_assert (error == NULL || dbus_error_is_set (error),
+                     "error is set", file, line, func);
 }
 
 static inline void
-_dbus_assert_error_is_clear (const DBusError *error)
+_dbus_assert_error_is_clear (const DBusError *error,
+                           const char      *file,
+                           int              line,
+                           const char      *func)
 {
-    _dbus_assert (error == NULL || !dbus_error_is_set (error));
+  _dbus_real_assert (error == NULL || !dbus_error_is_set (error),
+                     "error is clear", file, line, func);
 }
 
-#define _DBUS_ASSERT_ERROR_IS_SET(error) _dbus_assert_error_is_set(error)
-#define _DBUS_ASSERT_ERROR_IS_CLEAR(error) _dbus_assert_error_is_clear(error)
+static inline void
+_dbus_assert_error_xor_bool (const DBusError *error,
+                             dbus_bool_t      retval,
+                             const char      *file,
+                             int              line,
+                             const char      *func)
+{
+  _dbus_real_assert (error == NULL || dbus_error_is_set (error) == !retval,
+                     "error is consistent with boolean result", file, line, func);
+}
+
+/**
+ * Assert that error is set, unless it is NULL in which case we cannot
+ * tell whether it would have been set.
+ */
+#define _DBUS_ASSERT_ERROR_IS_SET(error) _dbus_assert_error_is_set (error, __FILE__, __LINE__, _DBUS_FUNCTION_NAME)
+
+/**
+ * Assert that error is not set, unless it is NULL in which case we cannot
+ * tell whether it would have been set.
+ */
+#define _DBUS_ASSERT_ERROR_IS_CLEAR(error) _dbus_assert_error_is_clear (error, __FILE__, __LINE__, _DBUS_FUNCTION_NAME)
+
+/**
+ * Assert that error is consistent with retval: if error is not NULL,
+ * it must be set if and only if retval is false.
+ *
+ * retval can be a boolean expression like "result != NULL".
+ */
+#define _DBUS_ASSERT_ERROR_XOR_BOOL(error, retval) _dbus_assert_error_xor_bool (error, retval, __FILE__, __LINE__, _DBUS_FUNCTION_NAME)
 #endif
 
 #define _dbus_return_if_error_is_set(error) _dbus_return_if_fail ((error) == NULL || !dbus_error_is_set ((error)))
@@ -306,7 +348,8 @@ void _dbus_set_error_valist (DBusError  *error,
                              const char *format,
                              va_list     args) _DBUS_GNUC_PRINTF (3, 0);
 
-typedef dbus_bool_t (* DBusTestMemoryFunction)  (void *data);
+typedef dbus_bool_t (* DBusTestMemoryFunction)  (void        *data,
+                                                 dbus_bool_t  have_memory);
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
 /* Memory debugging */
@@ -334,7 +377,7 @@ dbus_bool_t _dbus_test_oom_handling (const char             *description,
 #define _dbus_disable_mem_pools()            (FALSE)
 #define _dbus_get_malloc_blocks_outstanding() (0)
 
-#define _dbus_test_oom_handling(description, func, data) ((*func) (data))
+#define _dbus_test_oom_handling(description, func, data) ((*func) (data, TRUE))
 #endif /* !DBUS_ENABLE_EMBEDDED_TESTS */
 
 typedef void (* DBusShutdownFunction) (void *data);
@@ -370,7 +413,8 @@ typedef enum
   _DBUS_N_GLOBAL_LOCKS
 } DBusGlobalLock;
 
-dbus_bool_t _dbus_lock   (DBusGlobalLock lock) _DBUS_GNUC_WARN_UNUSED_RESULT;
+_DBUS_WARN_UNUSED_RESULT
+dbus_bool_t _dbus_lock   (DBusGlobalLock lock);
 void        _dbus_unlock (DBusGlobalLock lock);
 
 #define _DBUS_LOCK_NAME(name)           _DBUS_LOCK_##name
@@ -378,8 +422,6 @@ void        _dbus_unlock (DBusGlobalLock lock);
 #define _DBUS_UNLOCK(name)              _dbus_unlock (_DBUS_LOCK_##name)
 
 DBUS_PRIVATE_EXPORT
-dbus_bool_t _dbus_threads_init_debug (void);
-
 dbus_bool_t   _dbus_address_append_escaped (DBusString       *escaped,
                                             const DBusString *unescaped);
 
@@ -402,7 +444,7 @@ union DBusGUID
   char as_bytes[DBUS_UUID_LENGTH_BYTES];                /**< guid as 16 single-byte values */
 };
 
-DBUS_PRIVATE_EXPORT _DBUS_GNUC_WARN_UNUSED_RESULT
+DBUS_PRIVATE_EXPORT _DBUS_WARN_UNUSED_RESULT
 dbus_bool_t _dbus_generate_uuid  (DBusGUID         *uuid,
                                   DBusError        *error);
 DBUS_PRIVATE_EXPORT
@@ -426,6 +468,9 @@ dbus_bool_t _dbus_get_local_machine_uuid_encoded (DBusString *uuid_str,
 #define _DBUS_STATIC_ASSERT(expr) \
   typedef struct { char _assertion[(expr) ? 1 : -1]; } \
   _DBUS_PASTE (_DBUS_STATIC_ASSERT_, __LINE__) _DBUS_GNUC_UNUSED
+
+#define _DBUS_STRINGIFY(x) #x
+#define _DBUS_FILE_LINE __FILE__ ":" _DBUS_STRINGIFY(__LINE__)
 
 DBUS_END_DECLS
 

@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2003  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -26,6 +26,7 @@
 #include "dbus-protocol.h"
 #include "dbus-marshal-basic.h"
 #include "dbus-test.h"
+#include "dbus-test-tap.h"
 #include "dbus-valgrind-internal.h"
 #include <stdio.h>
 #include <stdarg.h>
@@ -183,7 +184,14 @@
  */
 const char *_dbus_no_memory_message = "Not enough memory";
 
+/* Not necessarily thread-safe, but if writes don't propagate between
+ * threads, the worst that will happen is that we duplicate work in more than
+ * one thread. */
 static dbus_bool_t warn_initted = FALSE;
+
+/* Not necessarily thread-safe, but if writes don't propagate between
+ * threads, the worst that will happen is that warnings get their default
+ * fatal/non-fatal nature. */
 static dbus_bool_t fatal_warnings = FALSE;
 static dbus_bool_t fatal_warnings_on_check_failed = TRUE;
 
@@ -374,6 +382,30 @@ dbus_bool_t _dbus_get_verbose (void)
 }
 
 /**
+ * Low-level function for displaying a string
+ * for the predefined output channel, which
+ * can be the Windows debug output port or stderr.
+ *
+ * This function must be used instead of
+ * dbus_verbose(), if a dynamic memory request
+ * cannot be used to avoid recursive call loops.
+ *
+ * @param s string to display
+ */
+void
+_dbus_verbose_raw (const char *s)
+{
+  if (!_dbus_is_verbose_real ())
+    return;
+#ifdef DBUS_USE_OUTPUT_DEBUG_STRING
+  OutputDebugStringA (s);
+#else
+  fputs (s, stderr);
+  fflush (stderr);
+#endif
+}
+
+/**
  * Prints a warning message to stderr
  * if the user has enabled verbose mode.
  * This is the real function implementation,
@@ -421,16 +453,37 @@ _dbus_verbose_real (
     need_pid = FALSE;
 
   va_start (args, format);
+
 #ifdef DBUS_USE_OUTPUT_DEBUG_STRING
   {
-  char buf[1024];
-  strcpy(buf,module_name);
+    DBusString out = _DBUS_STRING_INIT_INVALID;
+    const char *message = NULL;
+
+    if (!_dbus_string_init (&out))
+      goto out;
+
+    if (!_dbus_string_append (&out, module_name))
+      goto out;
+
 #ifdef DBUS_CPP_SUPPORTS_VARIABLE_MACRO_ARGUMENTS
-  sprintf (buf+strlen(buf), "[%s(%d):%s] ",_dbus_file_path_extract_elements_from_tail(file,2),line,function);
+    if (!_dbus_string_append_printf (&out, "[%s(%d):%s] ", _dbus_file_path_extract_elements_from_tail (file, 2), line, function))
+      goto out;
 #endif
-  vsprintf (buf+strlen(buf),format, args);
-  va_end (args);
-  OutputDebugStringA(buf);
+    if (!_dbus_string_append_printf_valist (&out, format, args))
+      goto out;
+    message = _dbus_string_get_const_data (&out);
+out:
+    if (message == NULL)
+      {
+        OutputDebugStringA ("Out of memory while formatting verbose message: '''");
+        OutputDebugStringA (format);
+        OutputDebugStringA ("'''");
+      }
+    else
+      {
+        OutputDebugStringA (message);
+      }
+    _dbus_string_free (&out);
   }
 #else
 #ifdef DBUS_CPP_SUPPORTS_VARIABLE_MACRO_ARGUMENTS
@@ -438,15 +491,15 @@ _dbus_verbose_real (
 #endif
 
   vfprintf (stderr, format, args);
-  va_end (args);
-
   fflush (stderr);
 #endif
+
+  va_end (args);
 }
 
 /**
  * Reinitializes the verbose logging code, used
- * as a hack in dbus-spawn.c so that a child
+ * as a hack in dbus-spawn-unix.c so that a child
  * process re-reads its pid
  *
  */
@@ -1002,11 +1055,11 @@ run_failing_each_malloc (int                    n_mallocs,
     {      
       _dbus_set_fail_alloc_counter (n_mallocs);
 
-      _dbus_verbose ("\n===\n%s: (will fail malloc %d with %d failures)\n===\n",
-                     description, n_mallocs,
-                     _dbus_get_fail_alloc_failures ());
+      _dbus_test_diag ("%s: will fail malloc %d and %d that follow",
+                       description, n_mallocs,
+                       _dbus_get_fail_alloc_failures () - 1);
 
-      if (!(* func) (data))
+      if (!(* func) (data, FALSE))
         return FALSE;
       
       n_mallocs -= 1;
@@ -1044,17 +1097,18 @@ _dbus_test_oom_handling (const char             *description,
   
   _dbus_set_fail_alloc_counter (_DBUS_INT_MAX);
 
-  _dbus_verbose ("Running once to count mallocs\n");
-  
-  if (!(* func) (data))
+  _dbus_test_diag ("Running \"%s\" once to count mallocs", description);
+
+  if (!(* func) (data, TRUE))
     return FALSE;
-  
+
   approx_mallocs = _DBUS_INT_MAX - _dbus_get_fail_alloc_counter ();
 
-  _dbus_verbose ("\n=================\n%s: about %d mallocs total\n=================\n",
-                 description, approx_mallocs);
+  _dbus_test_diag ("\"%s\" has about %d mallocs in total",
+                   description, approx_mallocs);
 
   setting = _dbus_getenv ("DBUS_TEST_MALLOC_FAILURES");
+
   if (setting != NULL)
     {
       DBusString str;
@@ -1070,23 +1124,36 @@ _dbus_test_oom_handling (const char             *description,
       max_failures_to_try = 4;
     }
 
+  if (RUNNING_ON_VALGRIND && _dbus_getenv ("DBUS_TEST_SLOW") == NULL)
+    {
+      /* The full OOM testing is slow, valgrind is slow, so the
+       * combination is just horrible. Only do this if the user
+       * asked for extra-slow tests. */
+      max_failures_to_try = 0;
+    }
+
   if (max_failures_to_try < 1)
     {
-      _dbus_verbose ("not testing OOM handling\n");
+      _dbus_test_diag ("not testing OOM handling");
       return TRUE;
     }
+
+  _dbus_test_diag ("testing \"%s\" with up to %d consecutive malloc failures",
+                   description, max_failures_to_try);
 
   i = setting ? max_failures_to_try - 1 : 1;
   while (i < max_failures_to_try)
     {
+      _dbus_test_diag ("testing \"%s\" with %d consecutive malloc failures",
+                       description, i + 1);
+
       _dbus_set_fail_alloc_failures (i);
       if (!run_failing_each_malloc (approx_mallocs, description, func, data))
         return FALSE;
       ++i;
     }
   
-  _dbus_verbose ("\n=================\n%s: all iterations passed\n=================\n",
-                 description);
+  _dbus_verbose ("\"%s\" coped OK with malloc failures\n", description);
 
   return TRUE;
 }

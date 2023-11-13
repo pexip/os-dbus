@@ -4,7 +4,7 @@
  * Copyright (C) 2002, 2004  Red Hat Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -25,6 +25,7 @@
 
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-connection.h>
+#include <dbus/dbus-credentials.h>
 #include <dbus/dbus-protocol.h>
 #include <dbus/dbus-address.h>
 
@@ -89,6 +90,7 @@ dbus_bool_t        _dbus_transport_get_windows_user       (DBusTransport        
                                                            char                      **windows_sid_p);
 dbus_bool_t        _dbus_transport_get_linux_security_label (DBusTransport            *transport,
                                                            char                      **label_p);
+DBusCredentials   *_dbus_transport_get_credentials        (DBusTransport  *transport);
 
 void               _dbus_transport_set_windows_user_function (DBusTransport              *transport,
                                                               DBusAllowWindowsUserFunction   function,

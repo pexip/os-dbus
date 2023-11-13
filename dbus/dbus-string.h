@@ -1,11 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-string.h String utility class (internal to D-Bus implementation)
- * 
+ *
  * Copyright (C) 2002, 2003 Red Hat, Inc.
  * Copyright (C) 2006 Ralf Habacker <ralf.habacker@freenet.de>
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -54,6 +54,22 @@ struct DBusString
   unsigned int dummy_bits : 3; /**< placeholder */
 };
 
+/**
+ * Content for a DBusString that is considered invalid for all
+ * operations, except that it is valid to call _dbus_string_free()
+ * during error handling.
+ */
+#define _DBUS_STRING_INIT_INVALID \
+{ \
+  NULL, /* dummy1 */ \
+  0, /* dummy2 */ \
+  0, /* dummy3 */ \
+  0, /* dummy_bit1 */ \
+  0, /* dummy_bit2 */ \
+  0, /* dummy_bit3 */ \
+  0 /* dummy_bits */ \
+}
+
 #ifdef DBUS_DISABLE_ASSERT
 /* Some simple inlining hacks; the current linker is not smart enough
  * to inline non-exported symbols across files in the library.
@@ -76,6 +92,7 @@ DBUS_PRIVATE_EXPORT
 void          _dbus_string_init_const_len        (DBusString        *str,
                                                   const char        *value,
                                                   int                len);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_init_preallocated     (DBusString        *str,
                                                   int                allocate_size);
 
@@ -96,6 +113,7 @@ char*         _dbus_string_get_data              (DBusString        *str);
 DBUS_PRIVATE_EXPORT
 const char*   _dbus_string_get_const_data        (const DBusString  *str);
 #endif /* _dbus_string_get_const_data */
+DBUS_PRIVATE_EXPORT
 char*         _dbus_string_get_data_len          (DBusString        *str,
                                                   int                start,
                                                   int                len);
@@ -197,6 +215,10 @@ DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_append_byte           (DBusString        *str,
                                                   unsigned char      byte);
 DBUS_PRIVATE_EXPORT
+dbus_bool_t _dbus_string_append_strings          (DBusString        *str,
+                                                  char             **strings,
+                                                  char               separator);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_append_printf         (DBusString        *str,
                                                   const char        *format,
                                                   ...) _DBUS_GNUC_PRINTF (2, 3);
@@ -210,6 +232,7 @@ dbus_bool_t   _dbus_string_insert_2_aligned      (DBusString        *str,
 dbus_bool_t   _dbus_string_insert_4_aligned      (DBusString        *str,
                                                   int                insert_at,
                                                   const unsigned char octets[4]);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_insert_8_aligned      (DBusString        *str,
                                                   int                insert_at,
                                                   const unsigned char octets[8]);
@@ -319,6 +342,10 @@ dbus_bool_t   _dbus_string_starts_with_c_str     (const DBusString  *a,
 dbus_bool_t   _dbus_string_ends_with_c_str       (const DBusString  *a,
                                                   const char        *c_str);
 DBUS_PRIVATE_EXPORT
+dbus_bool_t   _dbus_string_starts_with_words_c_str (const DBusString  *a,
+                                                    const char        *c_str,
+                                                    char               word_separator);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_pop_line              (DBusString        *source,
                                                   DBusString        *dest);
 DBUS_PRIVATE_EXPORT
@@ -402,10 +429,10 @@ _dbus_string_get_const_udata_len (const DBusString *str, int start, int len)
 #define _DBUS_STRING_DEFINE_STATIC(name, str)                           \
   static const char _dbus_static_string_##name[] = str;                 \
   static const DBusString name = { _dbus_static_string_##name,          \
-                                   sizeof(_dbus_static_string_##name),  \
+                                   sizeof(_dbus_static_string_##name) - 1, \
                                    sizeof(_dbus_static_string_##name) + \
                                    _DBUS_STRING_ALLOCATION_PADDING,     \
-                                   TRUE, TRUE, FALSE, 0 }
+                                   TRUE, TRUE, TRUE, 0 }
 
 DBUS_END_DECLS
 

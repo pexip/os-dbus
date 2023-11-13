@@ -33,6 +33,7 @@
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-misc.h>
 #include <dbus/dbus-sysdeps.h>
+#include <dbus/dbus-test-tap.h>
 #include <string.h>
 
 typedef enum
@@ -480,7 +481,10 @@ bus_config_parser_new (const DBusString      *basedir,
   else
     {
 
-      /* Make up some numbers! woot! */
+      /* Make up some numbers! woot!
+       * Please keep these hard-coded values in sync with the comments
+       * in bus/system.conf.in. */
+
       parser->limits.max_incoming_bytes = _DBUS_ONE_MEGABYTE * 127;
       parser->limits.max_outgoing_bytes = _DBUS_ONE_MEGABYTE * 127;
       parser->limits.max_message_size = _DBUS_ONE_MEGABYTE * 32;
@@ -513,12 +517,21 @@ bus_config_parser_new (const DBusString      *basedir,
       
       parser->limits.max_incomplete_connections = 64;
       parser->limits.max_connections_per_user = 256;
+      parser->limits.max_containers_per_user = 16;
       
       /* Note that max_completed_connections / max_connections_per_user
        * is the number of users that would have to work together to
-       * DOS all the other users.
+       * DOS all the other users. The same applies to containers.
        */
       parser->limits.max_completed_connections = 2048;
+      parser->limits.max_containers = 512;
+      /* Similarly max_connections_per_user / max_connections_per_container
+       * is the number of app-containers per user that would have to work
+       * together to DoS all the other processes of that user */
+      parser->limits.max_connections_per_container = 8;
+      /* Someone trying to do a denial of service attack can make us store
+       * this much data per app-container */
+      parser->limits.max_container_metadata_bytes = 4096;
       
       parser->limits.max_pending_activations = 512;
       parser->limits.max_services_per_connection = 512;
@@ -572,31 +585,13 @@ bus_config_parser_unref (BusConfigParser *parser)
       dbus_free (parser->servicehelper);
       dbus_free (parser->bus_type);
       dbus_free (parser->pidfile);
-      
-      _dbus_list_foreach (&parser->listen_on,
-                          (DBusForeachFunction) dbus_free,
-                          NULL);
 
-      _dbus_list_clear (&parser->listen_on);
+      _dbus_list_clear_full (&parser->listen_on, dbus_free);
+      _dbus_list_clear_full (&parser->service_dirs,
+                             (DBusFreeFunction) bus_config_service_dir_free);
+      _dbus_list_clear_full (&parser->conf_dirs, dbus_free);
+      _dbus_list_clear_full (&parser->mechanisms, dbus_free);
 
-      _dbus_list_foreach (&parser->service_dirs,
-                          (DBusForeachFunction) bus_config_service_dir_free,
-                          NULL);
-
-      _dbus_list_clear (&parser->service_dirs);
-
-      _dbus_list_foreach (&parser->conf_dirs,
-                          (DBusForeachFunction) dbus_free,
-                          NULL);
-
-      _dbus_list_clear (&parser->conf_dirs);
-
-      _dbus_list_foreach (&parser->mechanisms,
-                          (DBusForeachFunction) dbus_free,
-                          NULL);
-
-      _dbus_list_clear (&parser->mechanisms);
-      
       _dbus_string_free (&parser->basedir);
 
       if (parser->policy)
@@ -607,25 +602,6 @@ bus_config_parser_unref (BusConfigParser *parser)
       
       dbus_free (parser);
     }
-}
-
-dbus_bool_t
-bus_config_parser_check_doctype (BusConfigParser   *parser,
-                                 const char        *doctype,
-                                 DBusError         *error)
-{
-  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
-
-  if (strcmp (doctype, "busconfig") != 0)
-    {
-      dbus_set_error (error,
-                      DBUS_ERROR_FAILED,
-                      "Configuration file has the wrong document type %s",
-                      doctype);
-      return FALSE;
-    }
-  else
-    return TRUE;
 }
 
 typedef struct
@@ -666,10 +642,11 @@ locate_attributes (BusConfigParser  *parser,
   va_start (args, first_attribute_retloc);
 
   name = va_arg (args, const char*);
-  retloc = va_arg (args, const char**);
+  retloc = NULL;
 
   while (name != NULL)
     {
+      retloc = va_arg (args, const char**);
       _dbus_assert (retloc != NULL);
       _dbus_assert (n_attrs < MAX_ATTRS);
 
@@ -679,7 +656,6 @@ locate_attributes (BusConfigParser  *parser,
       *retloc = NULL;
 
       name = va_arg (args, const char*);
-      retloc = va_arg (args, const char**);
     }
 
   va_end (args);
@@ -916,9 +892,7 @@ start_busconfig_child (BusConfigParser   *parser,
                 BUS_SERVICE_DIR_FLAGS_STRICT_NAMING))
             {
               BUS_SET_OOM (error);
-              _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
-                  NULL);
-              _dbus_list_clear (&dirs);
+              _dbus_list_clear_full (&dirs, dbus_free);
               return FALSE;
             }
         }
@@ -945,9 +919,7 @@ start_busconfig_child (BusConfigParser   *parser,
                                             BUS_SERVICE_DIR_FLAGS_NONE))
         {
           BUS_SET_OOM (error);
-          _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
-              NULL);
-          _dbus_list_clear (&dirs);
+          _dbus_list_clear_full (&dirs, dbus_free);
           return FALSE;
         }
 
@@ -983,9 +955,7 @@ start_busconfig_child (BusConfigParser   *parser,
                                             BUS_SERVICE_DIR_FLAGS_NONE))
         {
           BUS_SET_OOM (error);
-          _dbus_list_foreach (&dirs, (DBusForeachFunction) dbus_free,
-              NULL);
-          _dbus_list_clear (&dirs);
+          _dbus_list_clear_full (&dirs, dbus_free);
           return FALSE;
         }
 
@@ -1328,6 +1298,7 @@ append_rule_from_element (BusConfigParser   *parser,
   const char *send_member;
   const char *send_error;
   const char *send_destination;
+  const char *send_destination_prefix;
   const char *send_path;
   const char *send_type;
   const char *send_requested_reply;
@@ -1371,6 +1342,7 @@ append_rule_from_element (BusConfigParser   *parser,
                           "send_member", &send_member,
                           "send_error", &send_error,
                           "send_destination", &send_destination,
+                          "send_destination_prefix", &send_destination_prefix,
                           "send_path", &send_path,
                           "send_type", &send_type,
                           "send_broadcast", &send_broadcast,
@@ -1394,6 +1366,7 @@ append_rule_from_element (BusConfigParser   *parser,
     return FALSE;
 
   any_send_attribute = (send_destination != NULL ||
+                        send_destination_prefix != NULL ||
                         send_broadcast != NULL ||
                         send_path != NULL ||
                         send_type != NULL ||
@@ -1447,7 +1420,8 @@ append_rule_from_element (BusConfigParser   *parser,
    *     interface + member
    *     error
    * 
-   *   base send_ can combine with send_destination, send_path, send_type, send_requested_reply, send_broadcast, eavesdrop
+   *   base send_ can combine with send_destination, send_destination_prefix, send_path, send_type, send_requested_reply, send_broadcast, eavesdrop
+   *   send_destination must not occur with send_destination_prefix
    *   base receive_ with receive_sender, receive_path, receive_type, receive_requested_reply, eavesdrop
    *
    *   user, group, own, own_prefix must occur alone
@@ -1482,6 +1456,16 @@ append_rule_from_element (BusConfigParser   *parser,
                       "Invalid combination of attributes on element <%s>: "
                       "send_error cannot be combined with send_member or "
                       "send_interface",
+                      element_name);
+      return FALSE;
+    }
+
+  if ((send_destination != NULL) + (send_destination_prefix != NULL) > 1)
+    {
+      dbus_set_error (error, DBUS_ERROR_FAILED,
+                      "Invalid combination of attributes on element <%s>: "
+                      "send_destination cannot be combined with "
+                      "send_destination_prefix",
                       element_name);
       return FALSE;
     }
@@ -1619,7 +1603,16 @@ append_rule_from_element (BusConfigParser   *parser,
       rule->d.send.interface = _dbus_strdup (send_interface);
       rule->d.send.member = _dbus_strdup (send_member);
       rule->d.send.error = _dbus_strdup (send_error);
-      rule->d.send.destination = _dbus_strdup (send_destination);
+      if (send_destination)
+        {
+          rule->d.send.destination = _dbus_strdup (send_destination);
+          rule->d.send.destination_is_prefix = 0;
+        }
+      else if (send_destination_prefix)
+        {
+          rule->d.send.destination = _dbus_strdup (send_destination_prefix);
+          rule->d.send.destination_is_prefix = 1;
+        }
       rule->d.send.max_fds = max_fds;
       rule->d.send.min_fds = min_fds;
 
@@ -1631,7 +1624,7 @@ append_rule_from_element (BusConfigParser   *parser,
         goto nomem;
       if (send_error && rule->d.send.error == NULL)
         goto nomem;
-      if (send_destination && rule->d.send.destination == NULL)
+      if ((send_destination || send_destination_prefix) && rule->d.send.destination == NULL)
         goto nomem;
     }
   else if (any_receive_attribute)
@@ -2016,8 +2009,6 @@ bus_config_parser_start_element (BusConfigParser   *parser,
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  /* printf ("START: %s\n", element_name); */
-  
   t = top_element_type (parser);
 
   if (t == ELEMENT_NONE)
@@ -2178,6 +2169,30 @@ set_limit (BusConfigParser *parser,
       must_be_int = TRUE;
       parser->limits.max_replies_per_connection = value;
     }
+  else if (strcmp (name, "max_containers") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_containers = value;
+    }
+  else if (strcmp (name, "max_containers_per_user") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_containers_per_user = value;
+    }
+  else if (strcmp (name, "max_container_metadata_bytes") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_container_metadata_bytes = value;
+    }
+  else if (strcmp (name, "max_connections_per_container") == 0)
+    {
+      must_be_positive = TRUE;
+      must_be_int = TRUE;
+      parser->limits.max_connections_per_container = value;
+    }
   else
     {
       dbus_set_error (error, DBUS_ERROR_FAILED,
@@ -2217,8 +2232,6 @@ bus_config_parser_end_element (BusConfigParser   *parser,
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-  /* printf ("END: %s\n", element_name); */
-  
   t = top_element_type (parser);
 
   if (t == ELEMENT_NONE)
@@ -2566,16 +2579,6 @@ bus_config_parser_content (BusConfigParser   *parser,
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
-#if 0
-  {
-    const char *c_str;
-    
-    _dbus_string_get_const_data (content, &c_str);
-
-    printf ("CONTENT %d bytes: %s\n", _dbus_string_get_length (content), c_str);
-  }
-#endif
-  
   e = peek_element (parser);
   if (e == NULL)
     {
@@ -3090,12 +3093,12 @@ do_check_own_rules (BusPolicy  *policy)
       dbus_bool_t ret;
 
       if (!_dbus_string_init (&service_name))
-        _dbus_assert_not_reached ("couldn't init string");
+        _dbus_test_fatal ("couldn't init string");
       if (!_dbus_string_append (&service_name, checks[i].name))
-        _dbus_assert_not_reached ("couldn't append string");
+        _dbus_test_fatal ("couldn't append string");
 
       ret = bus_policy_check_can_own (policy, &service_name);
-      printf ("        Check name %s: %s\n", checks[i].name,
+      _dbus_test_diag ("        Check name %s: %s", checks[i].name,
               ret ? "allowed" : "not allowed");
       if (checks[i].allowed && !ret)
         {
@@ -3203,20 +3206,20 @@ process_test_valid_subdir (const DBusString *test_base_dir,
   dir = NULL;
 
   if (!_dbus_string_init (&test_directory))
-    _dbus_assert_not_reached ("didn't allocate test_directory");
+    _dbus_test_fatal ("didn't allocate test_directory");
 
   _dbus_string_init_const (&filename, subdir);
 
   if (!_dbus_string_copy (test_base_dir, 0,
                           &test_directory, 0))
-    _dbus_assert_not_reached ("couldn't copy test_base_dir to test_directory");
+    _dbus_test_fatal ("couldn't copy test_base_dir to test_directory");
 
   if (!_dbus_concat_dir_and_file (&test_directory, &filename))
-    _dbus_assert_not_reached ("couldn't allocate full path");
+    _dbus_test_fatal ("couldn't allocate full path");
 
   _dbus_string_free (&filename);
   if (!_dbus_string_init (&filename))
-    _dbus_assert_not_reached ("didn't allocate filename string");
+    _dbus_test_fatal ("didn't allocate filename string");
 
   dbus_error_init (&error);
   dir = _dbus_directory_open (&test_directory, &error);
@@ -3230,11 +3233,11 @@ process_test_valid_subdir (const DBusString *test_base_dir,
     }
 
   if (validity == VALID)
-    printf ("Testing valid files:\n");
+    _dbus_test_diag ("Testing valid files:");
   else if (validity == INVALID)
-    printf ("Testing invalid files:\n");
+    _dbus_test_diag ("Testing invalid files:");
   else
-    printf ("Testing unknown files:\n");
+    _dbus_test_diag ("Testing unknown files:");
 
  next:
   while (_dbus_directory_get_next_file (dir, &filename, &error))
@@ -3243,13 +3246,13 @@ process_test_valid_subdir (const DBusString *test_base_dir,
       LoaderOomData d;
 
       if (!_dbus_string_init (&full_path))
-        _dbus_assert_not_reached ("couldn't init string");
+        _dbus_test_fatal ("couldn't init string");
 
       if (!_dbus_string_copy (&test_directory, 0, &full_path, 0))
-        _dbus_assert_not_reached ("couldn't copy dir to full_path");
+        _dbus_test_fatal ("couldn't copy dir to full_path");
 
       if (!_dbus_concat_dir_and_file (&full_path, &filename))
-        _dbus_assert_not_reached ("couldn't concat file to dir");
+        _dbus_test_fatal ("couldn't concat file to dir");
 
       if (!_dbus_string_ends_with_c_str (&full_path, ".conf"))
         {
@@ -3259,7 +3262,7 @@ process_test_valid_subdir (const DBusString *test_base_dir,
           goto next;
         }
 
-      printf ("    %s\n", _dbus_string_get_const_data (&filename));
+      _dbus_test_diag ("    %s", _dbus_string_get_const_data (&filename));
 
       _dbus_verbose (" expecting %s\n",
                      validity == VALID ? "valid" :
@@ -3277,8 +3280,8 @@ process_test_valid_subdir (const DBusString *test_base_dir,
        */
       /* if (!_dbus_test_oom_handling ("config-loader", check_loader_oom_func, &d)) */
       if (!check_loader_oom_func (&d))
-        _dbus_assert_not_reached ("test failed");
-      
+        _dbus_test_fatal ("test failed");
+
       _dbus_string_free (&full_path);
     }
 
@@ -3459,22 +3462,22 @@ limits_equal (const BusLimits *a,
 {
   return
     (a->max_incoming_bytes == b->max_incoming_bytes
-     || a->max_incoming_unix_fds == b->max_incoming_unix_fds
-     || a->max_outgoing_bytes == b->max_outgoing_bytes
-     || a->max_outgoing_unix_fds == b->max_outgoing_unix_fds
-     || a->max_message_size == b->max_message_size
-     || a->max_message_unix_fds == b->max_message_unix_fds
-     || a->activation_timeout == b->activation_timeout
-     || a->auth_timeout == b->auth_timeout
-     || a->pending_fd_timeout == b->pending_fd_timeout
-     || a->max_completed_connections == b->max_completed_connections
-     || a->max_incomplete_connections == b->max_incomplete_connections
-     || a->max_connections_per_user == b->max_connections_per_user
-     || a->max_pending_activations == b->max_pending_activations
-     || a->max_services_per_connection == b->max_services_per_connection
-     || a->max_match_rules_per_connection == b->max_match_rules_per_connection
-     || a->max_replies_per_connection == b->max_replies_per_connection
-     || a->reply_timeout == b->reply_timeout);
+     && a->max_incoming_unix_fds == b->max_incoming_unix_fds
+     && a->max_outgoing_bytes == b->max_outgoing_bytes
+     && a->max_outgoing_unix_fds == b->max_outgoing_unix_fds
+     && a->max_message_size == b->max_message_size
+     && a->max_message_unix_fds == b->max_message_unix_fds
+     && a->activation_timeout == b->activation_timeout
+     && a->auth_timeout == b->auth_timeout
+     && a->pending_fd_timeout == b->pending_fd_timeout
+     && a->max_completed_connections == b->max_completed_connections
+     && a->max_incomplete_connections == b->max_incomplete_connections
+     && a->max_connections_per_user == b->max_connections_per_user
+     && a->max_pending_activations == b->max_pending_activations
+     && a->max_services_per_connection == b->max_services_per_connection
+     && a->max_match_rules_per_connection == b->max_match_rules_per_connection
+     && a->max_replies_per_connection == b->max_replies_per_connection
+     && a->reply_timeout == b->reply_timeout);
 }
 
 static dbus_bool_t
@@ -3538,7 +3541,7 @@ all_are_equiv (const DBusString *target_directory)
   retval = FALSE;
 
   if (!_dbus_string_init (&filename))
-    _dbus_assert_not_reached ("didn't allocate filename string");
+    _dbus_test_fatal ("didn't allocate filename string");
 
   dbus_error_init (&error);
   dir = _dbus_directory_open (target_directory, &error);
@@ -3551,7 +3554,7 @@ all_are_equiv (const DBusString *target_directory)
       goto finished;
     }
 
-  printf ("Comparing equivalent files:\n");
+  _dbus_test_diag ("Comparing equivalent files:");
 
  next:
   while (_dbus_directory_get_next_file (dir, &filename, &error))
@@ -3559,13 +3562,13 @@ all_are_equiv (const DBusString *target_directory)
       DBusString full_path;
 
       if (!_dbus_string_init (&full_path))
-	_dbus_assert_not_reached ("couldn't init string");
+        _dbus_test_fatal ("couldn't init string");
 
       if (!_dbus_string_copy (target_directory, 0, &full_path, 0))
-        _dbus_assert_not_reached ("couldn't copy dir to full_path");
+        _dbus_test_fatal ("couldn't copy dir to full_path");
 
       if (!_dbus_concat_dir_and_file (&full_path, &filename))
-        _dbus_assert_not_reached ("couldn't concat file to dir");
+        _dbus_test_fatal ("couldn't concat file to dir");
 
       if (!_dbus_string_ends_with_c_str (&full_path, ".conf"))
         {
@@ -3575,7 +3578,7 @@ all_are_equiv (const DBusString *target_directory)
           goto next;
         }
 
-      printf ("    %s\n", _dbus_string_get_const_data (&filename));
+      _dbus_test_diag ("    %s", _dbus_string_get_const_data (&filename));
 
       parser = bus_config_load (&full_path, TRUE, NULL, &error);
 
@@ -3631,20 +3634,20 @@ process_test_equiv_subdir (const DBusString *test_base_dir,
   retval = FALSE;
 
   if (!_dbus_string_init (&test_directory))
-    _dbus_assert_not_reached ("didn't allocate test_directory");
+    _dbus_test_fatal ("didn't allocate test_directory");
 
   _dbus_string_init_const (&filename, subdir);
 
   if (!_dbus_string_copy (test_base_dir, 0,
 			  &test_directory, 0))
-    _dbus_assert_not_reached ("couldn't copy test_base_dir to test_directory");
+    _dbus_test_fatal ("couldn't copy test_base_dir to test_directory");
 
   if (!_dbus_concat_dir_and_file (&test_directory, &filename))
-    _dbus_assert_not_reached ("couldn't allocate full path");
+    _dbus_test_fatal ("couldn't allocate full path");
 
   _dbus_string_free (&filename);
   if (!_dbus_string_init (&filename))
-    _dbus_assert_not_reached ("didn't allocate filename string");
+    _dbus_test_fatal ("didn't allocate filename string");
 
   dbus_error_init (&error);
   dir = _dbus_directory_open (&test_directory, &error);
@@ -3666,14 +3669,14 @@ process_test_equiv_subdir (const DBusString *test_base_dir,
 	continue;
 
       if (!_dbus_string_init (&full_path))
-	_dbus_assert_not_reached ("couldn't init string");
+        _dbus_test_fatal ("couldn't init string");
 
       if (!_dbus_string_copy (&test_directory, 0, &full_path, 0))
-        _dbus_assert_not_reached ("couldn't copy dir to full_path");
+        _dbus_test_fatal ("couldn't copy dir to full_path");
 
       if (!_dbus_concat_dir_and_file (&full_path, &filename))
-        _dbus_assert_not_reached ("couldn't concat file to dir");
-      
+        _dbus_test_fatal ("couldn't concat file to dir");
+
       equal = all_are_equiv (&full_path);
       _dbus_string_free (&full_path);
 
@@ -3745,21 +3748,21 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
       !_dbus_string_init (&data_home_based) ||
       !_dbus_string_init (&data_dirs_based) ||
       !_dbus_string_init (&data_dirs_based2))
-    _dbus_assert_not_reached ("OOM allocating strings");
+    _dbus_test_fatal ("OOM allocating strings");
 
   if (!_dbus_string_copy (test_base_dir, 0,
                           &full_path, 0))
-    _dbus_assert_not_reached ("couldn't copy test_base_dir to full_path");
+    _dbus_test_fatal ("couldn't copy test_base_dir to full_path");
 
   _dbus_string_init_const (&tmp, "valid-config-files");
 
   if (!_dbus_concat_dir_and_file (&full_path, &tmp))
-    _dbus_assert_not_reached ("couldn't allocate full path");
+    _dbus_test_fatal ("couldn't allocate full path");
 
   _dbus_string_init_const (&tmp, "standard-session-dirs.conf");
 
   if (!_dbus_concat_dir_and_file (&full_path, &tmp))
-    _dbus_assert_not_reached ("couldn't allocate full path");
+    _dbus_test_fatal ("couldn't allocate full path");
 
 #ifdef DBUS_WIN
   if (!_dbus_string_append (&install_root_based, DBUS_DATADIR) ||
@@ -3792,9 +3795,9 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
   if (dbus_test_builddir == NULL || xdg_data_home == NULL ||
       xdg_runtime_dir == NULL)
     {
-      printf ("Not testing default session service directories because a "
+      _dbus_test_diag ("Not testing default session service directories because a "
               "build-time testing environment variable is not set: "
-              "see AM_TESTS_ENVIRONMENT in tests/Makefile.am\n");
+              "see AM_TESTS_ENVIRONMENT in tests/Makefile.am");
       ret = TRUE;
       goto out;
     }
@@ -3806,21 +3809,21 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
       !_dbus_string_append (&runtime_dir_based, xdg_runtime_dir) ||
       !_dbus_string_append (&data_home_based, xdg_data_home) ||
       !_dbus_string_append (&data_home_based, "/dbus-1/services"))
-    _dbus_assert_not_reached ("out of memory");
+    _dbus_test_fatal ("out of memory");
 
   if (!_dbus_ensure_directory (&runtime_dir_based, NULL))
-    _dbus_assert_not_reached ("Unable to create fake XDG_RUNTIME_DIR");
+    _dbus_test_fatal ("Unable to create fake XDG_RUNTIME_DIR");
 
   if (!_dbus_string_append (&runtime_dir_based, "/dbus-1/services"))
-    _dbus_assert_not_reached ("out of memory");
+    _dbus_test_fatal ("out of memory");
 
   /* Sanity check: the Makefile sets this up. We assume that if this is
    * right, the XDG_DATA_DIRS will be too. */
   if (!_dbus_string_starts_with_c_str (&data_home_based, dbus_test_builddir))
-    _dbus_assert_not_reached ("$XDG_DATA_HOME should start with $DBUS_TEST_BUILDDIR");
+    _dbus_test_fatal ("$XDG_DATA_HOME should start with $DBUS_TEST_BUILDDIR");
 
   if (!_dbus_string_starts_with_c_str (&runtime_dir_based, dbus_test_builddir))
-    _dbus_assert_not_reached ("$XDG_RUNTIME_DIR should start with $DBUS_TEST_BUILDDIR");
+    _dbus_test_fatal ("$XDG_RUNTIME_DIR should start with $DBUS_TEST_BUILDDIR");
 
   test_session_service_dir_matches[0] = _dbus_string_get_const_data (
       &runtime_dir_based);
@@ -3835,7 +3838,7 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
   parser = bus_config_load (&full_path, TRUE, NULL, &error);
 
   if (parser == NULL)
-    _dbus_assert_not_reached (error.message);
+    _dbus_test_fatal ("%s", error.message);
 
   dirs = bus_config_parser_get_service_dirs (parser);
 
@@ -3846,17 +3849,17 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
       BusConfigServiceDir *dir = link->data;
       BusServiceDirFlags expected = BUS_SERVICE_DIR_FLAGS_NONE;
 
-      printf ("    test service dir: '%s'\n", dir->path);
-      printf ("    current standard service dir: '%s'\n", test_session_service_dir_matches[i]);
+      _dbus_test_diag ("    test service dir: '%s'", dir->path);
+      _dbus_test_diag ("    current standard service dir: '%s'", test_session_service_dir_matches[i]);
       if (test_session_service_dir_matches[i] == NULL)
         {
-          printf ("more directories parsed than in match set\n");
+          _dbus_test_diag ("more directories parsed than in match set");
           goto out;
         }
  
       if (strcmp (test_session_service_dir_matches[i], dir->path) != 0)
         {
-          printf ("'%s' directory does not match '%s' in the match set\n",
+          _dbus_test_diag ("'%s' directory does not match '%s' in the match set",
                   dir->path, test_session_service_dir_matches[i]);
           goto out;
         }
@@ -3871,7 +3874,7 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
 
       if (dir->flags != expected)
         {
-          printf ("'%s' directory has flags 0x%x, should be 0x%x\n",
+          _dbus_test_diag ("'%s' directory has flags 0x%x, should be 0x%x",
                   dir->path, dir->flags, expected);
           goto out;
         }
@@ -3879,13 +3882,13 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
   
   if (test_session_service_dir_matches[i] != NULL)
     {
-      printf ("extra data %s in the match set was not matched\n",
+      _dbus_test_diag ("extra data %s in the match set was not matched",
               test_session_service_dir_matches[i]);
       goto out;
     }
 
   if (!bus_config_parser_get_watched_dirs (parser, &watched_dirs))
-    _dbus_assert_not_reached ("out of memory");
+    _dbus_test_fatal ("out of memory");
 
 #ifdef DBUS_WIN
   /* We expect all directories to be watched (not that it matters on Windows,
@@ -3901,20 +3904,20 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
        link != NULL;
        link = _dbus_list_get_next_link (&watched_dirs, link), i++)
     {
-      printf ("    watched service dir: '%s'\n", (const char *) link->data);
-      printf ("    current standard service dir: '%s'\n",
+      _dbus_test_diag ("    watched service dir: '%s'", (const char *) link->data);
+      _dbus_test_diag ("    current standard service dir: '%s'",
               test_session_service_dir_matches[i]);
 
       if (test_session_service_dir_matches[i] == NULL)
         {
-          printf ("more directories parsed than in match set\n");
+          _dbus_test_diag ("more directories parsed than in match set");
           goto out;
         }
 
       if (strcmp (test_session_service_dir_matches[i],
                   (const char *) link->data) != 0)
         {
-          printf ("'%s' directory does not match '%s' in the match set\n",
+          _dbus_test_diag ("'%s' directory does not match '%s' in the match set",
                   (const char *) link->data,
                   test_session_service_dir_matches[i]);
           goto out;
@@ -3923,7 +3926,7 @@ test_default_session_servicedirs (const DBusString *test_base_dir)
 
   if (test_session_service_dir_matches[i] != NULL)
     {
-      printf ("extra data %s in the match set was not matched\n",
+      _dbus_test_diag ("extra data %s in the match set was not matched",
               test_session_service_dir_matches[i]);
       goto out;
     }
@@ -3965,16 +3968,16 @@ test_default_system_servicedirs (void)
   dirs = NULL;
 
   if (!_dbus_get_standard_system_servicedirs (&dirs))
-    _dbus_assert_not_reached ("couldn't get stardard dirs");
+    _dbus_test_fatal ("couldn't get stardard dirs");
 
   /* make sure we read and parse the env variable correctly */
   i = 0;
   while ((link = _dbus_list_pop_first_link (&dirs)))
     {
-      printf ("    test service dir: %s\n", (char *)link->data);
+      _dbus_test_diag ("    test service dir: %s", (char *)link->data);
       if (test_system_service_dir_matches[i] == NULL)
         {
-          printf ("more directories parsed than in match set\n");
+          _dbus_test_diag ("more directories parsed than in match set");
           dbus_free (link->data);
           _dbus_list_free_link (link);
           return FALSE;
@@ -3983,7 +3986,7 @@ test_default_system_servicedirs (void)
       if (strcmp (test_system_service_dir_matches[i], 
                   (char *)link->data) != 0)
         {
-          printf ("%s directory does not match %s in the match set\n", 
+          _dbus_test_diag ("%s directory does not match %s in the match set",
                   (char *)link->data,
                   test_system_service_dir_matches[i]);
           dbus_free (link->data);
@@ -3999,7 +4002,7 @@ test_default_system_servicedirs (void)
   
   if (test_system_service_dir_matches[i] != NULL)
     {
-      printf ("extra data %s in the match set was not matched\n",
+      _dbus_test_diag ("extra data %s in the match set was not matched",
               test_system_service_dir_matches[i]);
 
       return FALSE;
@@ -4010,41 +4013,46 @@ test_default_system_servicedirs (void)
 #endif
 		   
 dbus_bool_t
-bus_config_parser_test (const DBusString *test_data_dir)
+bus_config_parser_test (const char *test_data_dir_cstr)
 {
-  if (test_data_dir == NULL ||
-      _dbus_string_get_length (test_data_dir) == 0)
+  DBusString test_data_dir;
+
+  if (test_data_dir_cstr == NULL || test_data_dir_cstr[0] == '\0')
     {
-      printf ("No test data\n");
+      _dbus_test_diag ("No test data");
       return TRUE;
     }
 
-  if (!test_default_session_servicedirs (test_data_dir))
+  _dbus_string_init_const (&test_data_dir, test_data_dir_cstr);
+
+  if (!test_default_session_servicedirs (&test_data_dir))
     return FALSE;
 
 #ifdef DBUS_WIN
-  printf("default system service dir skipped\n");
+  _dbus_test_diag ("default system service dir skipped");
 #else
   if (!test_default_system_servicedirs())
     return FALSE;
 #endif
 
-  if (!process_test_valid_subdir (test_data_dir, "valid-config-files", VALID))
+  if (!process_test_valid_subdir (&test_data_dir, "valid-config-files",
+                                  VALID))
     return FALSE;
 
 #ifndef DBUS_WIN
-  if (!process_test_valid_subdir (test_data_dir, "valid-config-files-system", VALID))
+  if (!process_test_valid_subdir (&test_data_dir,
+                                  "valid-config-files-system", VALID))
     return FALSE;
 #endif
 
-  if (!process_test_valid_subdir (test_data_dir, "invalid-config-files", INVALID))
+  if (!process_test_valid_subdir (&test_data_dir, "invalid-config-files",
+                                  INVALID))
     return FALSE;
 
-  if (!process_test_equiv_subdir (test_data_dir, "equiv-config-files"))
+  if (!process_test_equiv_subdir (&test_data_dir, "equiv-config-files"))
     return FALSE;
 
   return TRUE;
 }
 
 #endif /* DBUS_ENABLE_EMBEDDED_TESTS */
-

@@ -10,9 +10,10 @@ XSBC-Pexip-Original-Uploaders:
  Loic Minier <lool@dooz.org>,
  Simon McVittie <smcv@debian.org>,
 Build-Depends:
- autoconf-archive (>= 20150224),
+ autoconf-archive,
  automake,
- debhelper-compat (= 12),
+ debhelper (>= 13.7) | debhelper (<< 13.4),
+ debhelper-compat (= 13),
  dh-exec,
  libapparmor-dev [linux-any],
  libaudit-dev [linux-any],
@@ -24,18 +25,16 @@ Build-Depends:
  libsystemd-dev [linux-any],
  libx11-dev,
  pkg-config,
- python3 <!nocheck> <!noinsttest>,
- python3-dbus <!nocheck> <!noinsttest>,
- python3-gi <!nocheck> <!noinsttest>,
- valgrind [amd64 arm64 armhf i386 mips64 mips64el mips mipsel powerpc ppc64 ppc64el s390x],
+ valgrind-if-available,
+ xml-core,
  xmlto <!nodoc>,
 Build-Depends-Indep:
  doxygen <!nodoc>,
  ducktype <!nodoc>,
  xsltproc <!nodoc>,
  yelp-tools <!nodoc>,
-Standards-Version: 4.5.1
-Vcs-Git: https://salsa.debian.org/utopia-team/dbus.git -b debian/bullseye
+Standards-Version: 4.6.2
+Vcs-Git: https://salsa.debian.org/utopia-team/dbus.git
 Vcs-Browser: https://salsa.debian.org/utopia-team/dbus
 Homepage: https://dbus.freedesktop.org/
 Rules-Requires-Root: no
@@ -45,22 +44,20 @@ Package: dbus
 Architecture: any
 Priority: standard
 Provides:
- dbus-bin (= ${binary:Version}),
- dbus-daemon (= ${binary:Version}),
- dbus-session-bus-common (= ${binary:Version}),
  dbus-system-bus (= ${binary:Version}),
- dbus-system-bus-common (= ${binary:Version}),
  default-dbus-system-bus,
 Pre-Depends:
  ${misc:Pre-Depends},
 Depends:
- adduser,
+ dbus-bin (= ${binary:Version}),
+ dbus-daemon (= ${binary:Version}),
+ dbus-system-bus-common (>= ${source:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Suggests:
  default-dbus-session-bus | dbus-session-bus,
 Multi-Arch: foreign
-Description: simple interprocess messaging system (daemon and utilities)
+Description: simple interprocess messaging system (system message bus)
  D-Bus is a message bus, used for sending messages between applications.
  Conceptually, it fits somewhere in between raw sockets and CORBA in
  terms of complexity.
@@ -73,10 +70,109 @@ Description: simple interprocess messaging system (daemon and utilities)
  .
  It comes with several bindings, including GLib, Python, Qt and Java.
  .
- This package contains the D-Bus daemon and related utilities.
+ This package provides a fully-functional D-Bus system bus with activation
+ support, used for communication between system services, and depends on
+ most of the other components of the reference implementation of D-Bus.
  .
- The client-side library can be found in the libdbus-1-3 package, as it is no
- longer contained in this package.
+ To provide a complete D-Bus session bus, install one of the packages
+ that implement the dbus-session-bus virtual package, such as
+ dbus-user-session. The recommended implementation is indicated by
+ the default-dbus-session-bus virtual package.
+
+Package: dbus-session-bus-common
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+Breaks:
+ dbus (<< 1.13.18-2~),
+Replaces:
+ dbus (<< 1.13.18-2~),
+Description: simple interprocess messaging system (session bus configuration)
+ D-Bus is a message bus, used for sending messages between applications.
+ Conceptually, it fits somewhere in between raw sockets and CORBA in
+ terms of complexity.
+ .
+ This package contains the configuration files defining the behaviour of
+ the D-Bus session bus, used for applications and per-user services.
+ These are used by the reference implementation in the dbus package,
+ and by the reimplementation in the dbus-broker package.
+ .
+ To provide a complete D-Bus session bus, install one of the packages
+ that implement the dbus-session-bus virtual package, such as
+ dbus-user-session. The recommended implementation is indicated by
+ the default-dbus-session-bus virtual package.
+
+Package: dbus-system-bus-common
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ adduser,
+ ${misc:Depends},
+Breaks:
+ dbus (<< 1.13.18-2~),
+Replaces:
+ dbus (<< 1.13.18-2~),
+Description: simple interprocess messaging system (system bus configuration)
+ D-Bus is a message bus, used for sending messages between applications.
+ Conceptually, it fits somewhere in between raw sockets and CORBA in
+ terms of complexity.
+ .
+ This package contains the configuration files defining the behaviour of
+ the D-Bus system bus, used for system services such as networking and
+ storage management services. It is also responsible for creating the
+ 'messagebus' system user account used to run the system bus.
+ These are used by the reference implementation in the dbus package,
+ and by the reimplementation in the dbus-broker package.
+ .
+ To provide a complete D-Bus system bus, install one of the packages
+ that implement the dbus-system-bus virtual package, such as dbus.
+ The recommended implementation is indicated by the default-dbus-system-bus
+ virtual package.
+
+Package: dbus-bin
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+Breaks:
+ dbus (<< 1.13.18-2~),
+Replaces:
+ dbus (<< 1.13.18-2~),
+Description: simple interprocess messaging system (command line utilities)
+ D-Bus is a message bus, used for sending messages between applications.
+ Conceptually, it fits somewhere in between raw sockets and CORBA in
+ terms of complexity.
+ .
+ This package contains the D-Bus command-line utilities such as dbus-send
+ and dbus-monitor.
+
+Package: dbus-daemon
+Architecture: any
+Multi-Arch: foreign
+Depends:
+ dbus-bin (= ${binary:Version}),
+ dbus-session-bus-common (>= ${source:Version}),
+ ${misc:Depends},
+ ${shlibs:Depends},
+Breaks:
+ dbus (<< 1.13.18-2~),
+Replaces:
+ dbus (<< 1.13.18-2~),
+Description: simple interprocess messaging system (reference message bus)
+ D-Bus is a message bus, used for sending messages between applications.
+ Conceptually, it fits somewhere in between raw sockets and CORBA in
+ terms of complexity.
+ .
+ This package contains dbus-daemon, the reference implementation of a
+ D-Bus message bus, and dbus-run-session, a utility to start a temporary
+ session dbus-daemon in a constrained environment or for automated tests.
+ .
+ To provide a complete D-Bus session bus, install one of the packages
+ that implement the dbus-session-bus virtual package, such as
+ dbus-user-session. The recommended implementation is indicated by
+ the default-dbus-session-bus virtual package.
 
 Package: dbus-1-doc
 Build-Profiles: <!nodoc>
@@ -139,9 +235,9 @@ Depends:
 Description: simple interprocess messaging system (minimal runtime)
  D-Bus is a message bus, used for sending messages between applications.
  .
- This package is a minimal version of the dbus and dbus-x11 packages,
- for use in the Debian installer. It can run a session bus, but is not
- suitable for use as a system bus.
+ This package is a minimal version of the dbus-daemon and dbus-x11
+ packages, for use in the Debian installer. It can run a session bus,
+ but is not suitable for use as a system bus.
 
 Package: dbus-user-session
 Architecture: linux-any
@@ -152,16 +248,13 @@ Provides:
 Pre-Depends:
  ${misc:Pre-Depends},
 Depends:
- dbus (>= ${source:Version}),
+ dbus-daemon (= ${binary:Version}) | dbus-broker,
+ dbus-session-bus-common (>= ${source:Version}),
  libpam-systemd,
  systemd,
  ${misc:Depends},
 Recommends:
  systemd-sysv,
-Breaks:
- dbus-x11 (<< 1.9.10-2~),
- policykit-1 (<< 0.105-12~),
- udisks2 (<< 2.1.5-2~),
 Description: simple interprocess messaging system (systemd --user integration)
  D-Bus is a message bus, used for sending messages between applications.
  Conceptually, it fits somewhere in between raw sockets and CORBA in
@@ -194,7 +287,9 @@ Provides:
 Pre-Depends:
  ${misc:Pre-Depends},
 Depends:
- dbus,
+ dbus-bin (= ${binary:Version}),
+ dbus-daemon (= ${binary:Version}),
+ dbus-session-bus-common (>= ${source:Version}),
  ${misc:Depends},
  ${shlibs:Depends},
 Multi-Arch: foreign
@@ -203,8 +298,10 @@ Description: simple interprocess messaging system (X11 deps)
  Conceptually, it fits somewhere in between raw sockets and CORBA in
  terms of complexity.
  .
- This package contains the dbus-launch utility which is necessary for
- packages using a D-Bus session bus.
+ This package contains the dbus-launch utility, which automatically
+ launches one D-Bus session bus per X11 display per user. If the
+ dbus-user-session package is also installed, it takes precedence over
+ this package.
  .
  See the dbus description for more information about D-Bus in general.
 
@@ -216,8 +313,6 @@ Pre-Depends:
 Depends:
  ${misc:Depends},
  ${shlibs:Depends},
-Breaks:
- dbus (<< 1.9.16-1~),
 Recommends:
  dbus,
 Section: libs
@@ -234,7 +329,7 @@ Description: simple interprocess messaging system (library)
  .
  It comes with several bindings, including GLib, Python, Qt and Java.
  .
- The daemon can be found in the dbus package.
+ The message bus daemon can be found in the dbus-daemon package.
 
 Package: libdbus-1-3-udeb
 Build-Profiles: <!noudeb>

@@ -35,9 +35,9 @@ Security
 
 If you find a security vulnerability that is not known to the public,
 please report it privately to dbus-security@lists.freedesktop.org
-or by reporting a freedesktop.org bug that is marked as
-restricted to the "D-BUS security group" (you might need to "Show
-Advanced Fields" to have that option).
+or by reporting a Gitlab issue at
+https://gitlab.freedesktop.org/dbus/dbus/issues/new and marking it
+as "confidential".
 
 On Unix systems, the system bus (dbus-daemon --system) is designed
 to be a security boundary between users with different privileges.
@@ -166,20 +166,10 @@ for your binding.
 Bootstrapping D-Bus on new platforms
 ===
 
-A full build of D-Bus, with all regression tests enabled and run, has some
-dependencies which themselves depend on D-Bus, either for compilation or
-for some of *their* regression tests: GLib, dbus-glib and dbus-python are
-currently affected.
+A full build of dbus, with all regression tests enabled and run, depends
+on GLib. A full build of GLib, with all regression tests enabled and run,
+depends on dbus.
 
-To avoid circular dependencies, when bootstrapping D-Bus for the first time
-on a new OS or CPU architecture, you can either cross-compile some of
-those components, or choose the build order and options carefully:
-
-* build and install D-Bus without tests
-  - do not use the --enable-modular-tests=yes configure option
-  - do not use the --enable-tests=yes configure option
-* build and install GLib, again without tests
-* use those versions of libdbus and GLib to build and install dbus-glib
-* ... and use those to install dbus-python
-* rebuild libdbus; this time you can run all of the tests
-* rebuild GLib; this time you can run all of the tests
+To break this cycle, don't enable full test coverage (for at least one
+of those projects) during bootstrapping. You can rebuild with full test
+coverage after you have built both dbus and GLib at least once.

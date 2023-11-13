@@ -1,11 +1,11 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-sysdeps-util-unix.c Would be in dbus-sysdeps-unix.c, but not used in libdbus
- * 
+ *
  * Copyright (C) 2002, 2003, 2004, 2005  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -15,7 +15,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -35,6 +35,7 @@
 #include "dbus-test.h"
 
 #include <sys/types.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -42,6 +43,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
 #ifdef HAVE_SYS_RESOURCE_H
 #include <sys/resource.h>
@@ -51,8 +53,8 @@
 #include <dirent.h>
 #include <sys/un.h>
 
-#ifdef HAVE_SYS_SYSLIMITS_H
-#include <sys/syslimits.h>
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
 #endif
 
 #ifdef HAVE_SYSTEMD
@@ -99,6 +101,12 @@ _dbus_become_daemon (const DBusString *pidfile,
     }
 
   _dbus_verbose ("forking...\n");
+
+  /* Make sure our output buffers aren't redundantly printed by both the
+   * parent and the child */
+  fflush (stdout);
+  fflush (stderr);
+
   switch ((child_pid = fork ()))
     {
     case -1:
@@ -820,7 +828,7 @@ fill_group_info (DBusGroupInfo    *info,
    * to add more configure checks.
    */
   
-#if defined (HAVE_POSIX_GETPWNAM_R) || defined (HAVE_NONPOSIX_GETPWNAM_R)
+#ifdef HAVE_GETPWNAM_R
   {
     struct group *g;
     int result;
@@ -850,17 +858,12 @@ fill_group_info (DBusGroupInfo    *info,
           }
 
         g = NULL;
-#ifdef HAVE_POSIX_GETPWNAM_R
         if (group_c_str)
           result = getgrnam_r (group_c_str, &g_str, buf, buflen,
                                &g);
         else
           result = getgrgid_r (gid, &g_str, buf, buflen,
                                &g);
-#else
-        g = getgrnam_r (group_c_str, &g_str, buf, buflen);
-        result = 0;
-#endif /* !HAVE_POSIX_GETPWNAM_R */
         /* Try a bigger buffer if ERANGE was returned:
            https://bugs.freedesktop.org/show_bug.cgi?id=16727
         */
@@ -894,6 +897,8 @@ fill_group_info (DBusGroupInfo    *info,
   {
     /* I guess we're screwed on thread safety here */
     struct group *g;
+
+#warning getpwnam_r() not available, please report this to the dbus maintainers with details of your OS
 
     g = getgrnam (group_c_str);
 
@@ -987,14 +992,16 @@ _dbus_parse_unix_group_from_config (const DBusString  *groupname,
  * @param uid the UID
  * @param group_ids return location for array of group IDs
  * @param n_group_ids return location for length of returned array
+ * @param error error location
  * @returns #TRUE if the UID existed and we got some credentials
  */
 dbus_bool_t
 _dbus_unix_groups_from_uid (dbus_uid_t            uid,
                             dbus_gid_t          **group_ids,
-                            int                  *n_group_ids)
+                            int                  *n_group_ids,
+                            DBusError            *error)
 {
-  return _dbus_groups_from_uid (uid, group_ids, n_group_ids);
+  return _dbus_groups_from_uid (uid, group_ids, n_group_ids, error);
 }
 
 /**
@@ -1104,7 +1111,22 @@ string_squash_nonprintable (DBusString *str)
   
   buf = _dbus_string_get_udata (str);
   len = _dbus_string_get_length (str);
-  
+
+  /* /proc/$pid/cmdline is a sequence of \0-terminated words, but we
+   * want a sequence of space-separated words, with no extra trailing
+   * space:
+   *     "/bin/sleep" "\0" "60" "\0"
+   *  -> "/bin/sleep" "\0" "60"
+   *  -> "/bin/sleep" " " "60"
+   *
+   * so chop off the trailing NUL before cleaning up unprintable
+   * characters. */
+  if (len > 0 && buf[len - 1] == '\0')
+    {
+      _dbus_string_shorten (str, 1);
+      len--;
+    }
+
   for (i = 0; i < len; i++)
     {
       unsigned char c = (unsigned char) buf[i];
@@ -1532,45 +1554,54 @@ _dbus_get_session_config_file (DBusString *str)
   return _dbus_string_append (str, DBUS_SESSION_CONFIG_FILE);
 }
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
-
-/*
- * Set uid to a machine-readable authentication identity (numeric Unix
- * uid or ConvertSidToStringSid-style Windows SID) that is likely to exist,
- * and differs from the identity of the current process.
- *
- * @param uid Populated with a machine-readable authentication identity
- *    on success
- * @returns #FALSE if no memory
+/**
+ * Report to a service manager that the daemon calling this function is
+ * ready for use. This is currently only implemented for systemd.
  */
-dbus_bool_t
-_dbus_test_append_different_uid (DBusString *uid)
+void
+_dbus_daemon_report_ready (void)
 {
-  if (geteuid () == 0)
-    return _dbus_string_append (uid, "65534");
-  else
-    return _dbus_string_append (uid, "0");
-}
-
-/*
- * Set uid to a human-readable authentication identity (login name)
- * that is likely to exist, and differs from the identity of the current
- * process. This function currently only exists on Unix platforms.
- *
- * @param uid Populated with a machine-readable authentication identity
- *    on success
- * @returns #FALSE if no memory
- */
-dbus_bool_t
-_dbus_test_append_different_username (DBusString *username)
-{
-  if (geteuid () == 0)
-    return _dbus_string_append (username, "nobody");
-  else
-    return _dbus_string_append (username, "root");
-}
-
+#ifdef HAVE_SYSTEMD
+  sd_notify (0, "READY=1");
 #endif
+}
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * reloading configuration. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_reloading (void)
+{
+#ifdef HAVE_SYSTEMD
+  sd_notify (0, "RELOADING=1");
+#endif
+}
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * reloading configuration. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_reloaded (void)
+{
+#ifdef HAVE_SYSTEMD
+  /* For systemd, this is the same code */
+  _dbus_daemon_report_ready ();
+#endif
+}
+
+/**
+ * Report to a service manager that the daemon calling this function is
+ * shutting down. This is currently only implemented for systemd.
+ */
+void
+_dbus_daemon_report_stopping (void)
+{
+#ifdef HAVE_SYSTEMD
+  sd_notify (0, "STOPPING=1");
+#endif
+}
 
 /**
  * If the current process has been protected from the Linux OOM killer
@@ -1595,13 +1626,14 @@ _dbus_reset_oom_score_adj (const char **error_str_p)
   const char *error_str = NULL;
 
 #ifdef O_CLOEXEC
-  fd = open ("/proc/self/oom_score_adj", O_RDWR | O_CLOEXEC);
+  fd = open ("/proc/self/oom_score_adj", O_RDONLY | O_CLOEXEC);
 #endif
 
   if (fd < 0)
     {
-      fd = open ("/proc/self/oom_score_adj", O_RDWR);
-      _dbus_fd_set_close_on_exec (fd);
+      fd = open ("/proc/self/oom_score_adj", O_RDONLY);
+      if (fd >= 0)
+        _dbus_fd_set_close_on_exec (fd);
     }
 
   if (fd >= 0)
@@ -1647,6 +1679,26 @@ _dbus_reset_oom_score_adj (const char **error_str_p)
           goto out;
         }
 
+      close (fd);
+#ifdef O_CLOEXEC
+      fd = open ("/proc/self/oom_score_adj", O_WRONLY | O_CLOEXEC);
+
+      if (fd < 0)
+#endif
+        {
+          fd = open ("/proc/self/oom_score_adj", O_WRONLY);
+          if (fd >= 0)
+            _dbus_fd_set_close_on_exec (fd);
+        }
+
+      if (fd < 0)
+        {
+          ret = FALSE;
+          error_str = "open(/proc/self/oom_score_adj) for writing";
+          saved_errno = errno;
+          goto out;
+        }
+
       if (pwrite (fd, "0", sizeof (char), 0) < 0)
         {
           ret = FALSE;
@@ -1667,7 +1719,7 @@ _dbus_reset_oom_score_adj (const char **error_str_p)
   else
     {
       ret = FALSE;
-      error_str = "open(/proc/self/oom_score_adj)";
+      error_str = "open(/proc/self/oom_score_adj) for reading";
       saved_errno = errno;
       goto out;
     }

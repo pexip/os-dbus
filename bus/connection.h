@@ -4,7 +4,7 @@
  * Copyright (C) 2003, 2004  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -28,22 +28,17 @@
 #include <dbus/dbus-list.h>
 #include "bus.h"
 
-typedef dbus_bool_t (* BusConnectionForeachFunction) (DBusConnection *connection, 
-                                                      void           *data);
-
+typedef enum
+{
+  BUS_EXTRA_HEADERS_CONTAINER_INSTANCE = (1 << 0),
+  BUS_EXTRA_HEADERS_NONE = 0
+} BusExtraHeaders;
 
 BusConnections* bus_connections_new               (BusContext                   *context);
 BusConnections* bus_connections_ref               (BusConnections               *connections);
 void            bus_connections_unref             (BusConnections               *connections);
 dbus_bool_t     bus_connections_setup_connection  (BusConnections               *connections,
                                                    DBusConnection               *connection);
-void            bus_connections_foreach           (BusConnections               *connections,
-                                                   BusConnectionForeachFunction  function,
-                                                   void                         *data);
-void            bus_connections_foreach_active    (BusConnections               *connections,
-                                                   BusConnectionForeachFunction  function,
-                                                   void                         *data);
-BusContext*     bus_connections_get_context       (BusConnections               *connections);
 void            bus_connections_increment_stamp   (BusConnections               *connections);
 dbus_bool_t     bus_connections_reload_policy     (BusConnections               *connections,
                                                    DBusError                    *error);
@@ -83,6 +78,13 @@ const char *bus_connection_get_name  (DBusConnection *connection);
 dbus_bool_t bus_connection_preallocate_oom_error (DBusConnection *connection);
 void        bus_connection_send_oom_error        (DBusConnection *connection,
                                                   DBusMessage    *in_reply_to);
+
+void        bus_connection_request_headers       (DBusConnection  *connection,
+                                                  BusExtraHeaders  headers);
+
+/* called by policy.c */
+dbus_bool_t bus_connection_is_queued_owner_by_prefix (DBusConnection *connection,
+                                                      const char *name_prefix);
 
 /* called by signals.c */
 dbus_bool_t bus_connection_add_match_rule      (DBusConnection *connection,
@@ -132,7 +134,8 @@ typedef void (* BusTransactionCancelFunction) (void *data);
 BusTransaction* bus_transaction_new              (BusContext                   *context);
 BusContext*     bus_transaction_get_context      (BusTransaction               *transaction);
 dbus_bool_t     bus_transaction_send             (BusTransaction               *transaction,
-                                                  DBusConnection               *connection,
+                                                  DBusConnection               *sender,
+                                                  DBusConnection               *destination,
                                                   DBusMessage                  *message);
 dbus_bool_t     bus_transaction_capture          (BusTransaction               *transaction,
                                                   DBusConnection               *connection,

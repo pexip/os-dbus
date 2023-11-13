@@ -32,16 +32,15 @@
 
 #include <dbus/dbus.h>
 #include "dbus/dbus-internals.h"
-#include "dbus/dbus-marshal-header.h"
 #include "dbus/dbus-message-internal.h"
-#include "dbus/dbus-message-private.h"
 #include "dbus/dbus-pipe.h"
 #include "test-utils-glib.h"
 
 /* Return TRUE if the right thing happens, but the right thing might include
  * OOM. */
 static dbus_bool_t
-test_array (void *contained_signature)
+test_array (void        *contained_signature,
+            dbus_bool_t  have_memory)
 {
   DBusMessage *m;
   DBusMessageIter iter;
@@ -153,7 +152,8 @@ out:
 /* Return TRUE if the right thing happens, but the right thing might include
  * OOM or inability to pass fds. */
 static dbus_bool_t
-test_fd (void *ignored)
+test_fd (void        *ignored,
+         dbus_bool_t  have_memory)
 {
   DBusMessage *m = NULL;
   DBusPipe pipe;
@@ -261,7 +261,8 @@ iterate_fully (DBusMessageIter *iter,
 /* Return TRUE if the right thing happens, but the right thing might include
  * OOM. */
 static dbus_bool_t
-test_valid_message_blobs (void *message_name)
+test_valid_message_blobs (void        *message_name,
+                          dbus_bool_t  have_memory)
 {
   gchar *path = NULL;
   gchar *contents = NULL;
@@ -284,15 +285,7 @@ test_valid_message_blobs (void *message_name)
 
   if (m == NULL)
     {
-      if (dbus_error_has_name (&e, DBUS_ERROR_NO_MEMORY))
-        {
-          g_test_message ("Out of memory (not a problem)");
-          goto out;
-        }
-
-      /* TODO: Validity checking sometimes returns InvalidArgs for OOM */
-      if (dbus_error_has_name (&e, DBUS_ERROR_INVALID_ARGS) &&
-          strstr (e.message, "Out of memory") != NULL)
+      if (dbus_error_has_name (&e, DBUS_ERROR_NO_MEMORY) && !have_memory)
         {
           g_test_message ("Out of memory (not a problem)");
           goto out;
@@ -327,7 +320,8 @@ out:
 /* Return TRUE if the right thing happens, but the right thing might include
  * OOM. */
 static dbus_bool_t
-test_invalid_message_blobs (void *message_name)
+test_invalid_message_blobs (void        *message_name,
+                            dbus_bool_t  have_memory)
 {
   gchar *path = NULL;
   gchar *contents = NULL;
@@ -354,14 +348,12 @@ test_invalid_message_blobs (void *message_name)
       ok = FALSE;
 
       /* Attempt to reproduce dbus#413 */
-      _dbus_header_delete_field (&m->header, 0x52);
-      _dbus_header_delete_field (&m->header, 0xfd);
-      _dbus_header_delete_field (&m->header, 0xff);
+      _dbus_message_remove_unknown_fields (m);
 
       goto out;
     }
 
-  if (dbus_error_has_name (&e, DBUS_ERROR_NO_MEMORY))
+  if (dbus_error_has_name (&e, DBUS_ERROR_NO_MEMORY) && !have_memory)
     {
       g_test_message ("Out of memory (not a problem)");
       goto out;
@@ -394,7 +386,8 @@ out:
  * Return TRUE if the right thing happens, but the right thing might include
  * OOM. */
 static dbus_bool_t
-test_zero_iter (void *ignored)
+test_zero_iter (void        *ignored,
+                dbus_bool_t  have_memory)
 {
   DBusMessage *m;
   DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
@@ -561,5 +554,6 @@ main (int argc,
   ret = g_test_run ();
 
   g_queue_free_full (test_cases_to_free, oom_test_case_free);
+  dbus_shutdown ();
   return ret;
 }

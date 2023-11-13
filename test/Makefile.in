@@ -15,7 +15,7 @@
 @SET_MAKE@
 
 # aminclude_static.am generated automatically by Autoconf
-# from AX_AM_MACROS_STATIC on Tue Jun  6 14:02:10 BST 2023
+# from AX_AM_MACROS_STATIC on Fri Sep  1 15:31:27 BST 2023
 
 
 
@@ -99,19 +99,27 @@ host_triplet = @host@
 @DBUS_WITH_GLIB_TRUE@	test-utils-glib.h \
 @DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-TESTS = $(am__append_3) $(am__EXEEXT_15) $(am__EXEEXT_16)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__append_2 = test-bus-launch-helper.sh \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-bus-system.sh
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_3 = $(wrap_bus_tests) $(wrap_dbus_tests)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_4 = $(wrap_bus_tests) $(wrap_dbus_tests)
-noinst_PROGRAMS = $(am__EXEEXT_10) $(am__EXEEXT_11)
-nobase_testexec_PROGRAMS = $(am__EXEEXT_9)
-@DBUS_WIN_TRUE@am__append_5 = manual-paths
-@DBUS_WITH_GLIB_TRUE@am__append_6 = \
+TESTS = $(am__EXEEXT_14) $(am__EXEEXT_23) $(am__EXEEXT_24)
+noinst_PROGRAMS = $(am__EXEEXT_14) $(am__EXEEXT_17) $(am__EXEEXT_18) \
+	$(am__EXEEXT_19)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_WINCE_FALSE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_2 = test-spawn-oom
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_3 = test-spawn
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_4 = test-bus-launch-helper-oom \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-bus-system
+# this is used by the tests but is not, itself, a test
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__append_5 = dbus-daemon-launch-helper-for-tests
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_6 = $(uninstallable_test_programs)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__append_7 = $(uninstallable_test_programs)
+nobase_testexec_PROGRAMS = $(am__EXEEXT_10)
+@DBUS_WIN_TRUE@am__append_8 = manual-paths
+@DBUS_WITH_GLIB_TRUE@am__append_9 = \
+@DBUS_WITH_GLIB_TRUE@	test-assertions \
 @DBUS_WITH_GLIB_TRUE@	test-corrupt \
 @DBUS_WITH_GLIB_TRUE@	test-dbus-daemon \
 @DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-eavesdrop \
+@DBUS_WITH_GLIB_TRUE@	test-desktop-file \
 @DBUS_WITH_GLIB_TRUE@	test-fdpass \
+@DBUS_WITH_GLIB_TRUE@	test-header-fields \
 @DBUS_WITH_GLIB_TRUE@	test-message \
 @DBUS_WITH_GLIB_TRUE@	test-monitor \
 @DBUS_WITH_GLIB_TRUE@	test-loopback \
@@ -120,57 +128,67 @@ nobase_testexec_PROGRAMS = $(am__EXEEXT_9)
 @DBUS_WITH_GLIB_TRUE@	test-relay \
 @DBUS_WITH_GLIB_TRUE@	test-server-oom \
 @DBUS_WITH_GLIB_TRUE@	test-syntax \
+@DBUS_WITH_GLIB_TRUE@	test-sysdeps \
 @DBUS_WITH_GLIB_TRUE@	test-syslog \
 @DBUS_WITH_GLIB_TRUE@	test-uid-permissions \
+@DBUS_WITH_GLIB_TRUE@	test-userdb \
 @DBUS_WITH_GLIB_TRUE@	test-variant \
 @DBUS_WITH_GLIB_TRUE@	$(NULL)
 
 
 # These binaries are used in tests but are not themselves tests
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_7 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_10 = \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-apparmor-activation \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_8 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_11 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-containers \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-sd-activation \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_9 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_12 = \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-fork.sh \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
 
 # Only runnable when installed, not from the source tree
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_10 = \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_13 = \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	integration/transient-services.sh \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-apparmor-activation.sh \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
 
 # Testing dbus-launch relies on special code in that binary.
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_11 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_14 = \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-launch-eval.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_12 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__append_15 = \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-launch-x11.sh \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_WITH_GLIB_TRUE@am__append_13 = \
+@DBUS_WITH_GLIB_TRUE@am__append_16 = \
 @DBUS_WITH_GLIB_TRUE@	manual-authz \
 @DBUS_WITH_GLIB_TRUE@	manual-test-thread-blocking \
 @DBUS_WITH_GLIB_TRUE@	$(NULL)
 
-@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_14 = $(installable_tests)
-@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_15 = $(installable_tests)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_16 = $(installable_helpers) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__append_17 = \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	test-counter \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@	$(NULL)
+
+@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_18 = $(installable_tests)
+@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_19 = $(installable_tests)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_20 = $(installable_helpers) \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_manual_tests) \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_tests)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_17 = $(dist_installed_test_scripts) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_21 = $(dist_installed_test_scripts) \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(dist_installable_test_scripts)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_18 = $(installable_test_meta) \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_22 = $(installable_test_meta) \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_test_meta_with_config)
-@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_19 = $(installable_tests) $(installable_manual_tests)
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__append_23 = $(installable_helpers) \
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_manual_tests) \
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(installable_tests)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_FALSE@am__append_24 = $(installable_helpers)
 subdir = test
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
@@ -183,8 +201,8 @@ am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
 	$(top_srcdir)/m4/ld-version-script.m4 \
 	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
 	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
-	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/pkg.m4 \
-	$(top_srcdir)/m4/visibility.m4 $(top_srcdir)/configure.ac
+	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/m4/visibility.m4 \
+	$(top_srcdir)/configure.ac
 am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
 	$(ACLOCAL_M4)
 DIST_COMMON = $(srcdir)/Makefile.am \
@@ -194,57 +212,95 @@ CONFIG_HEADER = $(top_builddir)/config.h
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_1 = test-apparmor-activation$(EXEEXT)
-am__EXEEXT_2 = $(am__EXEEXT_1)
+am__EXEEXT_2 = test-service$(EXEEXT) test-sleep-forever$(EXEEXT) \
+	$(am__EXEEXT_1)
 @DBUS_WIN_TRUE@am__EXEEXT_3 = manual-paths$(EXEEXT)
 @DBUS_WITH_GLIB_TRUE@am__EXEEXT_4 = manual-authz$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	manual-test-thread-blocking$(EXEEXT)
 am__EXEEXT_5 = manual-backtrace$(EXEEXT) manual-dir-iter$(EXEEXT) \
 	manual-tcp$(EXEEXT) $(am__EXEEXT_3) $(am__EXEEXT_4)
-@DBUS_WITH_GLIB_TRUE@am__EXEEXT_6 = test-corrupt$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@am__EXEEXT_6 = test-assertions$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-corrupt$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-dbus-daemon$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-eavesdrop$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-desktop-file$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-fdpass$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-header-fields$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-message$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-monitor$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-loopback$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-marshal$(EXEEXT) test-refs$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-relay$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-server-oom$(EXEEXT) \
-@DBUS_WITH_GLIB_TRUE@	test-syntax$(EXEEXT) test-syslog$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-syntax$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-sysdeps$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-syslog$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-uid-permissions$(EXEEXT) \
+@DBUS_WITH_GLIB_TRUE@	test-userdb$(EXEEXT) \
 @DBUS_WITH_GLIB_TRUE@	test-variant$(EXEEXT)
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_7 = test-sd-activation$(EXEEXT)
-am__EXEEXT_8 = test-shell$(EXEEXT) test-printf$(EXEEXT) \
-	$(am__EXEEXT_6) $(am__EXEEXT_7)
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_9 = $(am__EXEEXT_2) \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_7 =  \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-containers$(EXEEXT) \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-sd-activation$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am__EXEEXT_8 = test-counter$(EXEEXT)
+am__EXEEXT_9 = test-atomic$(EXEEXT) test-hash$(EXEEXT) \
+	test-shell$(EXEEXT) test-misc-internals$(EXEEXT) \
+	test-printf$(EXEEXT) $(am__EXEEXT_6) $(am__EXEEXT_7) \
+	$(am__EXEEXT_8)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_10 = $(am__EXEEXT_2) \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_5) \
-@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_8)
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_9)
 am__installdirs = "$(DESTDIR)$(testexecdir)" \
 	"$(DESTDIR)$(testexecdir)" "$(DESTDIR)$(testmetadir)"
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_10 = test-spawn$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-exit$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_WINCE_FALSE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__EXEEXT_11 = test-spawn-oom$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__EXEEXT_12 = test-bus-launch-helper-oom$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	test-bus-system$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_13 = $(am__EXEEXT_11) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-bus$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-bus-dispatch$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-bus-dispatch-sha1$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-marshal-recursive$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-message-internals$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-strings$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__EXEEXT_12)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_14 = $(am__EXEEXT_13)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__EXEEXT_15 = test-spawn$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am__EXEEXT_16 = dbus-daemon-launch-helper-for-tests$(EXEEXT)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@am__EXEEXT_17 = test-exit$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-names$(EXEEXT) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-privserver$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-segfault$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-service$(EXEEXT) \
 @DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-shell-service$(EXEEXT) \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-sleep-forever$(EXEEXT)
-@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_11 = $(am__EXEEXT_8) \
-@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_5)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__EXEEXT_15) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__EXEEXT_16)
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_18 = $(am__EXEEXT_2) \
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_5) \
+@DBUS_ENABLE_INSTALLED_TESTS_FALSE@@DBUS_ENABLE_MODULAR_TESTS_TRUE@	$(am__EXEEXT_9)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_MODULAR_TESTS_FALSE@am__EXEEXT_19 = $(am__EXEEXT_2)
 PROGRAMS = $(nobase_testexec_PROGRAMS) $(noinst_PROGRAMS)
 LTLIBRARIES = $(noinst_LTLIBRARIES)
 am__DEPENDENCIES_1 =
 libdbus_testutils_la_DEPENDENCIES = $(am__DEPENDENCIES_1) \
 	$(top_builddir)/dbus/libdbus-1.la \
 	$(top_builddir)/dbus/libdbus-internal.la
-am__libdbus_testutils_la_SOURCES_DIST = test-utils.c test-utils.h \
+am__libdbus_testutils_la_SOURCES_DIST = disable-crash-handling.c \
+	disable-crash-handling.h test-utils.c test-utils.h \
 	test-utils-glib.c test-utils-glib.h
 @DBUS_WITH_GLIB_TRUE@am__objects_1 = test-utils-glib.lo
-am_libdbus_testutils_la_OBJECTS = test-utils.lo $(am__objects_1)
+am_libdbus_testutils_la_OBJECTS = disable-crash-handling.lo \
+	test-utils.lo $(am__objects_1)
 libdbus_testutils_la_OBJECTS = $(am_libdbus_testutils_la_OBJECTS)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am__dirstamp = $(am__leading_dot)dirstamp
+am_dbus_daemon_launch_helper_for_tests_OBJECTS =  \
+	bus/launch-helper-for-tests.$(OBJEXT)
+dbus_daemon_launch_helper_for_tests_OBJECTS =  \
+	$(am_dbus_daemon_launch_helper_for_tests_OBJECTS)
+dbus_daemon_launch_helper_for_tests_DEPENDENCIES =  \
+	$(am__DEPENDENCIES_1) \
+	$(top_builddir)/bus/liblaunch-helper-internal.la
 am_manual_authz_OBJECTS = manual-authz.$(OBJEXT)
 manual_authz_OBJECTS = $(am_manual_authz_OBJECTS)
 manual_authz_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
@@ -257,7 +313,7 @@ manual_dir_iter_DEPENDENCIES =  \
 	$(top_builddir)/dbus/libdbus-internal.la
 am_manual_paths_OBJECTS = manual-paths.$(OBJEXT)
 manual_paths_OBJECTS = $(am_manual_paths_OBJECTS)
-manual_paths_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
+manual_paths_DEPENDENCIES = libdbus-testutils.la
 am_manual_tcp_OBJECTS = manual-tcp.$(OBJEXT)
 manual_tcp_OBJECTS = $(am_manual_tcp_OBJECTS)
 manual_tcp_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
@@ -273,9 +329,51 @@ test_apparmor_activation_OBJECTS =  \
 @DBUS_UNIX_TRUE@test_apparmor_activation_DEPENDENCIES =  \
 @DBUS_UNIX_TRUE@	libdbus-testutils.la $(am__DEPENDENCIES_1) \
 @DBUS_UNIX_TRUE@	$(am__DEPENDENCIES_1)
+am_test_assertions_OBJECTS = internals/assertions.$(OBJEXT)
+test_assertions_OBJECTS = $(am_test_assertions_OBJECTS)
+test_assertions_DEPENDENCIES = libdbus-testutils.la \
+	$(am__DEPENDENCIES_1)
+am_test_atomic_OBJECTS = internals/atomic.$(OBJEXT)
+test_atomic_OBJECTS = $(am_test_atomic_OBJECTS)
+test_atomic_DEPENDENCIES = libdbus-testutils.la
+am_test_bus_OBJECTS = bus/main.$(OBJEXT)
+test_bus_OBJECTS = $(am_test_bus_OBJECTS)
+test_bus_DEPENDENCIES =  \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la
+am_test_bus_dispatch_OBJECTS = bus/dispatch.$(OBJEXT)
+test_bus_dispatch_OBJECTS = $(am_test_bus_dispatch_OBJECTS)
+test_bus_dispatch_DEPENDENCIES =  \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la
+am_test_bus_dispatch_sha1_OBJECTS = bus/dispatch-sha1.$(OBJEXT)
+test_bus_dispatch_sha1_OBJECTS = $(am_test_bus_dispatch_sha1_OBJECTS)
+test_bus_dispatch_sha1_DEPENDENCIES =  \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la
+am_test_bus_launch_helper_oom_OBJECTS =  \
+	bus/launch-helper-oom.$(OBJEXT)
+test_bus_launch_helper_oom_OBJECTS =  \
+	$(am_test_bus_launch_helper_oom_OBJECTS)
+test_bus_launch_helper_oom_DEPENDENCIES =  \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	libdbus-testutils.la
+am_test_bus_system_OBJECTS = bus/system.$(OBJEXT)
+test_bus_system_OBJECTS = $(am_test_bus_system_OBJECTS)
+test_bus_system_DEPENDENCIES =  \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	libdbus-testutils.la
+am_test_containers_OBJECTS = containers.$(OBJEXT)
+test_containers_OBJECTS = $(am_test_containers_OBJECTS)
+test_containers_DEPENDENCIES = libdbus-testutils.la \
+	$(am__DEPENDENCIES_1)
 am_test_corrupt_OBJECTS = corrupt.$(OBJEXT)
 test_corrupt_OBJECTS = $(am_test_corrupt_OBJECTS)
 test_corrupt_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am__test_counter_SOURCES_DIST = internals/counter.c
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@am_test_counter_OBJECTS = internals/counter.$(OBJEXT)
+test_counter_OBJECTS = $(am_test_counter_OBJECTS)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@test_counter_DEPENDENCIES = libdbus-testutils.la
 am_test_dbus_daemon_OBJECTS = dbus-daemon.$(OBJEXT)
 test_dbus_daemon_OBJECTS = $(am_test_dbus_daemon_OBJECTS)
 test_dbus_daemon_DEPENDENCIES = libdbus-testutils.la \
@@ -286,12 +384,23 @@ test_dbus_daemon_eavesdrop_OBJECTS =  \
 	$(am_test_dbus_daemon_eavesdrop_OBJECTS)
 test_dbus_daemon_eavesdrop_DEPENDENCIES = libdbus-testutils.la \
 	$(am__DEPENDENCIES_1)
+am_test_desktop_file_OBJECTS = internals/desktop-file.$(OBJEXT)
+test_desktop_file_OBJECTS = $(am_test_desktop_file_OBJECTS)
+test_desktop_file_DEPENDENCIES = libdbus-testutils.la \
+	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_1)
 test_exit_SOURCES = test-exit.c
 test_exit_OBJECTS = test-exit.$(OBJEXT)
 test_exit_LDADD = $(LDADD)
 am_test_fdpass_OBJECTS = fdpass.$(OBJEXT)
 test_fdpass_OBJECTS = $(am_test_fdpass_OBJECTS)
 test_fdpass_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am_test_hash_OBJECTS = internals/hash.$(OBJEXT)
+test_hash_OBJECTS = $(am_test_hash_OBJECTS)
+test_hash_DEPENDENCIES = libdbus-testutils.la
+am_test_header_fields_OBJECTS = header-fields.$(OBJEXT)
+test_header_fields_OBJECTS = $(am_test_header_fields_OBJECTS)
+test_header_fields_DEPENDENCIES = libdbus-testutils.la \
+	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_1)
 am_test_loopback_OBJECTS = loopback.$(OBJEXT)
 test_loopback_OBJECTS = $(am_test_loopback_OBJECTS)
 test_loopback_DEPENDENCIES = libdbus-testutils.la \
@@ -299,20 +408,47 @@ test_loopback_DEPENDENCIES = libdbus-testutils.la \
 am_test_marshal_OBJECTS = marshal.$(OBJEXT)
 test_marshal_OBJECTS = $(am_test_marshal_OBJECTS)
 test_marshal_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am_test_marshal_recursive_OBJECTS =  \
+	internals/dbus-marshal-recursive-util.$(OBJEXT) \
+	internals/marshal-recursive.$(OBJEXT)
+test_marshal_recursive_OBJECTS = $(am_test_marshal_recursive_OBJECTS)
+test_marshal_recursive_DEPENDENCIES = libdbus-testutils.la
 am_test_message_OBJECTS = message.$(OBJEXT)
 test_message_OBJECTS = $(am_test_message_OBJECTS)
 test_message_DEPENDENCIES = libdbus-testutils.la \
 	$(top_builddir)/dbus/libdbus-internal.la $(am__DEPENDENCIES_1)
+am_test_message_internals_OBJECTS =  \
+	internals/dbus-marshal-recursive-util.$(OBJEXT) \
+	internals/dbus-message-factory.$(OBJEXT) \
+	internals/dbus-message-util.$(OBJEXT) \
+	internals/message-internals.$(OBJEXT)
+test_message_internals_OBJECTS = $(am_test_message_internals_OBJECTS)
+test_message_internals_DEPENDENCIES = libdbus-testutils.la
+am_test_misc_internals_OBJECTS = internals/address.$(OBJEXT) \
+	internals/dbus-auth-script.$(OBJEXT) \
+	internals/dbus-auth-util.$(OBJEXT) \
+	internals/dbus-credentials-util.$(OBJEXT) \
+	internals/dbus-marshal-byteswap-util.$(OBJEXT) \
+	internals/dbus-marshal-recursive-util.$(OBJEXT) \
+	internals/dbus-marshal-validate-util.$(OBJEXT) \
+	internals/dbus-string-util.$(OBJEXT) \
+	internals/dbus-sysdeps-util.$(OBJEXT) \
+	internals/mempool.$(OBJEXT) internals/misc-internals.$(OBJEXT) \
+	internals/sha.$(OBJEXT)
+test_misc_internals_OBJECTS = $(am_test_misc_internals_OBJECTS)
+test_misc_internals_DEPENDENCIES = libdbus-testutils.la
 am_test_monitor_OBJECTS = monitor.$(OBJEXT)
 test_monitor_OBJECTS = $(am_test_monitor_OBJECTS)
 test_monitor_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
 test_names_SOURCES = test-names.c
 test_names_OBJECTS = test-names.$(OBJEXT)
 test_names_DEPENDENCIES = libdbus-testutils.la
-am__dirstamp = $(am__leading_dot)dirstamp
 am_test_printf_OBJECTS = internals/printf.$(OBJEXT)
 test_printf_OBJECTS = $(am_test_printf_OBJECTS)
 test_printf_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
+test_privserver_SOURCES = test-privserver.c
+test_privserver_OBJECTS = test-privserver.$(OBJEXT)
+test_privserver_DEPENDENCIES = libdbus-testutils.la
 am_test_refs_OBJECTS = internals/refs.$(OBJEXT)
 test_refs_OBJECTS = $(am_test_refs_OBJECTS)
 test_refs_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
@@ -325,9 +461,14 @@ am__test_sd_activation_SOURCES_DIST = sd-activation.c
 test_sd_activation_OBJECTS = $(am_test_sd_activation_OBJECTS)
 @DBUS_UNIX_TRUE@test_sd_activation_DEPENDENCIES =  \
 @DBUS_UNIX_TRUE@	libdbus-testutils.la $(am__DEPENDENCIES_1)
-test_segfault_SOURCES = test-segfault.c
-test_segfault_OBJECTS = test-segfault.$(OBJEXT)
+am_test_segfault_OBJECTS =  \
+	test_segfault-disable-crash-handling.$(OBJEXT) \
+	test_segfault-test-segfault.$(OBJEXT)
+test_segfault_OBJECTS = $(am_test_segfault_OBJECTS)
 test_segfault_LDADD = $(LDADD)
+test_segfault_LINK = $(LIBTOOL) $(AM_V_lt) --tag=CC $(AM_LIBTOOLFLAGS) \
+	$(LIBTOOLFLAGS) --mode=link $(CCLD) $(test_segfault_CFLAGS) \
+	$(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 am_test_server_oom_OBJECTS = internals/server-oom.$(OBJEXT)
 test_server_oom_OBJECTS = $(am_test_server_oom_OBJECTS)
 test_server_oom_DEPENDENCIES = libdbus-testutils.la \
@@ -344,12 +485,25 @@ test_shell_service_DEPENDENCIES = libdbus-testutils.la
 test_sleep_forever_SOURCES = test-sleep-forever.c
 test_sleep_forever_OBJECTS = test-sleep-forever.$(OBJEXT)
 test_sleep_forever_LDADD = $(LDADD)
-am_test_spawn_OBJECTS = spawn-test.$(OBJEXT)
+am__test_spawn_SOURCES_DIST = spawn-test.c
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am_test_spawn_OBJECTS =  \
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	spawn-test.$(OBJEXT)
 test_spawn_OBJECTS = $(am_test_spawn_OBJECTS)
-test_spawn_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@test_spawn_DEPENDENCIES = $(top_builddir)/dbus/libdbus-internal.la
+am__test_spawn_oom_SOURCES_DIST = internals/spawn-oom.c
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@am_test_spawn_oom_OBJECTS = internals/spawn-oom.$(OBJEXT)
+test_spawn_oom_OBJECTS = $(am_test_spawn_oom_OBJECTS)
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@test_spawn_oom_DEPENDENCIES =  \
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@	libdbus-testutils.la
+am_test_strings_OBJECTS = internals/strings.$(OBJEXT)
+test_strings_OBJECTS = $(am_test_strings_OBJECTS)
+test_strings_DEPENDENCIES = libdbus-testutils.la
 am_test_syntax_OBJECTS = syntax.$(OBJEXT)
 test_syntax_OBJECTS = $(am_test_syntax_OBJECTS)
 test_syntax_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
+am_test_sysdeps_OBJECTS = internals/sysdeps.$(OBJEXT)
+test_sysdeps_OBJECTS = $(am_test_sysdeps_OBJECTS)
+test_sysdeps_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
 am_test_syslog_OBJECTS = internals/syslog.$(OBJEXT)
 test_syslog_OBJECTS = $(am_test_syslog_OBJECTS)
 test_syslog_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
@@ -357,6 +511,9 @@ am_test_uid_permissions_OBJECTS = uid-permissions.$(OBJEXT)
 test_uid_permissions_OBJECTS = $(am_test_uid_permissions_OBJECTS)
 test_uid_permissions_DEPENDENCIES = libdbus-testutils.la \
 	$(am__DEPENDENCIES_1)
+am_test_userdb_OBJECTS = internals/userdb.$(OBJEXT)
+test_userdb_OBJECTS = $(am_test_userdb_OBJECTS)
+test_userdb_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
 am_test_variant_OBJECTS = internals/variant.$(OBJEXT)
 test_variant_OBJECTS = $(am_test_variant_OBJECTS)
 test_variant_DEPENDENCIES = libdbus-testutils.la $(am__DEPENDENCIES_1)
@@ -407,26 +564,54 @@ am__v_at_1 =
 DEFAULT_INCLUDES = -I.@am__isrc@ -I$(top_builddir)
 depcomp = $(SHELL) $(top_srcdir)/build-aux/depcomp
 am__maybe_remake_depfiles = depfiles
-am__depfiles_remade = ./$(DEPDIR)/corrupt.Po \
+am__depfiles_remade = ./$(DEPDIR)/containers.Po ./$(DEPDIR)/corrupt.Po \
 	./$(DEPDIR)/dbus-daemon-eavesdrop.Po \
-	./$(DEPDIR)/dbus-daemon.Po ./$(DEPDIR)/fdpass.Po \
-	./$(DEPDIR)/loopback.Po ./$(DEPDIR)/manual-authz.Po \
-	./$(DEPDIR)/manual-backtrace.Po ./$(DEPDIR)/manual-dir-iter.Po \
-	./$(DEPDIR)/manual-paths.Po ./$(DEPDIR)/manual-tcp.Po \
-	./$(DEPDIR)/marshal.Po ./$(DEPDIR)/message.Po \
-	./$(DEPDIR)/monitor.Po ./$(DEPDIR)/relay.Po \
-	./$(DEPDIR)/sd-activation.Po ./$(DEPDIR)/shell-test.Po \
-	./$(DEPDIR)/spawn-test.Po ./$(DEPDIR)/syntax.Po \
-	./$(DEPDIR)/test-exit.Po ./$(DEPDIR)/test-names.Po \
-	./$(DEPDIR)/test-segfault.Po ./$(DEPDIR)/test-service.Po \
-	./$(DEPDIR)/test-shell-service.Po \
+	./$(DEPDIR)/dbus-daemon.Po \
+	./$(DEPDIR)/disable-crash-handling.Plo ./$(DEPDIR)/fdpass.Po \
+	./$(DEPDIR)/header-fields.Po ./$(DEPDIR)/loopback.Po \
+	./$(DEPDIR)/manual-authz.Po ./$(DEPDIR)/manual-backtrace.Po \
+	./$(DEPDIR)/manual-dir-iter.Po ./$(DEPDIR)/manual-paths.Po \
+	./$(DEPDIR)/manual-tcp.Po ./$(DEPDIR)/marshal.Po \
+	./$(DEPDIR)/message.Po ./$(DEPDIR)/monitor.Po \
+	./$(DEPDIR)/relay.Po ./$(DEPDIR)/sd-activation.Po \
+	./$(DEPDIR)/shell-test.Po ./$(DEPDIR)/spawn-test.Po \
+	./$(DEPDIR)/syntax.Po ./$(DEPDIR)/test-exit.Po \
+	./$(DEPDIR)/test-names.Po ./$(DEPDIR)/test-privserver.Po \
+	./$(DEPDIR)/test-service.Po ./$(DEPDIR)/test-shell-service.Po \
 	./$(DEPDIR)/test-sleep-forever.Po \
 	./$(DEPDIR)/test-utils-glib.Plo ./$(DEPDIR)/test-utils.Plo \
 	./$(DEPDIR)/test_apparmor_activation-sd-activation.Po \
+	./$(DEPDIR)/test_segfault-disable-crash-handling.Po \
+	./$(DEPDIR)/test_segfault-test-segfault.Po \
 	./$(DEPDIR)/thread-blocking.Po ./$(DEPDIR)/uid-permissions.Po \
+	bus/$(DEPDIR)/dispatch-sha1.Po bus/$(DEPDIR)/dispatch.Po \
+	bus/$(DEPDIR)/launch-helper-for-tests.Po \
+	bus/$(DEPDIR)/launch-helper-oom.Po bus/$(DEPDIR)/main.Po \
+	bus/$(DEPDIR)/system.Po internals/$(DEPDIR)/address.Po \
+	internals/$(DEPDIR)/assertions.Po \
+	internals/$(DEPDIR)/atomic.Po internals/$(DEPDIR)/counter.Po \
+	internals/$(DEPDIR)/dbus-auth-script.Po \
+	internals/$(DEPDIR)/dbus-auth-util.Po \
+	internals/$(DEPDIR)/dbus-credentials-util.Po \
+	internals/$(DEPDIR)/dbus-marshal-byteswap-util.Po \
+	internals/$(DEPDIR)/dbus-marshal-recursive-util.Po \
+	internals/$(DEPDIR)/dbus-marshal-validate-util.Po \
+	internals/$(DEPDIR)/dbus-message-factory.Po \
+	internals/$(DEPDIR)/dbus-message-util.Po \
+	internals/$(DEPDIR)/dbus-string-util.Po \
+	internals/$(DEPDIR)/dbus-sysdeps-util.Po \
+	internals/$(DEPDIR)/desktop-file.Po \
+	internals/$(DEPDIR)/hash.Po \
+	internals/$(DEPDIR)/marshal-recursive.Po \
+	internals/$(DEPDIR)/mempool.Po \
+	internals/$(DEPDIR)/message-internals.Po \
+	internals/$(DEPDIR)/misc-internals.Po \
 	internals/$(DEPDIR)/printf.Po internals/$(DEPDIR)/refs.Po \
-	internals/$(DEPDIR)/server-oom.Po \
-	internals/$(DEPDIR)/syslog.Po internals/$(DEPDIR)/variant.Po
+	internals/$(DEPDIR)/server-oom.Po internals/$(DEPDIR)/sha.Po \
+	internals/$(DEPDIR)/spawn-oom.Po \
+	internals/$(DEPDIR)/strings.Po internals/$(DEPDIR)/sysdeps.Po \
+	internals/$(DEPDIR)/syslog.Po internals/$(DEPDIR)/userdb.Po \
+	internals/$(DEPDIR)/variant.Po
 am__mv = mv -f
 COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 	$(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS)
@@ -446,40 +631,65 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(libdbus_testutils_la_SOURCES) $(manual_authz_SOURCES) \
-	$(manual_backtrace_SOURCES) $(manual_dir_iter_SOURCES) \
-	$(manual_paths_SOURCES) $(manual_tcp_SOURCES) \
-	$(manual_test_thread_blocking_SOURCES) \
-	$(test_apparmor_activation_SOURCES) $(test_corrupt_SOURCES) \
+SOURCES = $(libdbus_testutils_la_SOURCES) \
+	$(dbus_daemon_launch_helper_for_tests_SOURCES) \
+	$(manual_authz_SOURCES) $(manual_backtrace_SOURCES) \
+	$(manual_dir_iter_SOURCES) $(manual_paths_SOURCES) \
+	$(manual_tcp_SOURCES) $(manual_test_thread_blocking_SOURCES) \
+	$(test_apparmor_activation_SOURCES) $(test_assertions_SOURCES) \
+	$(test_atomic_SOURCES) $(test_bus_SOURCES) \
+	$(test_bus_dispatch_SOURCES) $(test_bus_dispatch_sha1_SOURCES) \
+	$(test_bus_launch_helper_oom_SOURCES) \
+	$(test_bus_system_SOURCES) $(test_containers_SOURCES) \
+	$(test_corrupt_SOURCES) $(test_counter_SOURCES) \
 	$(test_dbus_daemon_SOURCES) \
-	$(test_dbus_daemon_eavesdrop_SOURCES) test-exit.c \
-	$(test_fdpass_SOURCES) $(test_loopback_SOURCES) \
-	$(test_marshal_SOURCES) $(test_message_SOURCES) \
-	$(test_monitor_SOURCES) test-names.c $(test_printf_SOURCES) \
+	$(test_dbus_daemon_eavesdrop_SOURCES) \
+	$(test_desktop_file_SOURCES) test-exit.c \
+	$(test_fdpass_SOURCES) $(test_hash_SOURCES) \
+	$(test_header_fields_SOURCES) $(test_loopback_SOURCES) \
+	$(test_marshal_SOURCES) $(test_marshal_recursive_SOURCES) \
+	$(test_message_SOURCES) $(test_message_internals_SOURCES) \
+	$(test_misc_internals_SOURCES) $(test_monitor_SOURCES) \
+	test-names.c $(test_printf_SOURCES) test-privserver.c \
 	$(test_refs_SOURCES) $(test_relay_SOURCES) \
-	$(test_sd_activation_SOURCES) test-segfault.c \
+	$(test_sd_activation_SOURCES) $(test_segfault_SOURCES) \
 	$(test_server_oom_SOURCES) test-service.c \
 	$(test_shell_SOURCES) test-shell-service.c \
 	test-sleep-forever.c $(test_spawn_SOURCES) \
-	$(test_syntax_SOURCES) $(test_syslog_SOURCES) \
-	$(test_uid_permissions_SOURCES) $(test_variant_SOURCES)
+	$(test_spawn_oom_SOURCES) $(test_strings_SOURCES) \
+	$(test_syntax_SOURCES) $(test_sysdeps_SOURCES) \
+	$(test_syslog_SOURCES) $(test_uid_permissions_SOURCES) \
+	$(test_userdb_SOURCES) $(test_variant_SOURCES)
 DIST_SOURCES = $(am__libdbus_testutils_la_SOURCES_DIST) \
+	$(dbus_daemon_launch_helper_for_tests_SOURCES) \
 	$(manual_authz_SOURCES) $(manual_backtrace_SOURCES) \
 	$(manual_dir_iter_SOURCES) $(manual_paths_SOURCES) \
 	$(manual_tcp_SOURCES) $(manual_test_thread_blocking_SOURCES) \
 	$(am__test_apparmor_activation_SOURCES_DIST) \
-	$(test_corrupt_SOURCES) $(test_dbus_daemon_SOURCES) \
-	$(test_dbus_daemon_eavesdrop_SOURCES) test-exit.c \
-	$(test_fdpass_SOURCES) $(test_loopback_SOURCES) \
-	$(test_marshal_SOURCES) $(test_message_SOURCES) \
-	$(test_monitor_SOURCES) test-names.c $(test_printf_SOURCES) \
+	$(test_assertions_SOURCES) $(test_atomic_SOURCES) \
+	$(test_bus_SOURCES) $(test_bus_dispatch_SOURCES) \
+	$(test_bus_dispatch_sha1_SOURCES) \
+	$(test_bus_launch_helper_oom_SOURCES) \
+	$(test_bus_system_SOURCES) $(test_containers_SOURCES) \
+	$(test_corrupt_SOURCES) $(am__test_counter_SOURCES_DIST) \
+	$(test_dbus_daemon_SOURCES) \
+	$(test_dbus_daemon_eavesdrop_SOURCES) \
+	$(test_desktop_file_SOURCES) test-exit.c \
+	$(test_fdpass_SOURCES) $(test_hash_SOURCES) \
+	$(test_header_fields_SOURCES) $(test_loopback_SOURCES) \
+	$(test_marshal_SOURCES) $(test_marshal_recursive_SOURCES) \
+	$(test_message_SOURCES) $(test_message_internals_SOURCES) \
+	$(test_misc_internals_SOURCES) $(test_monitor_SOURCES) \
+	test-names.c $(test_printf_SOURCES) test-privserver.c \
 	$(test_refs_SOURCES) $(test_relay_SOURCES) \
-	$(am__test_sd_activation_SOURCES_DIST) test-segfault.c \
-	$(test_server_oom_SOURCES) test-service.c \
-	$(test_shell_SOURCES) test-shell-service.c \
-	test-sleep-forever.c $(test_spawn_SOURCES) \
-	$(test_syntax_SOURCES) $(test_syslog_SOURCES) \
-	$(test_uid_permissions_SOURCES) $(test_variant_SOURCES)
+	$(am__test_sd_activation_SOURCES_DIST) \
+	$(test_segfault_SOURCES) $(test_server_oom_SOURCES) \
+	test-service.c $(test_shell_SOURCES) test-shell-service.c \
+	test-sleep-forever.c $(am__test_spawn_SOURCES_DIST) \
+	$(am__test_spawn_oom_SOURCES_DIST) $(test_strings_SOURCES) \
+	$(test_syntax_SOURCES) $(test_sysdeps_SOURCES) \
+	$(test_syslog_SOURCES) $(test_uid_permissions_SOURCES) \
+	$(test_userdb_SOURCES) $(test_variant_SOURCES)
 RECURSIVE_TARGETS = all-recursive check-recursive cscopelist-recursive \
 	ctags-recursive dvi-recursive html-recursive info-recursive \
 	install-data-recursive install-dvi-recursive \
@@ -676,12 +886,12 @@ am__set_TESTS_bases = \
   bases=`echo $$bases`
 AM_TESTSUITE_SUMMARY_HEADER = ' for $(PACKAGE_STRING)'
 RECHECK_LOGS = $(TEST_LOGS)
-@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_12 =  \
+@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_20 =  \
 @DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@	test-dbus-daemon-fork.sh
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_13 = test-dbus-launch-eval.sh
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_14 = test-dbus-launch-x11.sh
-am__EXEEXT_15 = $(am__EXEEXT_12) $(am__EXEEXT_13) $(am__EXEEXT_14)
-@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_16 = $(am__EXEEXT_8)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_21 = test-dbus-launch-eval.sh
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_ENABLE_X11_AUTOLAUNCH_TRUE@@DBUS_UNIX_TRUE@@DBUS_WITH_GLIB_TRUE@am__EXEEXT_22 = test-dbus-launch-x11.sh
+am__EXEEXT_23 = $(am__EXEEXT_20) $(am__EXEEXT_21) $(am__EXEEXT_22)
+@DBUS_ENABLE_MODULAR_TESTS_TRUE@am__EXEEXT_24 = $(am__EXEEXT_9)
 TEST_SUITE_LOG = test-suite.log
 LOG_COMPILE = $(LOG_COMPILER) $(AM_LOG_FLAGS) $(LOG_FLAGS)
 am__set_b = \
@@ -751,7 +961,6 @@ CODE_COVERAGE_CPPFLAGS = @CODE_COVERAGE_CPPFLAGS@
 CODE_COVERAGE_CXXFLAGS = @CODE_COVERAGE_CXXFLAGS@
 CODE_COVERAGE_ENABLED = @CODE_COVERAGE_ENABLED@
 CODE_COVERAGE_LIBS = @CODE_COVERAGE_LIBS@
-CPP = @CPP@
 CPPFLAGS = @CPPFLAGS@
 CSCOPE = @CSCOPE@
 CTAGS = @CTAGS@
@@ -765,6 +974,7 @@ DBUS_BINDIR = @DBUS_BINDIR@
 DBUS_CONSOLE_OWNER_FILE = @DBUS_CONSOLE_OWNER_FILE@
 DBUS_DAEMONDIR = @DBUS_DAEMONDIR@
 DBUS_DATADIR = @DBUS_DATADIR@
+DBUS_GENERATE_MAN = @DBUS_GENERATE_MAN@
 DBUS_INT16_TYPE = @DBUS_INT16_TYPE@
 DBUS_INT32_TYPE = @DBUS_INT32_TYPE@
 DBUS_INT64_CONSTANT = @DBUS_INT64_CONSTANT@
@@ -788,12 +998,18 @@ DBUS_TEST_USER = @DBUS_TEST_USER@
 DBUS_UINT64_CONSTANT = @DBUS_UINT64_CONSTANT@
 DBUS_USER = @DBUS_USER@
 DBUS_VERSION = @DBUS_VERSION@
+DBUS_VER_FILE_TYPE = @DBUS_VER_FILE_TYPE@
+DBUS_VER_INTERNAL_NAME = @DBUS_VER_INTERNAL_NAME@
+DBUS_VER_ORIGINAL_NAME = @DBUS_VER_ORIGINAL_NAME@
 DBUS_X_CFLAGS = @DBUS_X_CFLAGS@
 DBUS_X_LIBS = @DBUS_X_LIBS@
 DEFS = @DEFS@
 DEPDIR = @DEPDIR@
 DLLTOOL = @DLLTOOL@
 DOXYGEN = @DOXYGEN@
+DOXYGEN_GENERATE_QHP = @DOXYGEN_GENERATE_QHP@
+DOXYGEN_QCH_FILE = @DOXYGEN_QCH_FILE@
+DOXYGEN_QHG_LOCATION = @DOXYGEN_QHG_LOCATION@
 DSYMUTIL = @DSYMUTIL@
 DUCKTYPE = @DUCKTYPE@
 DUMPBIN = @DUMPBIN@
@@ -868,14 +1084,13 @@ PACKAGE_URL = @PACKAGE_URL@
 PACKAGE_VERSION = @PACKAGE_VERSION@
 PATH_SEPARATOR = @PATH_SEPARATOR@
 PKG_CONFIG = @PKG_CONFIG@
-PYTHON = @PYTHON@
-PYTHON_EXEC_PREFIX = @PYTHON_EXEC_PREFIX@
-PYTHON_PLATFORM = @PYTHON_PLATFORM@
-PYTHON_PREFIX = @PYTHON_PREFIX@
-PYTHON_VERSION = @PYTHON_VERSION@
+PKG_CONFIG_LIBDIR = @PKG_CONFIG_LIBDIR@
+PKG_CONFIG_PATH = @PKG_CONFIG_PATH@
+QHELPGENERATOR = @QHELPGENERATOR@
 RANLIB = @RANLIB@
 RC = @RC@
 R_DYNAMIC_LDFLAG = @R_DYNAMIC_LDFLAG@
+SANITIZE_CFLAGS = @SANITIZE_CFLAGS@
 SED = @SED@
 SELINUX_CFLAGS = @SELINUX_CFLAGS@
 SELINUX_LIBS = @SELINUX_LIBS@
@@ -898,13 +1113,10 @@ WARN_CFLAGS = @WARN_CFLAGS@
 WARN_CXXFLAGS = @WARN_CXXFLAGS@
 WARN_LDFLAGS = @WARN_LDFLAGS@
 WARN_SCANNERFLAGS = @WARN_SCANNERFLAGS@
-XMKMF = @XMKMF@
 XMLTO = @XMLTO@
 XSLTPROC = @XSLTPROC@
 X_CFLAGS = @X_CFLAGS@
-X_EXTRA_LIBS = @X_EXTRA_LIBS@
 X_LIBS = @X_LIBS@
-X_PRE_LIBS = @X_PRE_LIBS@
 YELP_BUILD = @YELP_BUILD@
 abs_builddir = @abs_builddir@
 abs_srcdir = @abs_srcdir@
@@ -952,13 +1164,10 @@ mkdir_p = @mkdir_p@
 oldincludedir = @oldincludedir@
 pdfdir = @pdfdir@
 pkgconfig_prefix = @pkgconfig_prefix@
-pkgpyexecdir = @pkgpyexecdir@
-pkgpythondir = @pkgpythondir@
 prefix = @prefix@
 program_transform_name = @program_transform_name@
 psdir = @psdir@
-pyexecdir = @pyexecdir@
-pythondir = @pythondir@
+qchdir = @qchdir@
 runstatedir = @runstatedir@
 sbindir = @sbindir@
 sharedstatedir = @sharedstatedir@
@@ -972,7 +1181,7 @@ top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
 SUBDIRS = . name-test
 DIST_SUBDIRS = name-test
-CLEANFILES = $(am__append_4) $(noinst_DATA) $(NULL)
+CLEANFILES = $(noinst_DATA) $(NULL)
 EXTRA_DIST = glib-tap-test.sh tap-test.sh.in dbus-test-runner \
 	$(in_data) $(static_data)
 AM_CPPFLAGS = \
@@ -983,6 +1192,7 @@ AM_CPPFLAGS = \
 	$(APPARMOR_CFLAGS) \
 	$(GLIB_CFLAGS) \
 	$(GIO_UNIX_CFLAGS) \
+	$(VALGRIND_CFLAGS) \
 	$(NULL)
 
 
@@ -990,10 +1200,12 @@ AM_CPPFLAGS = \
 AM_LDFLAGS = @R_DYNAMIC_LDFLAG@
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 noinst_LTLIBRARIES = libdbus-testutils.la
-libdbus_testutils_la_SOURCES = test-utils.c test-utils.h $(NULL) \
+libdbus_testutils_la_SOURCES = disable-crash-handling.c \
+	disable-crash-handling.h test-utils.c test-utils.h $(NULL) \
 	$(am__append_1)
 libdbus_testutils_la_LIBADD = \
 	$(CODE_COVERAGE_LIBS) \
@@ -1006,35 +1218,68 @@ LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/build-aux/tap-driver
 LOG_COMPILER = $(srcdir)/glib-tap-test.sh
 SH_LOG_DRIVER = $(LOG_DRIVER)
 SH_LOG_COMPILER = $(SHELL)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@uninstallable_test_programs =  \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__append_2) test-bus \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-bus-dispatch \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-bus-dispatch-sha1 \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-marshal-recursive \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-message-internals \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-strings $(NULL) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__append_4)
 @DBUS_ENABLE_EMBEDDED_TESTS_FALSE@TEST_BINARIES = 
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@TEST_BINARIES = \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-spawn \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-exit \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-names \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-segfault \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-service \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-shell-service \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-sleep-forever \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(NULL)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@TEST_BINARIES = test-exit test-names \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-privserver test-segfault \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	test-shell-service $(NULL) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__append_3) \
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__append_5)
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@test_counter_SOURCES = internals/counter.c
+@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@@DBUS_UNIX_TRUE@test_counter_LDADD = libdbus-testutils.la
+test_atomic_SOURCES = internals/atomic.c
+test_atomic_LDADD = libdbus-testutils.la
 
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@wrap_bus_tests = test-bus.sh \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	$(am__append_2)
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@wrap_dbus_tests = test-dbus.sh
+# This helper is meant to crash, so if we're compiling the rest with
+# AddressSanitizer, we need to stop it from catching the SIGSEGV and
+# turning it into _exit(1); so don't give it SANITIZE_CFLAGS.
+# CODE_COVERAGE_CFLAGS are fairly pointless here, too.
+test_segfault_CFLAGS = 
 test_service_LDADD = libdbus-testutils.la
 test_names_LDADD = libdbus-testutils.la
+test_privserver_LDADD = libdbus-testutils.la
 test_shell_service_LDADD = libdbus-testutils.la
 test_shell_SOURCES = shell-test.c
 test_shell_LDADD = libdbus-testutils.la
-test_spawn_SOURCES = spawn-test.c
-test_spawn_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+test_strings_SOURCES = internals/strings.c
+test_strings_LDADD = libdbus-testutils.la
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@test_spawn_SOURCES = spawn-test.c
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@test_spawn_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@test_spawn_oom_SOURCES = internals/spawn-oom.c
+@ENABLE_TRADITIONAL_ACTIVATION_TRUE@test_spawn_oom_LDADD = libdbus-testutils.la
+test_assertions_SOURCES = internals/assertions.c
+test_assertions_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 test_printf_SOURCES = internals/printf.c
 test_printf_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 test_refs_SOURCES = internals/refs.c
 test_refs_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+
+# We have to compile a separate copy of disable-crash-handling.c for
+# test-segfault rather than using libdbus-testutils.la, because
+# otherwise it would fail to link when using the AddressSanitizer.
+test_segfault_SOURCES = \
+	disable-crash-handling.c \
+	disable-crash-handling.h \
+	test-segfault.c \
+	$(NULL)
+
+# Deliberately not adding CODE_COVERAGE_LIBS here because we really
+# don't care about coverage for the test program that segfaults!
 test_server_oom_SOURCES = internals/server-oom.c
 test_server_oom_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+test_sysdeps_SOURCES = internals/sysdeps.c
+test_sysdeps_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 test_syslog_SOURCES = internals/syslog.c
 test_syslog_LDADD = libdbus-testutils.la $(GLIB_LIBS)
+test_userdb_SOURCES = internals/userdb.c
+test_userdb_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 test_variant_SOURCES = internals/variant.c
 test_variant_LDADD = libdbus-testutils.la $(GLIB_LIBS)
 manual_backtrace_SOURCES = manual-backtrace.c
@@ -1042,21 +1287,98 @@ manual_backtrace_LDADD = $(top_builddir)/dbus/libdbus-1.la
 manual_dir_iter_SOURCES = manual-dir-iter.c
 manual_dir_iter_LDADD = $(top_builddir)/dbus/libdbus-internal.la
 manual_paths_SOURCES = manual-paths.c
-manual_paths_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+manual_paths_LDADD = libdbus-testutils.la
 manual_tcp_SOURCES = manual-tcp.c
 manual_tcp_LDADD = $(top_builddir)/dbus/libdbus-internal.la
+test_bus_launch_helper_oom_SOURCES = bus/launch-helper-oom.c
+test_bus_launch_helper_oom_LDADD = \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+dbus_daemon_launch_helper_for_tests_SOURCES = bus/launch-helper-for-tests.c
+dbus_daemon_launch_helper_for_tests_LDADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	$(NULL)
+
+test_bus_system_SOURCES = bus/system.c
+test_bus_system_LDADD = \
+	$(top_builddir)/bus/liblaunch-helper-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_bus_SOURCES = bus/main.c
+test_bus_LDADD = \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_bus_dispatch_SOURCES = bus/dispatch.c
+test_bus_dispatch_LDADD = \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_bus_dispatch_sha1_SOURCES = bus/dispatch-sha1.c
+test_bus_dispatch_sha1_LDADD = \
+	$(top_builddir)/bus/libdbus-daemon-internal.la \
+	libdbus-testutils.la \
+	$(NULL)
+
+test_hash_SOURCES = internals/hash.c
+test_hash_LDADD = libdbus-testutils.la
+test_marshal_recursive_SOURCES = \
+	internals/dbus-marshal-recursive-util.c \
+	internals/dbus-marshal-recursive-util.h \
+	internals/marshal-recursive.c \
+	$(NULL)
+
+test_marshal_recursive_LDADD = libdbus-testutils.la
+test_message_internals_SOURCES = \
+	internals/dbus-marshal-recursive-util.c \
+	internals/dbus-marshal-recursive-util.h \
+	internals/dbus-message-factory.c \
+	internals/dbus-message-factory.h \
+	internals/dbus-message-util.c \
+	internals/dbus-message-util.h \
+	internals/message-internals.c \
+	$(NULL)
+
+test_message_internals_LDADD = libdbus-testutils.la
+test_misc_internals_SOURCES = \
+	internals/address.c \
+	internals/dbus-auth-script.c \
+	internals/dbus-auth-script.h \
+	internals/dbus-auth-util.c \
+	internals/dbus-credentials-util.c \
+	internals/dbus-marshal-byteswap-util.c \
+	internals/dbus-marshal-recursive-util.c \
+	internals/dbus-marshal-recursive-util.h \
+	internals/dbus-marshal-validate-util.c \
+	internals/dbus-string-util.c \
+	internals/dbus-sysdeps-util.c \
+	internals/mempool.c \
+	internals/misc-internals.c \
+	internals/misc-internals.h \
+	internals/sha.c \
+	$(NULL)
+
+test_misc_internals_LDADD = libdbus-testutils.la
 testexecdir = $(libexecdir)/installed-tests/dbus
 testmetadir = $(datadir)/installed-tests/dbus
-nobase_dist_testexec_SCRIPTS = $(am__append_17)
-nobase_testmeta_DATA = $(am__append_18)
-installable_helpers = $(NULL) $(am__append_7)
-installable_tests = test-shell test-printf $(NULL) $(am__append_6) \
-	$(am__append_8)
+nobase_dist_testexec_SCRIPTS = $(am__append_21)
+nobase_testmeta_DATA = $(am__append_22)
+installable_helpers = test-service test-sleep-forever $(NULL) \
+	$(am__append_10)
+installable_tests = test-atomic test-hash test-shell \
+	test-misc-internals test-printf $(NULL) $(am__append_9) \
+	$(am__append_11) $(am__append_17)
 installable_manual_tests = manual-backtrace manual-dir-iter manual-tcp \
-	$(NULL) $(am__append_5) $(am__append_13)
-dist_installable_test_scripts = $(NULL) $(am__append_9) \
-	$(am__append_11) $(am__append_12)
-dist_installed_test_scripts = $(NULL) $(am__append_10)
+	$(NULL) $(am__append_8) $(am__append_16)
+dist_installable_test_scripts = $(NULL) $(am__append_12) \
+	$(am__append_14) $(am__append_15)
+dist_installed_test_scripts = $(NULL) $(am__append_13)
 installable_test_meta = \
 	$(dist_installable_test_scripts:=.test) \
 	$(dist_installed_test_scripts:=.test) \
@@ -1069,7 +1391,7 @@ installable_test_meta_with_config = \
 	$(installable_tests:=_with_config.test) \
 	$(NULL)
 
-installcheck_tests = $(dist_installable_test_scripts) $(am__append_15)
+installcheck_tests = $(dist_installable_test_scripts) $(am__append_19)
 installcheck_environment = \
 	export XDG_DATA_HOME=@abs_top_builddir@/test/XDG_DATA_HOME; \
 	export XDG_DATA_DIRS=@abs_top_builddir@/test/XDG_DATA_DIRS:$(DESTDIR)$(datadir); \
@@ -1133,6 +1455,12 @@ manual_authz_LDADD = \
 @DBUS_UNIX_TRUE@    $(GLIB_LIBS) \
 @DBUS_UNIX_TRUE@    $(NULL)
 
+test_containers_SOURCES = containers.c
+test_containers_LDADD = \
+    libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
 test_corrupt_SOURCES = corrupt.c
 test_corrupt_LDADD = \
     libdbus-testutils.la \
@@ -1161,6 +1489,26 @@ test_dbus_daemon_LDADD = \
 test_dbus_daemon_eavesdrop_SOURCES = dbus-daemon-eavesdrop.c
 test_dbus_daemon_eavesdrop_LDADD = \
     libdbus-testutils.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+test_desktop_file_SOURCES = \
+    internals/desktop-file.c \
+    $(NULL)
+
+test_desktop_file_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
+    $(GLIB_LIBS) \
+    $(NULL)
+
+test_header_fields_SOURCES = \
+    header-fields.c \
+    $(NULL)
+
+test_header_fields_LDADD = \
+    libdbus-testutils.la \
+    $(top_builddir)/dbus/libdbus-internal.la \
     $(GLIB_LIBS) \
     $(NULL)
 
@@ -1243,14 +1591,19 @@ in_data = \
 	data/valid-config-files/finite-timeout.conf.in \
 	data/valid-config-files/forbidding.conf.in \
 	data/valid-config-files/incoming-limit.conf.in \
+	data/valid-config-files/limit-containers.conf.in \
 	data/valid-config-files/max-completed-connections.conf.in \
 	data/valid-config-files/max-connections-per-user.conf.in \
+	data/valid-config-files/max-containers.conf.in \
 	data/valid-config-files/max-match-rules-per-connection.conf.in \
 	data/valid-config-files/max-names-per-connection.conf.in \
 	data/valid-config-files/max-replies-per-connection.conf.in \
 	data/valid-config-files/multi-user.conf.in \
 	data/valid-config-files/pending-fd-timeout.conf.in \
+	data/valid-config-files/send-destination-prefix-rules.conf.in \
 	data/valid-config-files/systemd-activation.conf.in \
+	data/valid-config-files/tmp-session.conf.in \
+	data/valid-config-files-system/tmp-session-like-system.conf.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoExec.service.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoService.service.in \
 	data/invalid-service-files-system/org.freedesktop.DBus.TestSuiteNoUser.service.in \
@@ -1267,17 +1620,18 @@ in_data = \
 	$(NULL)
 
 static_data = \
-	name-test/tmp-session-like-system.conf \
 	data/auth/anonymous-client-successful.auth-script \
 	data/auth/anonymous-server-successful.auth-script \
 	data/auth/cancel.auth-script \
 	data/auth/client-out-of-mechanisms.auth-script \
 	data/auth/cookie-sha1-username.auth-script \
 	data/auth/cookie-sha1.auth-script \
+	data/auth/external-auto.auth-script \
 	data/auth/external-failed.auth-script \
 	data/auth/external-root.auth-script \
 	data/auth/external-silly.auth-script \
 	data/auth/external-successful.auth-script \
+	data/auth/external-username.auth-script \
 	data/auth/extra-bytes.auth-script \
 	data/auth/fail-after-n-attempts.auth-script \
 	data/auth/fallback.auth-script \
@@ -1291,37 +1645,43 @@ static_data = \
 	data/equiv-config-files/entities/basic.d/basic.conf \
 	data/equiv-config-files/entities/entities-1.conf \
 	data/equiv-config-files/entities/entities-2.conf \
-	data/incomplete-messages/missing-body.message \
+	data/invalid-config-files/apparmor-bad-attribute.conf \
+	data/invalid-config-files/apparmor-bad-mode.conf \
+	data/invalid-config-files/bad-attribute.conf \
+	data/invalid-config-files/bad-attribute-2.conf \
+	data/invalid-config-files/bad-element.conf \
+	data/invalid-config-files/bad-limit.conf \
 	data/invalid-config-files/badselinux-1.conf \
 	data/invalid-config-files/badselinux-2.conf \
 	data/invalid-config-files/circular-1.conf \
 	data/invalid-config-files/circular-2.conf \
 	data/invalid-config-files/circular-3.conf \
+	data/invalid-config-files/double-attribute.conf \
 	data/invalid-config-files/impossible-send.conf \
+	data/invalid-config-files/limit-no-name.conf \
+	data/invalid-config-files/ludicrous-limit.conf \
+	data/invalid-config-files/negative-limit.conf \
+	data/invalid-config-files/non-numeric-limit.conf \
 	data/invalid-config-files/not-well-formed.conf \
+	data/invalid-config-files/policy-bad-at-console.conf \
+	data/invalid-config-files/policy-bad-attribute.conf \
+	data/invalid-config-files/policy-bad-context.conf \
+	data/invalid-config-files/policy-bad-rule-attribute.conf \
+	data/invalid-config-files/policy-contradiction.conf \
+	data/invalid-config-files/policy-member-no-path.conf \
+	data/invalid-config-files/policy-mixed.conf \
+	data/invalid-config-files/policy-no-attributes.conf \
+	data/invalid-config-files/policy-no-rule-attribute.conf \
 	data/invalid-config-files/truncated-file.conf \
 	data/invalid-config-files/send-and-receive.conf \
-	data/invalid-messages/array-of-nil.message \
-	data/invalid-messages/array-with-mixed-types.message \
-	data/invalid-messages/bad-boolean-array.message \
-	data/invalid-messages/bad-boolean.message \
-	data/invalid-messages/bad-endian.message \
-	data/invalid-messages/bad-header-field-alignment.message \
+	data/invalid-config-files/unknown-limit.conf \
 	data/invalid-messages/boolean-has-no-value.message-raw \
 	data/invalid-messages/fixed-array-not-divisible.message-raw \
 	data/invalid-messages/fixed-array-not-divisible.message-raw.hex \
 	data/invalid-messages/issue418.message-raw \
 	data/invalid-messages/issue418.message-raw.hex \
-	data/invalid-messages/local-namespace.message \
 	data/invalid-messages/mis-nested-sig.message-raw \
 	data/invalid-messages/mis-nested-sig.message-raw.hex \
-	data/invalid-messages/no-dot-in-name.message \
-	data/invalid-messages/not-nul-header-padding.message \
-	data/invalid-messages/overlong-name.message \
-	data/invalid-messages/too-little-header-padding.message \
-	data/invalid-messages/too-much-header-padding-by-far.message \
-	data/invalid-messages/too-much-header-padding.message \
-	data/invalid-messages/too-short-dict.message \
 	data/invalid-messages/truncated-variant-sig.message-raw \
 	data/invalid-messages/truncated-variant-sig.message-raw.hex \
 	data/invalid-messages/zero-length-variant-sig.message-raw \
@@ -1334,6 +1694,9 @@ static_data = \
 	data/systemd-activation/com.example.ReceiveDenied.service \
 	data/systemd-activation/com.example.SendDenied.service \
 	data/systemd-activation/com.example.SendDeniedByAppArmorName.service \
+	data/systemd-activation/com.example.SendPrefixDenied.service \
+	data/systemd-activation/com.example.SendPrefixDenied.internal.service \
+	data/systemd-activation/com.example.SendPrefixDenied.SendPrefixAllowed.internal.service \
 	data/systemd-activation/com.example.SystemdActivatable1.service \
 	data/systemd-activation/com.example.SystemdActivatable2.service \
 	data/systemd-activation/org.freedesktop.systemd1.service \
@@ -1343,28 +1706,14 @@ static_data = \
 	data/valid-config-files/entities.conf \
 	data/valid-config-files/listen-unix-runtime.conf \
 	data/valid-config-files/many-rules.conf \
+	data/valid-config-files/minimal.conf \
 	data/valid-config-files/standard-session-dirs.conf \
 	data/valid-config-files-system/many-rules.conf \
 	data/valid-config-files-system/system.d/test.conf \
-	data/valid-messages/array-of-array-of-uint32.message \
 	data/valid-messages/byteswap-fd-index.message-raw \
 	data/valid-messages/byteswap-fd-index.message-raw.hex \
-	data/valid-messages/dict-simple.message \
-	data/valid-messages/dict.message \
-	data/valid-messages/emptiness.message \
-	data/valid-messages/lots-of-arguments.message \
 	data/valid-messages/minimal.message-raw \
 	data/valid-messages/minimal.message-raw.hex \
-	data/valid-messages/no-padding.message \
-	data/valid-messages/opposite-endian.message \
-	data/valid-messages/recursive-types.message \
-	data/valid-messages/simplest-manual.message \
-	data/valid-messages/simplest.message \
-	data/valid-messages/standard-acquire-service.message \
-	data/valid-messages/standard-hello.message \
-	data/valid-messages/standard-list-services.message \
-	data/valid-messages/standard-service-exists.message \
-	data/valid-messages/unknown-header-field.message \
 	$(NULL)
 
 imported_data = \
@@ -1403,9 +1752,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am $(top_srcdir
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu test/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign test/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu test/Makefile
+	  $(AUTOMAKE) --foreign test/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -1502,6 +1851,18 @@ clean-noinstLTLIBRARIES:
 
 libdbus-testutils.la: $(libdbus_testutils_la_OBJECTS) $(libdbus_testutils_la_DEPENDENCIES) $(EXTRA_libdbus_testutils_la_DEPENDENCIES) 
 	$(AM_V_CCLD)$(LINK)  $(libdbus_testutils_la_OBJECTS) $(libdbus_testutils_la_LIBADD) $(LIBS)
+bus/$(am__dirstamp):
+	@$(MKDIR_P) bus
+	@: > bus/$(am__dirstamp)
+bus/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) bus/$(DEPDIR)
+	@: > bus/$(DEPDIR)/$(am__dirstamp)
+bus/launch-helper-for-tests.$(OBJEXT): bus/$(am__dirstamp) \
+	bus/$(DEPDIR)/$(am__dirstamp)
+
+dbus-daemon-launch-helper-for-tests$(EXEEXT): $(dbus_daemon_launch_helper_for_tests_OBJECTS) $(dbus_daemon_launch_helper_for_tests_DEPENDENCIES) $(EXTRA_dbus_daemon_launch_helper_for_tests_DEPENDENCIES) 
+	@rm -f dbus-daemon-launch-helper-for-tests$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(dbus_daemon_launch_helper_for_tests_OBJECTS) $(dbus_daemon_launch_helper_for_tests_LDADD) $(LIBS)
 
 manual-authz$(EXEEXT): $(manual_authz_OBJECTS) $(manual_authz_DEPENDENCIES) $(EXTRA_manual_authz_DEPENDENCIES) 
 	@rm -f manual-authz$(EXEEXT)
@@ -1530,10 +1891,67 @@ manual-test-thread-blocking$(EXEEXT): $(manual_test_thread_blocking_OBJECTS) $(m
 test-apparmor-activation$(EXEEXT): $(test_apparmor_activation_OBJECTS) $(test_apparmor_activation_DEPENDENCIES) $(EXTRA_test_apparmor_activation_DEPENDENCIES) 
 	@rm -f test-apparmor-activation$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_apparmor_activation_OBJECTS) $(test_apparmor_activation_LDADD) $(LIBS)
+internals/$(am__dirstamp):
+	@$(MKDIR_P) internals
+	@: > internals/$(am__dirstamp)
+internals/$(DEPDIR)/$(am__dirstamp):
+	@$(MKDIR_P) internals/$(DEPDIR)
+	@: > internals/$(DEPDIR)/$(am__dirstamp)
+internals/assertions.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-assertions$(EXEEXT): $(test_assertions_OBJECTS) $(test_assertions_DEPENDENCIES) $(EXTRA_test_assertions_DEPENDENCIES) 
+	@rm -f test-assertions$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_assertions_OBJECTS) $(test_assertions_LDADD) $(LIBS)
+internals/atomic.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-atomic$(EXEEXT): $(test_atomic_OBJECTS) $(test_atomic_DEPENDENCIES) $(EXTRA_test_atomic_DEPENDENCIES) 
+	@rm -f test-atomic$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_atomic_OBJECTS) $(test_atomic_LDADD) $(LIBS)
+bus/main.$(OBJEXT): bus/$(am__dirstamp) bus/$(DEPDIR)/$(am__dirstamp)
+
+test-bus$(EXEEXT): $(test_bus_OBJECTS) $(test_bus_DEPENDENCIES) $(EXTRA_test_bus_DEPENDENCIES) 
+	@rm -f test-bus$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_bus_OBJECTS) $(test_bus_LDADD) $(LIBS)
+bus/dispatch.$(OBJEXT): bus/$(am__dirstamp) \
+	bus/$(DEPDIR)/$(am__dirstamp)
+
+test-bus-dispatch$(EXEEXT): $(test_bus_dispatch_OBJECTS) $(test_bus_dispatch_DEPENDENCIES) $(EXTRA_test_bus_dispatch_DEPENDENCIES) 
+	@rm -f test-bus-dispatch$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_bus_dispatch_OBJECTS) $(test_bus_dispatch_LDADD) $(LIBS)
+bus/dispatch-sha1.$(OBJEXT): bus/$(am__dirstamp) \
+	bus/$(DEPDIR)/$(am__dirstamp)
+
+test-bus-dispatch-sha1$(EXEEXT): $(test_bus_dispatch_sha1_OBJECTS) $(test_bus_dispatch_sha1_DEPENDENCIES) $(EXTRA_test_bus_dispatch_sha1_DEPENDENCIES) 
+	@rm -f test-bus-dispatch-sha1$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_bus_dispatch_sha1_OBJECTS) $(test_bus_dispatch_sha1_LDADD) $(LIBS)
+bus/launch-helper-oom.$(OBJEXT): bus/$(am__dirstamp) \
+	bus/$(DEPDIR)/$(am__dirstamp)
+
+test-bus-launch-helper-oom$(EXEEXT): $(test_bus_launch_helper_oom_OBJECTS) $(test_bus_launch_helper_oom_DEPENDENCIES) $(EXTRA_test_bus_launch_helper_oom_DEPENDENCIES) 
+	@rm -f test-bus-launch-helper-oom$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_bus_launch_helper_oom_OBJECTS) $(test_bus_launch_helper_oom_LDADD) $(LIBS)
+bus/system.$(OBJEXT): bus/$(am__dirstamp) \
+	bus/$(DEPDIR)/$(am__dirstamp)
+
+test-bus-system$(EXEEXT): $(test_bus_system_OBJECTS) $(test_bus_system_DEPENDENCIES) $(EXTRA_test_bus_system_DEPENDENCIES) 
+	@rm -f test-bus-system$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_bus_system_OBJECTS) $(test_bus_system_LDADD) $(LIBS)
+
+test-containers$(EXEEXT): $(test_containers_OBJECTS) $(test_containers_DEPENDENCIES) $(EXTRA_test_containers_DEPENDENCIES) 
+	@rm -f test-containers$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_containers_OBJECTS) $(test_containers_LDADD) $(LIBS)
 
 test-corrupt$(EXEEXT): $(test_corrupt_OBJECTS) $(test_corrupt_DEPENDENCIES) $(EXTRA_test_corrupt_DEPENDENCIES) 
 	@rm -f test-corrupt$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_corrupt_OBJECTS) $(test_corrupt_LDADD) $(LIBS)
+internals/counter.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-counter$(EXEEXT): $(test_counter_OBJECTS) $(test_counter_DEPENDENCIES) $(EXTRA_test_counter_DEPENDENCIES) 
+	@rm -f test-counter$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_counter_OBJECTS) $(test_counter_LDADD) $(LIBS)
 
 test-dbus-daemon$(EXEEXT): $(test_dbus_daemon_OBJECTS) $(test_dbus_daemon_DEPENDENCIES) $(EXTRA_test_dbus_daemon_DEPENDENCIES) 
 	@rm -f test-dbus-daemon$(EXEEXT)
@@ -1542,6 +1960,12 @@ test-dbus-daemon$(EXEEXT): $(test_dbus_daemon_OBJECTS) $(test_dbus_daemon_DEPEND
 test-dbus-daemon-eavesdrop$(EXEEXT): $(test_dbus_daemon_eavesdrop_OBJECTS) $(test_dbus_daemon_eavesdrop_DEPENDENCIES) $(EXTRA_test_dbus_daemon_eavesdrop_DEPENDENCIES) 
 	@rm -f test-dbus-daemon-eavesdrop$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_dbus_daemon_eavesdrop_OBJECTS) $(test_dbus_daemon_eavesdrop_LDADD) $(LIBS)
+internals/desktop-file.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-desktop-file$(EXEEXT): $(test_desktop_file_OBJECTS) $(test_desktop_file_DEPENDENCIES) $(EXTRA_test_desktop_file_DEPENDENCIES) 
+	@rm -f test-desktop-file$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_desktop_file_OBJECTS) $(test_desktop_file_LDADD) $(LIBS)
 
 test-exit$(EXEEXT): $(test_exit_OBJECTS) $(test_exit_DEPENDENCIES) $(EXTRA_test_exit_DEPENDENCIES) 
 	@rm -f test-exit$(EXEEXT)
@@ -1550,6 +1974,16 @@ test-exit$(EXEEXT): $(test_exit_OBJECTS) $(test_exit_DEPENDENCIES) $(EXTRA_test_
 test-fdpass$(EXEEXT): $(test_fdpass_OBJECTS) $(test_fdpass_DEPENDENCIES) $(EXTRA_test_fdpass_DEPENDENCIES) 
 	@rm -f test-fdpass$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_fdpass_OBJECTS) $(test_fdpass_LDADD) $(LIBS)
+internals/hash.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-hash$(EXEEXT): $(test_hash_OBJECTS) $(test_hash_DEPENDENCIES) $(EXTRA_test_hash_DEPENDENCIES) 
+	@rm -f test-hash$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_hash_OBJECTS) $(test_hash_LDADD) $(LIBS)
+
+test-header-fields$(EXEEXT): $(test_header_fields_OBJECTS) $(test_header_fields_DEPENDENCIES) $(EXTRA_test_header_fields_DEPENDENCIES) 
+	@rm -f test-header-fields$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_header_fields_OBJECTS) $(test_header_fields_LDADD) $(LIBS)
 
 test-loopback$(EXEEXT): $(test_loopback_OBJECTS) $(test_loopback_DEPENDENCIES) $(EXTRA_test_loopback_DEPENDENCIES) 
 	@rm -f test-loopback$(EXEEXT)
@@ -1558,10 +1992,54 @@ test-loopback$(EXEEXT): $(test_loopback_OBJECTS) $(test_loopback_DEPENDENCIES) $
 test-marshal$(EXEEXT): $(test_marshal_OBJECTS) $(test_marshal_DEPENDENCIES) $(EXTRA_test_marshal_DEPENDENCIES) 
 	@rm -f test-marshal$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_marshal_OBJECTS) $(test_marshal_LDADD) $(LIBS)
+internals/dbus-marshal-recursive-util.$(OBJEXT):  \
+	internals/$(am__dirstamp) internals/$(DEPDIR)/$(am__dirstamp)
+internals/marshal-recursive.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-marshal-recursive$(EXEEXT): $(test_marshal_recursive_OBJECTS) $(test_marshal_recursive_DEPENDENCIES) $(EXTRA_test_marshal_recursive_DEPENDENCIES) 
+	@rm -f test-marshal-recursive$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_marshal_recursive_OBJECTS) $(test_marshal_recursive_LDADD) $(LIBS)
 
 test-message$(EXEEXT): $(test_message_OBJECTS) $(test_message_DEPENDENCIES) $(EXTRA_test_message_DEPENDENCIES) 
 	@rm -f test-message$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_message_OBJECTS) $(test_message_LDADD) $(LIBS)
+internals/dbus-message-factory.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-message-util.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/message-internals.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-message-internals$(EXEEXT): $(test_message_internals_OBJECTS) $(test_message_internals_DEPENDENCIES) $(EXTRA_test_message_internals_DEPENDENCIES) 
+	@rm -f test-message-internals$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_message_internals_OBJECTS) $(test_message_internals_LDADD) $(LIBS)
+internals/address.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-auth-script.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-auth-util.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-credentials-util.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-marshal-byteswap-util.$(OBJEXT):  \
+	internals/$(am__dirstamp) internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-marshal-validate-util.$(OBJEXT):  \
+	internals/$(am__dirstamp) internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-string-util.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/dbus-sysdeps-util.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/mempool.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/misc-internals.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+internals/sha.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-misc-internals$(EXEEXT): $(test_misc_internals_OBJECTS) $(test_misc_internals_DEPENDENCIES) $(EXTRA_test_misc_internals_DEPENDENCIES) 
+	@rm -f test-misc-internals$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_misc_internals_OBJECTS) $(test_misc_internals_LDADD) $(LIBS)
 
 test-monitor$(EXEEXT): $(test_monitor_OBJECTS) $(test_monitor_DEPENDENCIES) $(EXTRA_test_monitor_DEPENDENCIES) 
 	@rm -f test-monitor$(EXEEXT)
@@ -1570,18 +2048,16 @@ test-monitor$(EXEEXT): $(test_monitor_OBJECTS) $(test_monitor_DEPENDENCIES) $(EX
 test-names$(EXEEXT): $(test_names_OBJECTS) $(test_names_DEPENDENCIES) $(EXTRA_test_names_DEPENDENCIES) 
 	@rm -f test-names$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_names_OBJECTS) $(test_names_LDADD) $(LIBS)
-internals/$(am__dirstamp):
-	@$(MKDIR_P) internals
-	@: > internals/$(am__dirstamp)
-internals/$(DEPDIR)/$(am__dirstamp):
-	@$(MKDIR_P) internals/$(DEPDIR)
-	@: > internals/$(DEPDIR)/$(am__dirstamp)
 internals/printf.$(OBJEXT): internals/$(am__dirstamp) \
 	internals/$(DEPDIR)/$(am__dirstamp)
 
 test-printf$(EXEEXT): $(test_printf_OBJECTS) $(test_printf_DEPENDENCIES) $(EXTRA_test_printf_DEPENDENCIES) 
 	@rm -f test-printf$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_printf_OBJECTS) $(test_printf_LDADD) $(LIBS)
+
+test-privserver$(EXEEXT): $(test_privserver_OBJECTS) $(test_privserver_DEPENDENCIES) $(EXTRA_test_privserver_DEPENDENCIES) 
+	@rm -f test-privserver$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_privserver_OBJECTS) $(test_privserver_LDADD) $(LIBS)
 internals/refs.$(OBJEXT): internals/$(am__dirstamp) \
 	internals/$(DEPDIR)/$(am__dirstamp)
 
@@ -1599,7 +2075,7 @@ test-sd-activation$(EXEEXT): $(test_sd_activation_OBJECTS) $(test_sd_activation_
 
 test-segfault$(EXEEXT): $(test_segfault_OBJECTS) $(test_segfault_DEPENDENCIES) $(EXTRA_test_segfault_DEPENDENCIES) 
 	@rm -f test-segfault$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(test_segfault_OBJECTS) $(test_segfault_LDADD) $(LIBS)
+	$(AM_V_CCLD)$(test_segfault_LINK) $(test_segfault_OBJECTS) $(test_segfault_LDADD) $(LIBS)
 internals/server-oom.$(OBJEXT): internals/$(am__dirstamp) \
 	internals/$(DEPDIR)/$(am__dirstamp)
 
@@ -1626,10 +2102,28 @@ test-sleep-forever$(EXEEXT): $(test_sleep_forever_OBJECTS) $(test_sleep_forever_
 test-spawn$(EXEEXT): $(test_spawn_OBJECTS) $(test_spawn_DEPENDENCIES) $(EXTRA_test_spawn_DEPENDENCIES) 
 	@rm -f test-spawn$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_spawn_OBJECTS) $(test_spawn_LDADD) $(LIBS)
+internals/spawn-oom.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-spawn-oom$(EXEEXT): $(test_spawn_oom_OBJECTS) $(test_spawn_oom_DEPENDENCIES) $(EXTRA_test_spawn_oom_DEPENDENCIES) 
+	@rm -f test-spawn-oom$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_spawn_oom_OBJECTS) $(test_spawn_oom_LDADD) $(LIBS)
+internals/strings.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-strings$(EXEEXT): $(test_strings_OBJECTS) $(test_strings_DEPENDENCIES) $(EXTRA_test_strings_DEPENDENCIES) 
+	@rm -f test-strings$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_strings_OBJECTS) $(test_strings_LDADD) $(LIBS)
 
 test-syntax$(EXEEXT): $(test_syntax_OBJECTS) $(test_syntax_DEPENDENCIES) $(EXTRA_test_syntax_DEPENDENCIES) 
 	@rm -f test-syntax$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_syntax_OBJECTS) $(test_syntax_LDADD) $(LIBS)
+internals/sysdeps.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-sysdeps$(EXEEXT): $(test_sysdeps_OBJECTS) $(test_sysdeps_DEPENDENCIES) $(EXTRA_test_sysdeps_DEPENDENCIES) 
+	@rm -f test-sysdeps$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_sysdeps_OBJECTS) $(test_sysdeps_LDADD) $(LIBS)
 internals/syslog.$(OBJEXT): internals/$(am__dirstamp) \
 	internals/$(DEPDIR)/$(am__dirstamp)
 
@@ -1640,6 +2134,12 @@ test-syslog$(EXEEXT): $(test_syslog_OBJECTS) $(test_syslog_DEPENDENCIES) $(EXTRA
 test-uid-permissions$(EXEEXT): $(test_uid_permissions_OBJECTS) $(test_uid_permissions_DEPENDENCIES) $(EXTRA_test_uid_permissions_DEPENDENCIES) 
 	@rm -f test-uid-permissions$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(test_uid_permissions_OBJECTS) $(test_uid_permissions_LDADD) $(LIBS)
+internals/userdb.$(OBJEXT): internals/$(am__dirstamp) \
+	internals/$(DEPDIR)/$(am__dirstamp)
+
+test-userdb$(EXEEXT): $(test_userdb_OBJECTS) $(test_userdb_DEPENDENCIES) $(EXTRA_test_userdb_DEPENDENCIES) 
+	@rm -f test-userdb$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(test_userdb_OBJECTS) $(test_userdb_LDADD) $(LIBS)
 internals/variant.$(OBJEXT): internals/$(am__dirstamp) \
 	internals/$(DEPDIR)/$(am__dirstamp)
 
@@ -1691,15 +2191,19 @@ uninstall-nobase_dist_testexecSCRIPTS:
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
+	-rm -f bus/*.$(OBJEXT)
 	-rm -f internals/*.$(OBJEXT)
 
 distclean-compile:
 	-rm -f *.tab.c
 
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/containers.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/corrupt.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-daemon-eavesdrop.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dbus-daemon.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/disable-crash-handling.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fdpass.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/header-fields.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/loopback.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-authz.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/manual-backtrace.Po@am__quote@ # am--include-marker
@@ -1716,19 +2220,52 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/syntax.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-exit.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-names.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-segfault.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-privserver.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-service.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-shell-service.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-sleep-forever.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-utils-glib.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test-utils.Plo@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_apparmor_activation-sd-activation.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_segfault-disable-crash-handling.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/test_segfault-test-segfault.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/thread-blocking.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uid-permissions.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@bus/$(DEPDIR)/dispatch-sha1.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@bus/$(DEPDIR)/dispatch.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@bus/$(DEPDIR)/launch-helper-for-tests.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@bus/$(DEPDIR)/launch-helper-oom.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@bus/$(DEPDIR)/main.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@bus/$(DEPDIR)/system.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/address.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/assertions.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/atomic.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/counter.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-auth-script.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-auth-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-credentials-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-marshal-byteswap-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-marshal-recursive-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-marshal-validate-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-message-factory.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-message-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-string-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/dbus-sysdeps-util.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/desktop-file.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/hash.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/marshal-recursive.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/mempool.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/message-internals.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/misc-internals.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/printf.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/refs.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/server-oom.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/sha.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/spawn-oom.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/strings.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/sysdeps.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/syslog.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/userdb.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@internals/$(DEPDIR)/variant.Po@am__quote@ # am--include-marker
 
 $(am__depfiles_remade):
@@ -1774,6 +2311,34 @@ test_apparmor_activation-sd-activation.obj: sd-activation.c
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='sd-activation.c' object='test_apparmor_activation-sd-activation.obj' libtool=no @AMDEPBACKSLASH@
 @AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
 @am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(test_apparmor_activation_CPPFLAGS) $(CPPFLAGS) $(AM_CFLAGS) $(CFLAGS) -c -o test_apparmor_activation-sd-activation.obj `if test -f 'sd-activation.c'; then $(CYGPATH_W) 'sd-activation.c'; else $(CYGPATH_W) '$(srcdir)/sd-activation.c'; fi`
+
+test_segfault-disable-crash-handling.o: disable-crash-handling.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -MT test_segfault-disable-crash-handling.o -MD -MP -MF $(DEPDIR)/test_segfault-disable-crash-handling.Tpo -c -o test_segfault-disable-crash-handling.o `test -f 'disable-crash-handling.c' || echo '$(srcdir)/'`disable-crash-handling.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_segfault-disable-crash-handling.Tpo $(DEPDIR)/test_segfault-disable-crash-handling.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='disable-crash-handling.c' object='test_segfault-disable-crash-handling.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -c -o test_segfault-disable-crash-handling.o `test -f 'disable-crash-handling.c' || echo '$(srcdir)/'`disable-crash-handling.c
+
+test_segfault-disable-crash-handling.obj: disable-crash-handling.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -MT test_segfault-disable-crash-handling.obj -MD -MP -MF $(DEPDIR)/test_segfault-disable-crash-handling.Tpo -c -o test_segfault-disable-crash-handling.obj `if test -f 'disable-crash-handling.c'; then $(CYGPATH_W) 'disable-crash-handling.c'; else $(CYGPATH_W) '$(srcdir)/disable-crash-handling.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_segfault-disable-crash-handling.Tpo $(DEPDIR)/test_segfault-disable-crash-handling.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='disable-crash-handling.c' object='test_segfault-disable-crash-handling.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -c -o test_segfault-disable-crash-handling.obj `if test -f 'disable-crash-handling.c'; then $(CYGPATH_W) 'disable-crash-handling.c'; else $(CYGPATH_W) '$(srcdir)/disable-crash-handling.c'; fi`
+
+test_segfault-test-segfault.o: test-segfault.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -MT test_segfault-test-segfault.o -MD -MP -MF $(DEPDIR)/test_segfault-test-segfault.Tpo -c -o test_segfault-test-segfault.o `test -f 'test-segfault.c' || echo '$(srcdir)/'`test-segfault.c
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_segfault-test-segfault.Tpo $(DEPDIR)/test_segfault-test-segfault.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-segfault.c' object='test_segfault-test-segfault.o' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -c -o test_segfault-test-segfault.o `test -f 'test-segfault.c' || echo '$(srcdir)/'`test-segfault.c
+
+test_segfault-test-segfault.obj: test-segfault.c
+@am__fastdepCC_TRUE@	$(AM_V_CC)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -MT test_segfault-test-segfault.obj -MD -MP -MF $(DEPDIR)/test_segfault-test-segfault.Tpo -c -o test_segfault-test-segfault.obj `if test -f 'test-segfault.c'; then $(CYGPATH_W) 'test-segfault.c'; else $(CYGPATH_W) '$(srcdir)/test-segfault.c'; fi`
+@am__fastdepCC_TRUE@	$(AM_V_at)$(am__mv) $(DEPDIR)/test_segfault-test-segfault.Tpo $(DEPDIR)/test_segfault-test-segfault.Po
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	$(AM_V_CC)source='test-segfault.c' object='test_segfault-test-segfault.obj' libtool=no @AMDEPBACKSLASH@
+@AMDEP_TRUE@@am__fastdepCC_FALSE@	DEPDIR=$(DEPDIR) $(CCDEPMODE) $(depcomp) @AMDEPBACKSLASH@
+@am__fastdepCC_FALSE@	$(AM_V_CC@am__nodep@)$(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) $(CPPFLAGS) $(test_segfault_CFLAGS) $(CFLAGS) -c -o test_segfault-test-segfault.obj `if test -f 'test-segfault.c'; then $(CYGPATH_W) 'test-segfault.c'; else $(CYGPATH_W) '$(srcdir)/test-segfault.c'; fi`
 
 mostlyclean-libtool:
 	-rm -f *.lo
@@ -2045,6 +2610,83 @@ recheck: all
 	        am__force_recheck=am--force-recheck \
 	        TEST_LOGS="$$log_list"; \
 	exit $$?
+test-spawn-oom.log: test-spawn-oom$(EXEEXT)
+	@p='test-spawn-oom$(EXEEXT)'; \
+	b='test-spawn-oom'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-bus.log: test-bus$(EXEEXT)
+	@p='test-bus$(EXEEXT)'; \
+	b='test-bus'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-bus-dispatch.log: test-bus-dispatch$(EXEEXT)
+	@p='test-bus-dispatch$(EXEEXT)'; \
+	b='test-bus-dispatch'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-bus-dispatch-sha1.log: test-bus-dispatch-sha1$(EXEEXT)
+	@p='test-bus-dispatch-sha1$(EXEEXT)'; \
+	b='test-bus-dispatch-sha1'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-marshal-recursive.log: test-marshal-recursive$(EXEEXT)
+	@p='test-marshal-recursive$(EXEEXT)'; \
+	b='test-marshal-recursive'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-message-internals.log: test-message-internals$(EXEEXT)
+	@p='test-message-internals$(EXEEXT)'; \
+	b='test-message-internals'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-strings.log: test-strings$(EXEEXT)
+	@p='test-strings$(EXEEXT)'; \
+	b='test-strings'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-bus-launch-helper-oom.log: test-bus-launch-helper-oom$(EXEEXT)
+	@p='test-bus-launch-helper-oom$(EXEEXT)'; \
+	b='test-bus-launch-helper-oom'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-bus-system.log: test-bus-system$(EXEEXT)
+	@p='test-bus-system$(EXEEXT)'; \
+	b='test-bus-system'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-atomic.log: test-atomic$(EXEEXT)
+	@p='test-atomic$(EXEEXT)'; \
+	b='test-atomic'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-hash.log: test-hash$(EXEEXT)
+	@p='test-hash$(EXEEXT)'; \
+	b='test-hash'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-shell.log: test-shell$(EXEEXT)
 	@p='test-shell$(EXEEXT)'; \
 	b='test-shell'; \
@@ -2052,9 +2694,23 @@ test-shell.log: test-shell$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-misc-internals.log: test-misc-internals$(EXEEXT)
+	@p='test-misc-internals$(EXEEXT)'; \
+	b='test-misc-internals'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-printf.log: test-printf$(EXEEXT)
 	@p='test-printf$(EXEEXT)'; \
 	b='test-printf'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-assertions.log: test-assertions$(EXEEXT)
+	@p='test-assertions$(EXEEXT)'; \
+	b='test-assertions'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -2080,9 +2736,23 @@ test-dbus-daemon-eavesdrop.log: test-dbus-daemon-eavesdrop$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-desktop-file.log: test-desktop-file$(EXEEXT)
+	@p='test-desktop-file$(EXEEXT)'; \
+	b='test-desktop-file'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-fdpass.log: test-fdpass$(EXEEXT)
 	@p='test-fdpass$(EXEEXT)'; \
 	b='test-fdpass'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-header-fields.log: test-header-fields$(EXEEXT)
+	@p='test-header-fields$(EXEEXT)'; \
+	b='test-header-fields'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -2143,6 +2813,13 @@ test-syntax.log: test-syntax$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-sysdeps.log: test-sysdeps$(EXEEXT)
+	@p='test-sysdeps$(EXEEXT)'; \
+	b='test-sysdeps'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-syslog.log: test-syslog$(EXEEXT)
 	@p='test-syslog$(EXEEXT)'; \
 	b='test-syslog'; \
@@ -2157,6 +2834,13 @@ test-uid-permissions.log: test-uid-permissions$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-userdb.log: test-userdb$(EXEEXT)
+	@p='test-userdb$(EXEEXT)'; \
+	b='test-userdb'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-variant.log: test-variant$(EXEEXT)
 	@p='test-variant$(EXEEXT)'; \
 	b='test-variant'; \
@@ -2164,9 +2848,23 @@ test-variant.log: test-variant$(EXEEXT)
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
 	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-containers.log: test-containers$(EXEEXT)
+	@p='test-containers$(EXEEXT)'; \
+	b='test-containers'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
 test-sd-activation.log: test-sd-activation$(EXEEXT)
 	@p='test-sd-activation$(EXEEXT)'; \
 	b='test-sd-activation'; \
+	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
+	--log-file $$b.log --trs-file $$b.trs \
+	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
+	"$$tst" $(AM_TESTS_FD_REDIRECT)
+test-counter.log: test-counter$(EXEEXT)
+	@p='test-counter$(EXEEXT)'; \
+	b='test-counter'; \
 	$(am__check_pre) $(LOG_DRIVER) --test-name "$$f" \
 	--log-file $$b.log --trs-file $$b.trs \
 	$(am__common_driver_flags) $(AM_LOG_DRIVER_FLAGS) $(LOG_DRIVER_FLAGS) -- $(LOG_COMPILE) \
@@ -2283,6 +2981,8 @@ clean-generic:
 distclean-generic:
 	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
 	-test . = "$(srcdir)" || test -z "$(CONFIG_CLEAN_VPATH_FILES)" || rm -f $(CONFIG_CLEAN_VPATH_FILES)
+	-rm -f bus/$(DEPDIR)/$(am__dirstamp)
+	-rm -f bus/$(am__dirstamp)
 	-rm -f internals/$(DEPDIR)/$(am__dirstamp)
 	-rm -f internals/$(am__dirstamp)
 
@@ -2296,10 +2996,13 @@ clean-am: clean-generic clean-libtool clean-local \
 	clean-noinstPROGRAMS mostlyclean-am
 
 distclean: distclean-recursive
-		-rm -f ./$(DEPDIR)/corrupt.Po
+		-rm -f ./$(DEPDIR)/containers.Po
+	-rm -f ./$(DEPDIR)/corrupt.Po
 	-rm -f ./$(DEPDIR)/dbus-daemon-eavesdrop.Po
 	-rm -f ./$(DEPDIR)/dbus-daemon.Po
+	-rm -f ./$(DEPDIR)/disable-crash-handling.Plo
 	-rm -f ./$(DEPDIR)/fdpass.Po
+	-rm -f ./$(DEPDIR)/header-fields.Po
 	-rm -f ./$(DEPDIR)/loopback.Po
 	-rm -f ./$(DEPDIR)/manual-authz.Po
 	-rm -f ./$(DEPDIR)/manual-backtrace.Po
@@ -2316,19 +3019,52 @@ distclean: distclean-recursive
 	-rm -f ./$(DEPDIR)/syntax.Po
 	-rm -f ./$(DEPDIR)/test-exit.Po
 	-rm -f ./$(DEPDIR)/test-names.Po
-	-rm -f ./$(DEPDIR)/test-segfault.Po
+	-rm -f ./$(DEPDIR)/test-privserver.Po
 	-rm -f ./$(DEPDIR)/test-service.Po
 	-rm -f ./$(DEPDIR)/test-shell-service.Po
 	-rm -f ./$(DEPDIR)/test-sleep-forever.Po
 	-rm -f ./$(DEPDIR)/test-utils-glib.Plo
 	-rm -f ./$(DEPDIR)/test-utils.Plo
 	-rm -f ./$(DEPDIR)/test_apparmor_activation-sd-activation.Po
+	-rm -f ./$(DEPDIR)/test_segfault-disable-crash-handling.Po
+	-rm -f ./$(DEPDIR)/test_segfault-test-segfault.Po
 	-rm -f ./$(DEPDIR)/thread-blocking.Po
 	-rm -f ./$(DEPDIR)/uid-permissions.Po
+	-rm -f bus/$(DEPDIR)/dispatch-sha1.Po
+	-rm -f bus/$(DEPDIR)/dispatch.Po
+	-rm -f bus/$(DEPDIR)/launch-helper-for-tests.Po
+	-rm -f bus/$(DEPDIR)/launch-helper-oom.Po
+	-rm -f bus/$(DEPDIR)/main.Po
+	-rm -f bus/$(DEPDIR)/system.Po
+	-rm -f internals/$(DEPDIR)/address.Po
+	-rm -f internals/$(DEPDIR)/assertions.Po
+	-rm -f internals/$(DEPDIR)/atomic.Po
+	-rm -f internals/$(DEPDIR)/counter.Po
+	-rm -f internals/$(DEPDIR)/dbus-auth-script.Po
+	-rm -f internals/$(DEPDIR)/dbus-auth-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-credentials-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-marshal-byteswap-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-marshal-recursive-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-marshal-validate-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-message-factory.Po
+	-rm -f internals/$(DEPDIR)/dbus-message-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-string-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-sysdeps-util.Po
+	-rm -f internals/$(DEPDIR)/desktop-file.Po
+	-rm -f internals/$(DEPDIR)/hash.Po
+	-rm -f internals/$(DEPDIR)/marshal-recursive.Po
+	-rm -f internals/$(DEPDIR)/mempool.Po
+	-rm -f internals/$(DEPDIR)/message-internals.Po
+	-rm -f internals/$(DEPDIR)/misc-internals.Po
 	-rm -f internals/$(DEPDIR)/printf.Po
 	-rm -f internals/$(DEPDIR)/refs.Po
 	-rm -f internals/$(DEPDIR)/server-oom.Po
+	-rm -f internals/$(DEPDIR)/sha.Po
+	-rm -f internals/$(DEPDIR)/spawn-oom.Po
+	-rm -f internals/$(DEPDIR)/strings.Po
+	-rm -f internals/$(DEPDIR)/sysdeps.Po
 	-rm -f internals/$(DEPDIR)/syslog.Po
+	-rm -f internals/$(DEPDIR)/userdb.Po
 	-rm -f internals/$(DEPDIR)/variant.Po
 	-rm -f Makefile
 distclean-am: clean-am distclean-compile distclean-generic \
@@ -2376,10 +3112,13 @@ install-ps-am:
 installcheck-am: installcheck-local
 
 maintainer-clean: maintainer-clean-recursive
-		-rm -f ./$(DEPDIR)/corrupt.Po
+		-rm -f ./$(DEPDIR)/containers.Po
+	-rm -f ./$(DEPDIR)/corrupt.Po
 	-rm -f ./$(DEPDIR)/dbus-daemon-eavesdrop.Po
 	-rm -f ./$(DEPDIR)/dbus-daemon.Po
+	-rm -f ./$(DEPDIR)/disable-crash-handling.Plo
 	-rm -f ./$(DEPDIR)/fdpass.Po
+	-rm -f ./$(DEPDIR)/header-fields.Po
 	-rm -f ./$(DEPDIR)/loopback.Po
 	-rm -f ./$(DEPDIR)/manual-authz.Po
 	-rm -f ./$(DEPDIR)/manual-backtrace.Po
@@ -2396,19 +3135,52 @@ maintainer-clean: maintainer-clean-recursive
 	-rm -f ./$(DEPDIR)/syntax.Po
 	-rm -f ./$(DEPDIR)/test-exit.Po
 	-rm -f ./$(DEPDIR)/test-names.Po
-	-rm -f ./$(DEPDIR)/test-segfault.Po
+	-rm -f ./$(DEPDIR)/test-privserver.Po
 	-rm -f ./$(DEPDIR)/test-service.Po
 	-rm -f ./$(DEPDIR)/test-shell-service.Po
 	-rm -f ./$(DEPDIR)/test-sleep-forever.Po
 	-rm -f ./$(DEPDIR)/test-utils-glib.Plo
 	-rm -f ./$(DEPDIR)/test-utils.Plo
 	-rm -f ./$(DEPDIR)/test_apparmor_activation-sd-activation.Po
+	-rm -f ./$(DEPDIR)/test_segfault-disable-crash-handling.Po
+	-rm -f ./$(DEPDIR)/test_segfault-test-segfault.Po
 	-rm -f ./$(DEPDIR)/thread-blocking.Po
 	-rm -f ./$(DEPDIR)/uid-permissions.Po
+	-rm -f bus/$(DEPDIR)/dispatch-sha1.Po
+	-rm -f bus/$(DEPDIR)/dispatch.Po
+	-rm -f bus/$(DEPDIR)/launch-helper-for-tests.Po
+	-rm -f bus/$(DEPDIR)/launch-helper-oom.Po
+	-rm -f bus/$(DEPDIR)/main.Po
+	-rm -f bus/$(DEPDIR)/system.Po
+	-rm -f internals/$(DEPDIR)/address.Po
+	-rm -f internals/$(DEPDIR)/assertions.Po
+	-rm -f internals/$(DEPDIR)/atomic.Po
+	-rm -f internals/$(DEPDIR)/counter.Po
+	-rm -f internals/$(DEPDIR)/dbus-auth-script.Po
+	-rm -f internals/$(DEPDIR)/dbus-auth-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-credentials-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-marshal-byteswap-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-marshal-recursive-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-marshal-validate-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-message-factory.Po
+	-rm -f internals/$(DEPDIR)/dbus-message-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-string-util.Po
+	-rm -f internals/$(DEPDIR)/dbus-sysdeps-util.Po
+	-rm -f internals/$(DEPDIR)/desktop-file.Po
+	-rm -f internals/$(DEPDIR)/hash.Po
+	-rm -f internals/$(DEPDIR)/marshal-recursive.Po
+	-rm -f internals/$(DEPDIR)/mempool.Po
+	-rm -f internals/$(DEPDIR)/message-internals.Po
+	-rm -f internals/$(DEPDIR)/misc-internals.Po
 	-rm -f internals/$(DEPDIR)/printf.Po
 	-rm -f internals/$(DEPDIR)/refs.Po
 	-rm -f internals/$(DEPDIR)/server-oom.Po
+	-rm -f internals/$(DEPDIR)/sha.Po
+	-rm -f internals/$(DEPDIR)/spawn-oom.Po
+	-rm -f internals/$(DEPDIR)/strings.Po
+	-rm -f internals/$(DEPDIR)/sysdeps.Po
 	-rm -f internals/$(DEPDIR)/syslog.Po
+	-rm -f internals/$(DEPDIR)/userdb.Po
 	-rm -f internals/$(DEPDIR)/variant.Po
 	-rm -f Makefile
 maintainer-clean-am: distclean-am maintainer-clean-generic
@@ -2457,14 +3229,6 @@ uninstall-am: uninstall-nobase_dist_testexecSCRIPTS \
 .PRECIOUS: Makefile
 
 
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@$(wrap_bus_tests): test-bus%.sh: ../bus/test-bus%$(EXEEXT) tap-test.sh.in Makefile
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	sed -e 's![@]RUN[@]!$<!' \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@		< $(srcdir)/tap-test.sh.in > $@
-
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@$(wrap_dbus_tests): test-dbus%.sh: ../dbus/test-dbus%$(EXEEXT) tap-test.sh.in Makefile
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@	sed -e 's![@]RUN[@]!$<!' \
-@DBUS_ENABLE_EMBEDDED_TESTS_TRUE@		< $(srcdir)/tap-test.sh.in > $@
-
 # If we're installing the tests into a DESTDIR we can't run them
 # again using the installed copy, because we don't know how to
 # do a portable equivalent of setting LD_LIBRARY_PATH.
@@ -2499,11 +3263,13 @@ uninstalled-config-local:
 	for F in $(in_data); do \
 		$(MKDIR_P) "$${F%/*}"; \
 		sed \
+			-e 's,[@]DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL[@],$(DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL),' \
+			-e 's,[@]DBUS_SESSION_BUS_LISTEN_ADDRESS[@],$(DBUS_SESSION_BUS_LISTEN_ADDRESS),' \
 			-e 's,[@]DBUS_TEST_DATA[@],@abs_builddir@/data,' \
 			-e 's,[@]DBUS_TEST_EXEC[@],@abs_builddir@,' \
 			-e 's,[@]DBUS_USER[@],$(DBUS_USER),' \
 			-e 's,[@]EXEEXT[@],$(EXEEXT),' \
-			-e 's,[@]TEST_LAUNCH_HELPER_BINARY[@],@abs_top_builddir@/bus/dbus-daemon-launch-helper-test$(EXEEXT),' \
+			-e 's,[@]TEST_LAUNCH_HELPER_BINARY[@],@abs_top_builddir@/test/dbus-daemon-launch-helper-for-tests$(EXEEXT),' \
 			-e 's,[@]TEST_LISTEN[@],$(TEST_LISTEN),' \
 			< $(srcdir)/"$$F" > "$${F%.in}"; \
 	done
@@ -2513,6 +3279,8 @@ installable-config-local:
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@	for F in $(in_data); do \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@		$(MKDIR_P) "installable/$${F%/*}"; \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@		sed \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@			-e 's,[@]DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL[@],$(DBUS_SESSION_CONF_MAYBE_AUTH_EXTERNAL),' \
+@DBUS_ENABLE_INSTALLED_TESTS_TRUE@			-e 's,[@]DBUS_SESSION_BUS_LISTEN_ADDRESS[@],$(DBUS_SESSION_BUS_LISTEN_ADDRESS),' \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@			-e 's,[@]DBUS_TEST_DATA[@],$(testexecdir)/data,' \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@			-e 's,[@]DBUS_TEST_EXEC[@],$(testexecdir),' \
 @DBUS_ENABLE_INSTALLED_TESTS_TRUE@			-e 's,[@]DBUS_USER[@],$(DBUS_USER),' \

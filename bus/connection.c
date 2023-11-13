@@ -4,7 +4,7 @@
  * Copyright (C) 2003  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -23,6 +23,8 @@
 
 #include <config.h>
 #include "connection.h"
+
+#include "containers.h"
 #include "dispatch.h"
 #include "policy.h"
 #include "services.h"
@@ -106,6 +108,7 @@ typedef struct
   long connection_tv_sec;  /**< Time when we connected (seconds component) */
   long connection_tv_usec; /**< Time when we connected (microsec component) */
   int stamp;               /**< connections->stamp last time we were traversed */
+  BusExtraHeaders want_headers;
 
 #ifdef DBUS_ENABLE_STATS
   int peak_match_rules;
@@ -305,6 +308,9 @@ bus_connection_disconnected (DBusConnection *connection)
       _dbus_list_remove_link (&d->connections->monitors, d->link_in_monitors);
       d->link_in_monitors = NULL;
     }
+
+  bus_containers_remove_connection (bus_context_get_containers (d->connections->context),
+                                    connection);
 
   if (d->link_in_connection_list != NULL)
     {
@@ -580,31 +586,48 @@ cache_peer_loginfo_string (BusConnectionData *d,
                            DBusConnection    *connection)
 {
   DBusString loginfo_buf;
-  unsigned long uid;
-  unsigned long pid;
-  char *windows_sid = NULL, *security_label = NULL;
+  dbus_uid_t uid = DBUS_UID_UNSET;
+  dbus_pid_t pid = DBUS_PID_UNSET;
+  const char *windows_sid = NULL;
+  const char *security_label = NULL;
   dbus_bool_t prev_added;
+  const char *container = NULL;
+  const char *container_type = NULL;
+  const char *container_name = NULL;
+  DBusCredentials *credentials;
 
   if (!_dbus_string_init (&loginfo_buf))
     return FALSE;
-  
+
+  credentials = _dbus_connection_get_credentials (connection);
+
   prev_added = FALSE;
-  if (dbus_connection_get_unix_user (connection, &uid))
+
+  if (credentials != NULL)
     {
-      if (!_dbus_string_append_printf (&loginfo_buf, "uid=%ld", uid))
+      uid = _dbus_credentials_get_unix_uid (credentials);
+      pid = _dbus_credentials_get_pid (credentials);
+      windows_sid = _dbus_credentials_get_windows_sid (credentials);
+      security_label = _dbus_credentials_get_linux_security_label (credentials);
+    }
+
+  if (uid != DBUS_UID_UNSET)
+    {
+      if (!_dbus_string_append_printf (&loginfo_buf, "uid=" DBUS_UID_FORMAT, uid))
         goto oom;
       else
         prev_added = TRUE;
     }
 
-  if (dbus_connection_get_unix_process_id (connection, &pid))
+  if (pid != DBUS_PID_UNSET)
     {
       if (prev_added)
         {
           if (!_dbus_string_append_byte (&loginfo_buf, ' '))
             goto oom;
         }
-      if (!_dbus_string_append_printf (&loginfo_buf, "pid=%ld comm=\"", pid))
+      if (!_dbus_string_append_printf (&loginfo_buf,
+                                       "pid=" DBUS_PID_FORMAT " comm=\"", pid))
         goto oom;
       /* Ignore errors here; we may not have permissions to read the
        * proc file. */
@@ -615,7 +638,7 @@ cache_peer_loginfo_string (BusConnectionData *d,
         prev_added = TRUE;
     }
 
-  if (dbus_connection_get_windows_user (connection, &windows_sid))
+  if (windows_sid != NULL)
     {
       dbus_bool_t did_append;
 
@@ -627,15 +650,13 @@ cache_peer_loginfo_string (BusConnectionData *d,
 
       did_append = _dbus_string_append_printf (&loginfo_buf,
                                                "sid=\"%s\"", windows_sid);
-      dbus_free (windows_sid);
-      windows_sid = NULL;
       if (!did_append)
         goto oom;
       else
         prev_added = TRUE;
     }
 
-  if (_dbus_connection_get_linux_security_label (connection, &security_label))
+  if (security_label != NULL)
     {
       dbus_bool_t did_append;
 
@@ -647,8 +668,30 @@ cache_peer_loginfo_string (BusConnectionData *d,
 
       did_append = _dbus_string_append_printf (&loginfo_buf,
                                                "label=\"%s\"", security_label);
-      dbus_free (security_label);
-      security_label = NULL;
+      if (!did_append)
+        goto oom;
+      else
+        prev_added = TRUE;
+    }
+
+  /* This does have to come from the connection, not the credentials */
+  if (bus_containers_connection_is_contained (connection, &container,
+                                              &container_type,
+                                              &container_name))
+    {
+      dbus_bool_t did_append;
+
+      if (prev_added)
+        {
+          if (!_dbus_string_append_byte (&loginfo_buf, ' '))
+            goto oom;
+        }
+
+      did_append = _dbus_string_append_printf (&loginfo_buf,
+                                               "container=%s %s=\"%s\")",
+                                               container,
+                                               container_type,
+                                               container_name);
       if (!did_append)
         goto oom;
       else
@@ -663,11 +706,6 @@ cache_peer_loginfo_string (BusConnectionData *d,
   return TRUE;
 oom:
    _dbus_string_free (&loginfo_buf);
-   if (security_label != NULL)
-     dbus_free (security_label);
-   if (windows_sid != NULL)
-     dbus_free (windows_sid);
-
    return FALSE;
 }
 
@@ -1002,14 +1040,46 @@ bus_connection_get_unix_groups  (DBusConnection   *connection,
                                  int              *n_groups,
                                  DBusError        *error)
 {
+  /* Assigning dbus_gid_t to unsigned long is lossless (in fact
+   * they are the same type) */
+  _DBUS_STATIC_ASSERT (sizeof (unsigned long) == sizeof (dbus_gid_t));
+
+  const dbus_gid_t *groups_borrowed = NULL;
+  DBusCredentials *credentials;
   unsigned long uid;
+  size_t n = 0;
 
   *groups = NULL;
   *n_groups = 0;
 
+  credentials = _dbus_connection_get_credentials (connection);
+
+  if (credentials != NULL &&
+      _dbus_credentials_get_unix_gids (credentials, &groups_borrowed, &n))
+    {
+      size_t i;
+
+      /* We got the group IDs from SO_PEERGROUPS or equivalent - no
+       * need to ask NSS */
+
+      *n_groups = n;
+      *groups = dbus_new (unsigned long, n);
+
+      if (*groups == NULL)
+        {
+          BUS_SET_OOM (error);
+          return FALSE;
+        }
+
+      for (i = 0; i < n; i++)
+        (*groups)[i] = groups_borrowed[i];
+
+      return TRUE;
+    }
+
   if (dbus_connection_get_unix_user (connection, &uid))
     {
-      if (!_dbus_unix_groups_from_uid (uid, groups, n_groups))
+      if (!_dbus_unix_groups_from_uid (uid, groups, n_groups, error))
         {
           _dbus_verbose ("Did not get any groups for UID %lu\n",
                          uid);
@@ -1077,92 +1147,6 @@ bus_connection_get_policy (DBusConnection *connection)
   _dbus_assert (d->policy != NULL);
   
   return d->policy;
-}
-
-static dbus_bool_t
-foreach_active (BusConnections               *connections,
-                BusConnectionForeachFunction  function,
-                void                         *data)
-{
-  DBusList *link;
-  
-  link = _dbus_list_get_first_link (&connections->completed);
-  while (link != NULL)
-    {
-      DBusConnection *connection = link->data;
-      DBusList *next = _dbus_list_get_next_link (&connections->completed, link);
-
-      if (!(* function) (connection, data))
-        return FALSE;
-      
-      link = next;
-    }
-
-  return TRUE;
-}
-
-static dbus_bool_t
-foreach_inactive (BusConnections               *connections,
-                  BusConnectionForeachFunction  function,
-                  void                         *data)
-{
-  DBusList *link;
-  
-  link = _dbus_list_get_first_link (&connections->incomplete);
-  while (link != NULL)
-    {
-      DBusConnection *connection = link->data;
-      DBusList *next = _dbus_list_get_next_link (&connections->incomplete, link);
-
-      if (!(* function) (connection, data))
-        return FALSE;
-      
-      link = next;
-    }
-
-  return TRUE;
-}
-
-/**
- * Calls function on each active connection; if the function returns
- * #FALSE, stops iterating. Active connections are authenticated
- * and have sent a Hello message.
- *
- * @param connections the connections object
- * @param function the function
- * @param data data to pass to it as a second arg
- */
-void
-bus_connections_foreach_active (BusConnections               *connections,
-                                BusConnectionForeachFunction  function,
-                                void                         *data)
-{
-  foreach_active (connections, function, data);
-}
-
-/**
- * Calls function on each connection; if the function returns
- * #FALSE, stops iterating.
- *
- * @param connections the connections object
- * @param function the function
- * @param data data to pass to it as a second arg
- */
-void
-bus_connections_foreach (BusConnections               *connections,
-                         BusConnectionForeachFunction  function,
-                         void                         *data)
-{
-  if (!foreach_active (connections, function, data))
-    return;
-
-  foreach_inactive (connections, function, data);
-}
-
-BusContext*
-bus_connections_get_context (BusConnections *connections)
-{
-  return connections->context;
 }
 
 /*
@@ -1463,6 +1447,46 @@ bus_connection_get_n_match_rules (DBusConnection *connection)
   return d->n_match_rules;
 }
 
+/**
+ * Checks whether the connection owns any name with a given prefix,
+ * regardless of whether the type of ownership is primary or queued.
+ *
+ * @note A name matches to a prefix if it is equal to the prefix,
+ * or if it starts with the prefix followed by a dot. This is the same
+ * rule as the 'own_prefix' checking rule.
+ *
+ * @param connection the connection
+ * @param name_prefix the prefix
+ * @returns #TRUE if the connection owns at least one name with the prefix,
+ * regardless of the type of ownership
+ */
+dbus_bool_t
+bus_connection_is_queued_owner_by_prefix (DBusConnection *connection,
+                                          const char *name_prefix)
+{
+  BusConnectionData *d;
+  DBusList *link;
+
+  d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert (d != NULL);
+
+  link = _dbus_list_get_first_link (&d->services_owned);
+  while (link != NULL)
+    {
+      BusService *service = link->data;
+      DBusString str;
+
+      _dbus_string_init_const (&str, bus_service_get_name (service));
+
+      if (_dbus_string_starts_with_words_c_str (&str, name_prefix, '.'))
+        return TRUE;
+
+      link = _dbus_list_get_next_link (&d->services_owned, link);
+    }
+
+  return FALSE;
+}
+
 void
 bus_connection_add_owned_service_link (DBusConnection *connection,
                                        DBusList       *link)
@@ -1560,6 +1584,7 @@ bus_connection_complete (DBusConnection   *connection,
 
   d->policy = bus_context_create_client_policy (d->connections->context,
                                                 connection,
+                                                NULL,
                                                 error);
 
   /* we may have a NULL policy on OOM or error getting list of
@@ -1636,22 +1661,27 @@ bus_connections_reload_policy (BusConnections *connections,
        link;
        link = _dbus_list_get_next_link (&(connections->completed), link))
     {
+      BusClientPolicy *policy;
+
       connection = link->data;
       d = BUS_CONNECTION_DATA (connection);
       _dbus_assert (d != NULL);
       _dbus_assert (d->policy != NULL);
 
-      bus_client_policy_unref (d->policy);
-      d->policy = bus_context_create_client_policy (connections->context,
-                                                    connection,
-                                                    error);
-      if (d->policy == NULL)
+      policy = bus_context_create_client_policy (connections->context,
+                                                 connection,
+                                                 d->policy,
+                                                 error);
+      if (policy == NULL)
         {
           _dbus_verbose ("Failed to create security policy for connection %p\n",
                       connection);
           _DBUS_ASSERT_ERROR_IS_SET (error);
           return FALSE;
         }
+
+      bus_client_policy_unref (d->policy);
+      d->policy = policy;
     }
 
   return TRUE;
@@ -2281,7 +2311,7 @@ bus_transaction_capture (BusTransaction *transaction,
     {
       DBusConnection *recipient = link->data;
 
-      if (!bus_transaction_send (transaction, recipient, message))
+      if (!bus_transaction_send (transaction, sender, recipient, message))
         goto out;
     }
 
@@ -2405,12 +2435,13 @@ bus_transaction_send_from_driver (BusTransaction *transaction,
       return TRUE;
     }
 
-  return bus_transaction_send (transaction, connection, message);
+  return bus_transaction_send (transaction, NULL, connection, message);
 }
 
 dbus_bool_t
 bus_transaction_send (BusTransaction *transaction,
-                      DBusConnection *connection,
+                      DBusConnection *sender,
+                      DBusConnection *destination,
                       DBusMessage    *message)
 {
   MessageToSend *to_send;
@@ -2427,24 +2458,44 @@ bus_transaction_send (BusTransaction *transaction,
                  dbus_message_get_member (message) : "(unset)",
                  dbus_message_get_error_name (message) ?
                  dbus_message_get_error_name (message) : "(unset)",
-                 dbus_connection_get_is_connected (connection) ?
+                 dbus_connection_get_is_connected (destination) ?
                  "" : " (disconnected)");
 
   _dbus_assert (dbus_message_get_sender (message) != NULL);
   
-  if (!dbus_connection_get_is_connected (connection))
-    return TRUE; /* silently ignore disconnected connections */
+  if (!dbus_connection_get_is_connected (destination))
+    return TRUE; /* silently ignore disconnected destinations */
   
-  d = BUS_CONNECTION_DATA (connection);
+  d = BUS_CONNECTION_DATA (destination);
   _dbus_assert (d != NULL);
-  
+
+  /* You might think that this is too late to be setting header fields,
+   * because the message is locked before sending - but remember that
+   * the message isn't actually queued to be sent (and hence locked)
+   * until we know we have enough memory for the entire transaction,
+   * and that doesn't happen until we know all the recipients.
+   * So this is about the last possible time we could edit the header. */
+  if ((d->want_headers & BUS_EXTRA_HEADERS_CONTAINER_INSTANCE) &&
+      dbus_message_get_container_instance (message) == NULL)
+    {
+      const char *path;
+
+      if (sender == NULL ||
+          !bus_containers_connection_is_contained (sender, &path,
+                                                   NULL, NULL))
+        path = "/";
+
+      if (!dbus_message_set_container_instance (message, path))
+        return FALSE;
+    }
+
   to_send = dbus_new (MessageToSend, 1);
   if (to_send == NULL)
     {
       return FALSE;
     }
 
-  to_send->preallocated = dbus_connection_preallocate_send (connection);
+  to_send->preallocated = dbus_connection_preallocate_send (destination);
   if (to_send->preallocated == NULL)
     {
       dbus_free (to_send);
@@ -2459,13 +2510,13 @@ bus_transaction_send (BusTransaction *transaction,
   
   if (!_dbus_list_prepend (&d->transaction_messages, to_send))
     {
-      message_to_send_free (connection, to_send);
+      message_to_send_free (destination, to_send);
       return FALSE;
     }
 
   _dbus_verbose ("prepended message\n");
   
-  /* See if we already had this connection in the list
+  /* See if we already had this destination in the list
    * for this transaction. If we have a pending message,
    * then we should already be in transaction->connections
    */
@@ -2485,10 +2536,10 @@ bus_transaction_send (BusTransaction *transaction,
 
   if (link == NULL)
     {
-      if (!_dbus_list_prepend (&transaction->connections, connection))
+      if (!_dbus_list_prepend (&transaction->connections, destination))
         {
           _dbus_list_remove (&d->transaction_messages, to_send);
-          message_to_send_free (connection, to_send);
+          message_to_send_free (destination, to_send);
           return FALSE;
         }
     }
@@ -2896,4 +2947,16 @@ bus_connection_be_monitor (DBusConnection  *connection,
   bus_connection_drop_pending_replies (d->connections, connection);
 
   return TRUE;
+}
+
+void
+bus_connection_request_headers (DBusConnection  *connection,
+                                BusExtraHeaders  headers)
+{
+  BusConnectionData *d;
+
+  d = BUS_CONNECTION_DATA (connection);
+  _dbus_assert (d != NULL);
+
+  d->want_headers |= headers;
 }

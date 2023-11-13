@@ -143,11 +143,12 @@ void        _dbus_group_info_free     (DBusGroupInfo    *info);
 DBUS_PRIVATE_EXPORT
 dbus_uid_t    _dbus_geteuid (void);
 
-dbus_bool_t _dbus_parse_uid (const DBusString  *uid_str,
-                             dbus_uid_t        *uid);
-
 DBUS_PRIVATE_EXPORT
 void _dbus_close_all (void);
+DBUS_PRIVATE_EXPORT
+void _dbus_fd_set_all_close_on_exec (void);
+DBUS_PRIVATE_EXPORT
+void _dbus_fd_clear_close_on_exec (int fd);
 
 dbus_bool_t _dbus_append_address_from_socket (DBusSocket  fd,
                                               DBusString *address,

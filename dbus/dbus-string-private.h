@@ -1,10 +1,10 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* dbus-string-private.h String utility class (internal to D-Bus implementation)
- * 
+ *
  * Copyright (C) 2002, 2003  Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -47,7 +47,7 @@ typedef struct
   int            allocated;      /**< Allocated size of data */
   unsigned int   constant : 1;   /**< String data is not owned by DBusString */
   unsigned int   locked : 1;     /**< DBusString has been locked and can't be changed */
-  unsigned int   invalid : 1;    /**< DBusString is invalid (e.g. already freed) */
+  unsigned int   valid : 1;      /**< DBusString is valid (initialized and not freed) */
   unsigned int   align_offset : 3; /**< str - align_offset is the actual malloc block */
 } DBusRealString;
 
@@ -77,7 +77,7 @@ _DBUS_STATIC_ASSERT (sizeof (DBusRealString) == sizeof (DBusString));
   do { \
       (void) real; /* might be unused unless asserting */ \
       _dbus_assert ((real) != NULL); \
-      _dbus_assert (!(real)->invalid); \
+      _dbus_assert ((real)->valid); \
       _dbus_assert ((real)->len >= 0); \
       _dbus_assert ((real)->allocated >= 0); \
       _dbus_assert ((real)->len <= ((real)->allocated - _DBUS_STRING_ALLOCATION_PADDING)); \

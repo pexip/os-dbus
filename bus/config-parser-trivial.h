@@ -4,7 +4,7 @@
  * Copyright (C) 2003 Red Hat, Inc.
  *
  * Licensed under the Academic Free License version 2.1
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -14,7 +14,7 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
@@ -39,9 +39,6 @@ BusConfigParser* bus_config_parser_new (const DBusString      *basedir,
 
 BusConfigParser* bus_config_parser_ref           (BusConfigParser   *parser);
 void             bus_config_parser_unref         (BusConfigParser   *parser);
-dbus_bool_t      bus_config_parser_check_doctype (BusConfigParser   *parser,
-                                                  const char        *doctype,
-                                                  DBusError         *error);
 dbus_bool_t      bus_config_parser_start_element (BusConfigParser   *parser,
                                                   const char        *element_name,
                                                   const char       **attribute_names,

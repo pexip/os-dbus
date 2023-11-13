@@ -17,6 +17,7 @@ AM_CPPFLAGS = \
 
 AM_CFLAGS = \
 	$(CODE_COVERAGE_CFLAGS) \
+	$(SANITIZE_CFLAGS) \
 	$(NULL)
 
 if HAVE_VISIBILITY
@@ -84,8 +85,12 @@ DBUS_SHARED_arch_sources = 			\
 	dbus-transport-win.h
 
 DBUS_UTIL_arch_sources =			\
-	dbus-sysdeps-util-win.c			\
-	dbus-spawn-win.c
+	dbus-sysdeps-util-win.c
+
+if ENABLE_TRADITIONAL_ACTIVATION
+DBUS_UTIL_arch_sources += dbus-spawn-win.c
+endif
+
 else
 
 if DBUS_ENABLE_LAUNCHD
@@ -116,11 +121,15 @@ DBUS_SHARED_arch_sources = 			\
 DBUS_UTIL_arch_sources = 			\
 	dbus-sysdeps-util-unix.c		\
 	dbus-userdb-util.c			\
-	dbus-spawn.c
+	$(NULL)
+
+if ENABLE_TRADITIONAL_ACTIVATION
+DBUS_UTIL_arch_sources += dbus-spawn-unix.c
+endif
 endif
 
-if HAVE_LINUX_EPOLL
-DBUS_UTIL_arch_sources += dbus-socket-set-epoll.c
+if DBUS_HAVE_LINUX_EPOLL
+DBUS_UTIL_arch_sources += dbus-pollable-set-epoll.c
 endif
 
 dbusinclude_HEADERS=				\
@@ -233,6 +242,14 @@ DBUS_SHARED_SOURCES=				\
 	dbus-sysdeps.h				\
 	dbus-valgrind-internal.h
 
+if DBUS_ENABLE_EMBEDDED_TESTS
+DBUS_SHARED_SOURCES += \
+	dbus-test-tap.c \
+	dbus-test-tap.h \
+	$(NULL)
+# else they are included in the test library instead
+endif
+
 ### source code that is generic utility functionality used
 ### by the bus daemon or test apps, but is NOT included
 ### in the D-Bus client library (all symbols in here
@@ -241,33 +258,19 @@ DBUS_SHARED_SOURCES=				\
 DBUS_UTIL_SOURCES=				\
 	dbus-asv-util.c				\
 	dbus-asv-util.h				\
-	dbus-auth-script.c			\
-	dbus-auth-script.h			\
-	dbus-auth-util.c			\
-	dbus-credentials-util.c			\
 	dbus-mainloop.c				\
 	dbus-mainloop.h				\
-	dbus-marshal-byteswap-util.c		\
-	dbus-marshal-recursive-util.c		\
-	dbus-marshal-validate-util.c		\
-	dbus-message-factory.c			\
-	dbus-message-factory.h			\
 	dbus-message-util.c			\
 	dbus-shell.c				\
 	dbus-shell.h				\
 	$(DBUS_UTIL_arch_sources)		\
-	dbus-socket-set.h			\
-	dbus-socket-set.c			\
-	dbus-socket-set-poll.c			\
+	dbus-pollable-set.h			\
+	dbus-pollable-set.c			\
+	dbus-pollable-set-poll.c			\
 	dbus-spawn.h				\
 	dbus-string-util.c			\
 	dbus-sysdeps-util.c			\
-	dbus-test.c				\
 	dbus-test.h
-
-if DBUS_ENABLE_EMBEDDED_TESTS
-DBUS_UTIL_SOURCES += dbus-spawn-test.c
-endif
 
 libdbus_1_la_SOURCES=				\
 	$(DBUS_LIB_SOURCES)			\
@@ -292,7 +295,10 @@ else
 SYMBOL_EXPORT_LDFLAGS=
 endif
 
-libdbus_1_la_LIBADD= $(LIBDBUS_LIBS)
+libdbus_1_la_LIBADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(LIBDBUS_LIBS) \
+	$(NULL)
 libdbus_1_la_LDFLAGS = \
 	$(AM_LDFLAGS) \
 	-version-info $(LT_CURRENT):$(LT_REVISION):$(LT_AGE) \
@@ -300,7 +306,11 @@ libdbus_1_la_LDFLAGS = \
 	-no-undefined \
 	$(NULL)
 
-libdbus_internal_la_LIBADD=$(LIBDBUS_LIBS) libdbus-1.la
+libdbus_internal_la_LIBADD = \
+	$(CODE_COVERAGE_LIBS) \
+	$(LIBDBUS_LIBS) \
+	libdbus-1.la \
+	$(NULL)
 
 if DBUS_WIN
 AM_CXXFLAGS = \
@@ -317,16 +327,6 @@ libdbus_1_la_LIBADD += libdbus-init-win.la
 endif
 
 noinst_PROGRAMS =
-
-if DBUS_ENABLE_EMBEDDED_TESTS
-# We can't actually run this til we've reached test/
-noinst_PROGRAMS += test-dbus
-endif
-
-test_dbus_SOURCES=				\
-	dbus-test-main.c
-
-test_dbus_LDADD = libdbus-internal.la
 
 # Add rules for code-coverage testing, as defined by AX_CODE_COVERAGE
 include $(top_srcdir)/aminclude_static.am

@@ -198,6 +198,9 @@ static void
 setup (Fixture *f,
     gconstpointer data)
 {
+#ifdef DBUS_WIN
+  const char *dbus_test_slow = NULL;
+#endif
   if (!dbus_threads_init_default ())
     g_error ("OOM");
 
@@ -207,17 +210,21 @@ setup (Fixture *f,
   f->n_threads = N_THREADS;
   f->n_refs = N_REFS;
 
-  // wine sets WINESERVERSOCKET for its child processes automatically
-  if (g_getenv ("WINESERVERSOCKET") != NULL)
+#ifdef DBUS_WIN
+  dbus_test_slow = g_getenv ("DBUS_TEST_SLOW");
+
+  if (dbus_test_slow == NULL || atoi (dbus_test_slow) < 1)
     {
       /* Our reference-counting is really slow under Wine (it involves
-       * IPC to wineserver). Do fewer iterations: enough to demonstrate
-       * that it works, rather than a performance test.
+       * IPC to wineserver) or Windows 7 guest on VirtualBox (5.22).
+       * Do fewer iterations:  enough to demonstrate that it works,
+       * rather than seriously trying to reproduce race conditions.
        */
-      f->n_threads = 10;
-      f->n_refs = 10;
+      f->n_threads = 100;
+      f->n_refs = 1000;
+      g_info ("reducing number of threads/refs to %d/%d", f->n_threads, f->n_refs);
     }
-
+#endif
   f->loop = _dbus_loop_new ();
   g_assert (f->loop != NULL);
 
@@ -256,8 +263,7 @@ setup_connection (Fixture *f,
   dbus_server_set_new_connection_function (f->server,
       new_conn_cb, f, NULL);
 
-  if (!test_server_setup (f->loop, f->server))
-    g_error ("failed to set up server");
+  test_server_setup (f->loop, f->server);
 
   address = dbus_server_get_address (f->server);
   g_assert (address != NULL);
@@ -266,8 +272,7 @@ setup_connection (Fixture *f,
   g_assert (f->connection != NULL);
   dbus_free (address);
 
-  if (!test_connection_setup (f->loop, f->connection))
-    g_error ("failed to set up connection");
+  test_connection_setup (f->loop, f->connection);
 
   while (f->server_connection == NULL)
     _dbus_loop_iterate (f->loop, TRUE);
@@ -343,6 +348,7 @@ test_connection (Fixture *f,
 
   /* Destroy the connection. This should be the last-unref. */
   g_assert (!f->last_unref);
+  test_connection_shutdown (f->loop, f->connection);
   dbus_connection_close (f->connection);
   dbus_connection_unref (f->connection);
   f->connection = NULL;
@@ -426,7 +432,7 @@ test_server (Fixture *f,
 
   /* Destroy the server. This should be the last-unref. */
   g_assert (!f->last_unref);
-  dbus_server_disconnect (f->server);
+  test_server_shutdown (f->loop, f->server);
   dbus_server_unref (f->server);
   f->server = NULL;
   g_assert (f->last_unref);
@@ -595,12 +601,14 @@ teardown (Fixture *f,
 {
   if (f->server_connection != NULL)
     {
+      test_connection_shutdown (f->loop, f->server_connection);
       dbus_connection_close (f->server_connection);
       dbus_connection_unref (f->server_connection);
     }
 
   if (f->connection != NULL)
     {
+      test_connection_shutdown (f->loop, f->connection);
       dbus_connection_close (f->connection);
       dbus_connection_unref (f->connection);
     }
@@ -624,6 +632,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   g_test_add ("/refs/connection", Fixture, NULL, setup_connection,
@@ -635,5 +645,7 @@ main (int argc,
   g_test_add ("/refs/server", Fixture, NULL, setup,
       test_server, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

@@ -25,6 +25,14 @@ dist_dtd_DATA = \
 	busconfig.dtd \
 	introspect.dtd
 
+xmlcatalogdir = $(dtddir)
+
+catalog.xml: catalog.xml.in
+	$(SED) "s|@DBUS_DTD_DIR@|$(dtddir)|" $< >$@
+
+xmlcatalog_DATA = \
+	catalog.xml
+
 dist_doc_DATA = system-activation.txt
 
 # uploaded and distributed, but not installed
@@ -38,6 +46,7 @@ STATIC_DOCS = \
 	introspect.xsl
 
 EXTRA_DIST = \
+	catalog.xml.in \
 	file-boilerplate.c \
 	doxygen_to_devhelp.xsl \
 	$(STATIC_DOCS)
@@ -119,6 +128,10 @@ endif
 install-data-local:: doxygen.stamp
 	$(MKDIR_P) $(DESTDIR)$(apidir)
 	$(INSTALL_DATA) api/html/* $(DESTDIR)$(apidir)
+if DBUS_QTHELP_DOCS_ENABLED
+	$(MKDIR_P) $(DESTDIR)$(qchdir)
+	$(INSTALL_DATA) $(DOXYGEN_QCH_FILE) $(DESTDIR)$(qchdir)
+endif
 if DBUS_DUCKTYPE_DOCS_ENABLED
 	$(AM_V_at)for x in $(YELP_STATIC_HTML); do \
 		if test -e "$$x"; then \
@@ -139,6 +152,8 @@ uninstall-local::
 	rm -f $(DESTDIR)$(docdir)/*.txt
 	rm -f $(DESTDIR)$(htmldir)/*.png
 	rm -f $(DESTDIR)$(htmldir)/*.svg
+	rm -f $(DESTDIR)$(apidir)/*.qhp
+	rm -f $(DESTDIR)$(qchdir)/dbus-*.qch
 	rmdir --ignore-fail-on-non-empty $(DESTDIR)$(apidir) || \
 		rmdir $(DESTDIR)$(apidir)
 endif
@@ -150,7 +165,7 @@ BONUS_FILES = \
 	$(top_srcdir)/AUTHORS \
 	$(top_srcdir)/NEWS \
 	$(top_srcdir)/COPYING \
-	$(top_srcdir)/ChangeLog
+	$(NULL)
 
 dbus-docs: $(STATIC_DOCS) $(dist_dtd_DATA) $(MAN_XML_FILES) $(dist_doc_DATA) $(dist_html_DATA) $(MAN_HTML_FILES) $(BONUS_FILES) doxygen.stamp $(XMLTO_HTML) $(YELP_HTML)
 	$(AM_V_at)rm -rf $@ $@.tmp
@@ -172,8 +187,8 @@ dbus-docs: $(STATIC_DOCS) $(dist_dtd_DATA) $(MAN_XML_FILES) $(dist_doc_DATA) $(d
 	$(AM_V_at)cp -r api/html @abs_builddir@/$@.tmp/api
 	$(AM_V_at)mv $@.tmp $@
 
-dbus-docs.tar.gz: dbus-docs
-	$(AM_V_GEN)tar czf $@ $<
+dbus-docs.tar.xz: dbus-docs
+	$(AM_V_GEN)tar --xz -c -f $@ $<
 
 DOC_SERVER = dbus.freedesktop.org
 DOC_WWW_DIR = /srv/dbus.freedesktop.org/www
@@ -181,8 +196,8 @@ DOC_WWW_DIR = /srv/dbus.freedesktop.org/www
 SPECIFICATION_SERVER = specifications.freedesktop.org
 SPECIFICATION_PATH = /srv/specifications.freedesktop.org/www/dbus/1.0
 
-maintainer-upload-docs: dbus-docs.tar.gz dbus-docs
-	scp dbus-docs.tar.gz $(DOC_SERVER):$(DOC_WWW_DIR)/
+maintainer-upload-docs: dbus-docs.tar.xz dbus-docs
+	scp dbus-docs.tar.xz $(DOC_SERVER):$(DOC_WWW_DIR)/
 	rsync -rpvzP --chmod=Dg+s,ug+rwX,o=rX \
 		dbus-docs/ $(DOC_SERVER):$(DOC_WWW_DIR)/doc/
 	cd $(srcdir) && scp -p $(dist_dtd_DATA) $(SPECIFICATION_SERVER):$(SPECIFICATION_PATH)/
@@ -196,6 +211,7 @@ endif
 CLEANFILES = \
 	$(man1_MANS) \
 	$(MAN_XML_FILES) \
+	$(xmlcatalog_DATA) \
 	$(XMLTO_HTML) \
 	$(YELP_HTML) \
 	$(YELP_STATIC_HTML) \

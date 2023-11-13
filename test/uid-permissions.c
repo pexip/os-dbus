@@ -29,6 +29,8 @@
 
 #include "test-utils-glib.h"
 
+#include <gio/gio.h>
+
 typedef struct {
     gboolean skip;
 
@@ -69,12 +71,18 @@ setup (Fixture *f,
       return;
     }
 
-  f->conn = test_connect_to_bus_as_user (f->ctx, address,
-      config ? config->user : TEST_USER_ME);
+  f->conn = test_try_connect_to_bus_as_user (f->ctx, address,
+      config ? config->user : TEST_USER_ME, &f->ge);
 
-  if (f->conn == NULL)
-    f->skip = TRUE;
+  if (f->conn == NULL &&
+      g_error_matches (f->ge, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED))
+    {
+      g_test_skip (f->ge->message);
+      g_clear_error (&f->ge);
+      f->skip = TRUE;
+    }
 
+  g_assert_no_error (f->ge);
   g_free (address);
 }
 
@@ -83,8 +91,8 @@ test_uae (Fixture *f,
     gconstpointer context)
 {
   const Config *config = context;
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
 
@@ -105,39 +113,26 @@ test_uae (Fixture *f,
       !dbus_message_iter_close_container (&args_iter, &arr_iter))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  dbus_message_unref (m);
-  m = NULL;
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (config->expect_success)
     {
       /* it succeeds */
-      g_assert_cmpint (dbus_message_get_type (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==,
           DBUS_MESSAGE_TYPE_METHOD_RETURN);
     }
   else
     {
       /* it fails, yielding an error message with one string argument */
-      g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-      g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
           DBUS_ERROR_ACCESS_DENIED);
-      g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+      g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
     }
 
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
 static void
@@ -145,8 +140,8 @@ test_monitor (Fixture *f,
     gconstpointer context)
 {
   const Config *config = context;
-  DBusMessage *m;
-  DBusPendingCall *pc;
+  DBusMessage *m = NULL;
+  DBusMessage *reply = NULL;
   DBusMessageIter args_iter;
   DBusMessageIter arr_iter;
   dbus_uint32_t no_flags = 0;
@@ -170,41 +165,33 @@ test_monitor (Fixture *f,
         DBUS_TYPE_UINT32, &no_flags))
     g_error ("OOM");
 
-  if (!dbus_connection_send_with_reply (f->conn, m, &pc,
-                                        DBUS_TIMEOUT_USE_DEFAULT) ||
-      pc == NULL)
-    g_error ("OOM");
-
-  dbus_message_unref (m);
-  m = NULL;
-
-  if (dbus_pending_call_get_completed (pc))
-    test_pending_call_store_reply (pc, &m);
-  else if (!dbus_pending_call_set_notify (pc, test_pending_call_store_reply,
-                                          &m, NULL))
-    g_error ("OOM");
-
-  while (m == NULL)
-    test_main_context_iterate (f->ctx, TRUE);
+  reply = test_main_context_call_and_wait (f->ctx, f->conn, m,
+      DBUS_TIMEOUT_USE_DEFAULT);
 
   if (config->expect_success)
     {
       /* it succeeds */
-      g_assert_cmpint (dbus_message_get_type (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==,
           DBUS_MESSAGE_TYPE_METHOD_RETURN);
     }
   else
     {
       /* it fails, yielding an error message with one string argument */
-      g_assert_cmpint (dbus_message_get_type (m), ==, DBUS_MESSAGE_TYPE_ERROR);
-      g_assert_cmpstr (dbus_message_get_error_name (m), ==,
+      g_assert_cmpint (dbus_message_get_type (reply), ==, DBUS_MESSAGE_TYPE_ERROR);
+      g_assert_cmpstr (dbus_message_get_error_name (reply), ==,
           DBUS_ERROR_ACCESS_DENIED);
-      g_assert_cmpstr (dbus_message_get_signature (m), ==, "s");
+      g_assert_cmpstr (dbus_message_get_signature (reply), ==, "s");
     }
 
-  dbus_message_unref (m);
+  dbus_clear_message (&reply);
+  dbus_clear_message (&m);
 }
 
+/*
+ * Assert that AddServer() can be called by the owner of the bus
+ * (TEST_USER_MESSAGEBUS) or by root, but cannot be called by other
+ * users for now.
+ */
 static void
 teardown (Fixture *f,
     gconstpointer context G_GNUC_UNUSED)
@@ -214,6 +201,7 @@ teardown (Fixture *f,
 
   if (f->conn != NULL)
     {
+      test_connection_shutdown (f->ctx, f->conn);
       dbus_connection_close (f->conn);
       dbus_connection_unref (f->conn);
       f->conn = NULL;
@@ -251,6 +239,8 @@ int
 main (int argc,
     char **argv)
 {
+  int ret;
+
   test_init (&argc, &argv);
 
   /* UpdateActivationEnvironment used to be allowed by dbus-daemon for root
@@ -270,5 +260,7 @@ main (int argc,
   g_test_add ("/uid-permissions/monitor/other", Fixture, &other_fail_config,
       setup, test_monitor, teardown);
 
-  return g_test_run ();
+  ret = g_test_run ();
+  dbus_shutdown ();
+  return ret;
 }

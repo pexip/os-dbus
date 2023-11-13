@@ -1,7 +1,9 @@
 /* -*- mode: C; c-file-style: "gnu"; indent-tabs-mode: nil; -*- */
 /* test.c  unit test routines
  *
- * Copyright (C) 2003 Red Hat, Inc.
+ * Copyright 2003-2004 Red Hat, Inc.
+ * Copyright 2011 Collabora Ltd.
+ * Copyright 2018 Laurent Bigonville
  *
  * Licensed under the Academic Free License version 2.1
  *
@@ -28,6 +30,8 @@
 #include <dbus/dbus-internals.h>
 #include <dbus/dbus-list.h>
 #include <dbus/dbus-sysdeps.h>
+#include <dbus/dbus-test-tap.h>
+#include "selinux.h"
 
 /* The "debug client" watch/timeout handlers don't dispatch messages,
  * as we manually pull them in order to verify them. This is why they
@@ -292,7 +296,7 @@ bus_context_new_test (const DBusString *test_data_dir,
     }
 
   dbus_error_init (&error);
-  context = bus_context_new (&config_file, BUS_CONTEXT_FLAG_NONE, NULL, NULL, NULL, &error);
+  context = bus_context_new (&config_file, BUS_CONTEXT_FLAG_NONE, NULL, NULL, NULL, NULL, &error);
   if (context == NULL)
     {
       _DBUS_ASSERT_ERROR_IS_SET (&error);
@@ -306,6 +310,13 @@ bus_context_new_test (const DBusString *test_data_dir,
 
       return NULL;
     }
+
+    if (_dbus_getenv ("DBUS_TEST_SELINUX")
+      && (!bus_selinux_pre_init ()
+	  || !bus_selinux_full_init (context, &error)))
+    _dbus_test_fatal ("Could not init selinux support");
+
+  dbus_error_free (&error);
 
   _dbus_string_free (&config_file);
 

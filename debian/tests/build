@@ -10,6 +10,12 @@ fi
 
 cd "$AUTOPKGTEST_TMP"
 
+if [ -n "${DEB_HOST_GNU_TYPE:-}" ]; then
+    CROSS_COMPILE="$DEB_HOST_GNU_TYPE-"
+else
+    CROSS_COMPILE=
+fi
+
 echo "1..1"
 
 cat > connect.c <<'EOF'
@@ -40,7 +46,7 @@ EOF
 # We don't exercise static linking because libsystemd is not available
 # as a static library.
 
-gcc -o connect connect.c $(pkg-config --cflags --libs dbus-1)
+${CROSS_COMPILE}gcc -o connect connect.c $(${CROSS_COMPILE}pkg-config --cflags --libs dbus-1)
 test -x connect
 dbus-run-session -- ./connect
 echo "# everything seems OK"

@@ -29,6 +29,8 @@
 
 #include "activation.h"
 #include "connection.h"
+#include "containers.h"
+#include "dispatch.h"
 #include "services.h"
 #include "utils.h"
 #include "policy.h"
@@ -69,11 +71,15 @@ struct BusContext
   BusMatchmaker *matchmaker;
   BusLimits limits;
   DBusRLimit *initial_fd_limit;
+  BusContainers *containers;
   unsigned int fork : 1;
   unsigned int syslog : 1;
   unsigned int keep_umask : 1;
   unsigned int allow_anonymous : 1;
   unsigned int systemd_activation : 1;
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+  unsigned int quiet_log : 1;
+#endif
   dbus_bool_t watches_enabled;
 };
 
@@ -97,7 +103,8 @@ server_get_context (DBusServer *server)
 
   bd = BUS_SERVER_DATA (server);
 
-  /* every DBusServer in the dbus-daemon has gone through setup_server() */
+  /* every DBusServer in the dbus-daemon's main loop has gone through
+   * bus_context_setup_server() */
   _dbus_assert (bd != NULL);
 
   context = bd->context;
@@ -170,8 +177,14 @@ new_connection_callback (DBusServer     *server,
                          DBusConnection *new_connection,
                          void           *data)
 {
-  BusContext *context = data;
+  /* If this fails it logs a warning, so we don't need to do that */
+  bus_context_add_incoming_connection (data, new_connection);
+}
 
+dbus_bool_t
+bus_context_add_incoming_connection (BusContext *context,
+                                     DBusConnection *new_connection)
+{
   /* If this fails it logs a warning, so we don't need to do that */
   if (!bus_connections_setup_connection (context->connections, new_connection))
     {
@@ -181,6 +194,8 @@ new_connection_callback (DBusServer     *server,
        * in general.
        */
       dbus_connection_close (new_connection);
+      /* on OOM, we won't have ref'd the connection so it will die. */
+      return FALSE;
     }
 
   dbus_connection_set_max_received_size (new_connection,
@@ -198,7 +213,7 @@ new_connection_callback (DBusServer     *server,
   dbus_connection_set_allow_anonymous (new_connection,
                                        context->allow_anonymous);
 
-  /* on OOM, we won't have ref'd the connection so it will die. */
+  return TRUE;
 }
 
 static void
@@ -215,6 +230,25 @@ setup_server (BusContext *context,
               char      **auth_mechanisms,
               DBusError  *error)
 {
+  if (!bus_context_setup_server (context, server, error))
+    return FALSE;
+
+  if (!dbus_server_set_auth_mechanisms (server, (const char**) auth_mechanisms))
+    {
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  dbus_server_set_new_connection_function (server, new_connection_callback,
+                                           context, NULL);
+  return TRUE;
+}
+
+dbus_bool_t
+bus_context_setup_server (BusContext                 *context,
+                          DBusServer                 *server,
+                          DBusError                  *error)
+{
   BusServerData *bd;
 
   bd = dbus_new0 (BusServerData, 1);
@@ -228,16 +262,6 @@ setup_server (BusContext *context,
     }
 
   bd->context = context;
-
-  if (!dbus_server_set_auth_mechanisms (server, (const char**) auth_mechanisms))
-    {
-      BUS_SET_OOM (error);
-      return FALSE;
-    }
-
-  dbus_server_set_new_connection_function (server,
-                                           new_connection_callback,
-                                           context, NULL);
 
   if (!dbus_server_set_watch_functions (server,
                                         add_server_watch,
@@ -741,11 +765,13 @@ process_config_postinit (BusContext      *context,
   return TRUE;
 }
 
+/* Takes ownership of print_addr_pipe fds, print_pid_pipe fds and ready_event_handle */
 BusContext*
 bus_context_new (const DBusString *config_file,
                  BusContextFlags   flags,
                  DBusPipe         *print_addr_pipe,
                  DBusPipe         *print_pid_pipe,
+                 void             *ready_event_handle,
                  const DBusString *address,
                  DBusError        *error)
 {
@@ -868,6 +894,17 @@ bus_context_new (const DBusString *config_file,
       _dbus_string_free (&addr);
     }
 
+#ifdef DBUS_WIN
+  if (ready_event_handle != NULL)
+    {
+      _dbus_verbose ("Notifying that we are ready to receive connections (event handle=%p)\n", ready_event_handle);
+      if (!_dbus_win_event_set (ready_event_handle, error))
+        goto failed;
+      if (!_dbus_win_event_free (ready_event_handle, error))
+        goto failed;
+    }
+#endif
+
   context->connections = bus_connections_new (context);
   if (context->connections == NULL)
     {
@@ -877,6 +914,14 @@ bus_context_new (const DBusString *config_file,
 
   context->matchmaker = bus_matchmaker_new ();
   if (context->matchmaker == NULL)
+    {
+      BUS_SET_OOM (error);
+      goto failed;
+    }
+
+  context->containers = bus_containers_new ();
+
+  if (context->containers == NULL)
     {
       BUS_SET_OOM (error);
       goto failed;
@@ -964,18 +1009,23 @@ bus_context_new (const DBusString *config_file,
    */
   bus_audit_init (context);
 
-  if (!bus_selinux_full_init ())
+  if (!bus_selinux_full_init (context, error))
     {
-      bus_context_log (context, DBUS_SYSTEM_LOG_ERROR,
-                       "SELinux enabled but D-Bus initialization failed; "
-                       "check system log");
-      exit (1);
+      _DBUS_ASSERT_ERROR_IS_SET (error);
+      goto failed;
     }
 
   if (!bus_apparmor_full_init (error))
     {
       _DBUS_ASSERT_ERROR_IS_SET (error);
       goto failed;
+    }
+
+  if (bus_selinux_enabled ())
+    {
+      if (context->syslog)
+        bus_context_log (context, DBUS_SYSTEM_LOG_INFO,
+                         "SELinux support is enabled\n");
     }
 
   if (bus_apparmor_enabled ())
@@ -1026,6 +1076,66 @@ bus_context_get_id (BusContext       *context,
   return _dbus_uuid_encode (&context->uuid, uuid);
 }
 
+/**
+ * Send signal to the buses that the activatable services may be changed
+ *
+ * @param context bus context to use
+ * @param error the error to set, if NULL no error will be set
+ * @return #FALSE if an error occurred, the reason is returned in \p error
+ */
+static dbus_bool_t
+bus_context_send_activatable_services_changed (BusContext *context,
+                                               DBusError  *error)
+{
+  DBusMessage *message;
+  BusTransaction *transaction;
+  dbus_bool_t retval = FALSE;
+
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  transaction = bus_transaction_new (context);
+  if (transaction == NULL)
+    {
+      BUS_SET_OOM (error);
+      return FALSE;
+    }
+
+  message = dbus_message_new_signal (DBUS_PATH_DBUS,
+                                     DBUS_INTERFACE_DBUS,
+                                     "ActivatableServicesChanged");
+
+  if (message == NULL)
+    {
+      BUS_SET_OOM (error);
+      goto out;
+    }
+
+  if (!dbus_message_set_sender (message, DBUS_SERVICE_DBUS))
+    {
+      BUS_SET_OOM (error);
+      goto out;
+    }
+
+  if (!bus_transaction_capture (transaction, NULL, NULL, message))
+    {
+      BUS_SET_OOM (error);
+      goto out;
+    }
+
+  retval = bus_dispatch_matches (transaction, NULL, NULL, message, error);
+
+out:
+  if (transaction != NULL)
+    {
+      if (retval)
+        bus_transaction_execute_and_free (transaction);
+      else
+        bus_transaction_cancel_and_free (transaction);
+    }
+  dbus_clear_message (&message);
+  return retval;
+}
+
 dbus_bool_t
 bus_context_reload_config (BusContext *context,
 			   DBusError  *error)
@@ -1033,6 +1143,8 @@ bus_context_reload_config (BusContext *context,
   BusConfigParser *parser;
   DBusString config_file;
   dbus_bool_t ret;
+
+  _dbus_daemon_report_reloading ();
 
   /* Flush the user database cache */
   _dbus_flush_caches ();
@@ -1064,6 +1176,17 @@ bus_context_reload_config (BusContext *context,
     bus_context_log (context, DBUS_SYSTEM_LOG_INFO, "Unable to reload configuration: %s", error->message);
   if (parser != NULL)
     bus_config_parser_unref (parser);
+
+  {
+    DBusError local_error = DBUS_ERROR_INIT;
+
+    if (!bus_context_send_activatable_services_changed (context, &local_error))
+      bus_context_log (context, DBUS_SYSTEM_LOG_INFO, "Unable to send signal that configuration has been reloaded: %s", local_error.message);
+
+    dbus_error_free (&local_error);
+  }
+
+  _dbus_daemon_report_reloaded ();
   return ret;
 }
 
@@ -1102,6 +1225,9 @@ bus_context_shutdown (BusContext  *context)
 
       link = _dbus_list_get_next_link (&context->servers, link);
     }
+
+  if (context->containers != NULL)
+    bus_containers_stop_listening (context->containers);
 }
 
 BusContext *
@@ -1172,6 +1298,7 @@ bus_context_unref (BusContext *context)
           context->matchmaker = NULL;
         }
 
+      bus_clear_containers (&context->containers);
       dbus_free (context->config_file);
       dbus_free (context->log_prefix);
       dbus_free (context->type);
@@ -1276,20 +1403,51 @@ bus_context_allow_windows_user (BusContext       *context,
                                         windows_sid);
 }
 
-BusPolicy *
-bus_context_get_policy (BusContext *context)
+BusContainers *
+bus_context_get_containers (BusContext *context)
 {
-  return context->policy;
+  return context->containers;
 }
 
 BusClientPolicy*
 bus_context_create_client_policy (BusContext      *context,
                                   DBusConnection  *connection,
+                                  BusClientPolicy *previous,
                                   DBusError       *error)
 {
+  BusClientPolicy *client;
+  DBusError local_error = DBUS_ERROR_INIT;
+  const char *conn;
+  const char *loginfo;
+
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
-  return bus_policy_create_client_policy (context->policy, connection,
-                                          error);
+
+  client = bus_policy_create_client_policy (context->policy, connection,
+                                            &local_error);
+
+  /* On success, use new policy */
+  if (client != NULL)
+    return client;
+
+  /* On failure while setting up a new connection, fail */
+  if (previous == NULL)
+    {
+      dbus_move_error (&local_error, error);
+      return NULL;
+    }
+
+  /* On failure while reloading, keep the previous policy */
+  conn = bus_connection_get_name (connection);
+  loginfo = bus_connection_get_loginfo (connection);
+
+  if (conn == NULL)
+    conn = "(inactive)";
+
+  bus_context_log (context, DBUS_SYSTEM_LOG_WARNING,
+                   "Unable to reload policy for connection \"%s\" (%s), "
+                   "keeping current policy: %s",
+                   conn, loginfo, local_error.message);
+  return bus_client_policy_ref (previous);
 }
 
 int
@@ -1359,6 +1517,26 @@ bus_context_get_reply_timeout (BusContext *context)
   return context->limits.reply_timeout;
 }
 
+int bus_context_get_max_containers (BusContext *context)
+{
+  return context->limits.max_containers;
+}
+
+int bus_context_get_max_containers_per_user (BusContext *context)
+{
+  return context->limits.max_containers_per_user;
+}
+
+int bus_context_get_max_container_metadata_bytes (BusContext *context)
+{
+  return context->limits.max_container_metadata_bytes;
+}
+
+int bus_context_get_max_connections_per_container (BusContext *context)
+{
+  return context->limits.max_connections_per_container;
+}
+
 DBusRLimit *
 bus_context_get_initial_fd_limit (BusContext *context)
 {
@@ -1389,7 +1567,11 @@ bus_context_log (BusContext *context, DBusSystemLogSeverity severity, const char
       if (!_dbus_string_append_printf_valist (&full_msg, msg, args))
         goto oom_out;
 
-      _dbus_log (severity, "%s", _dbus_string_get_const_data (&full_msg));
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+      if (severity > DBUS_SYSTEM_LOG_WARNING || !context->quiet_log)
+#endif
+        _dbus_log (severity, "%s", _dbus_string_get_const_data (&full_msg));
+
     oom_out:
       _dbus_string_free (&full_msg);
     }
@@ -1609,13 +1791,13 @@ bus_context_check_security_policy (BusContext     *context,
        * go on with the standard checks.
        */
       if (!bus_selinux_allows_send (sender, proposed_recipient,
-				    dbus_message_type_to_string (dbus_message_get_type (message)),
-				    dbus_message_get_interface (message),
-				    dbus_message_get_member (message),
-				    dbus_message_get_error_name (message),
-				    dest ? dest : DBUS_SERVICE_DBUS,
-				    activation_entry,
-				    error))
+                                    dbus_message_type_to_string (dbus_message_get_type (message)),
+                                    dbus_message_get_interface (message),
+                                    dbus_message_get_member (message),
+                                    dbus_message_get_error_name (message),
+                                    dest ? dest : DBUS_SERVICE_DBUS,
+                                    activation_entry,
+                                    error))
         {
           if (error != NULL && !dbus_error_is_set (error))
             {
@@ -1831,3 +2013,23 @@ bus_context_check_all_watches (BusContext *context)
       _dbus_server_toggle_all_watches (server, enabled);
     }
 }
+
+#ifdef DBUS_ENABLE_EMBEDDED_TESTS
+void
+bus_context_quiet_log_begin (BusContext *context)
+{
+  context->quiet_log = TRUE;
+}
+
+void
+bus_context_quiet_log_end (BusContext *context)
+{
+  context->quiet_log = FALSE;
+}
+
+dbus_bool_t
+bus_context_get_quiet_log (BusContext *context)
+{
+  return context->quiet_log;
+}
+#endif
