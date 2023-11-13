@@ -31,7 +31,7 @@ if [ "$1" = configure ]; then
             --disabled-password \
             --group "$MESSAGEUSER"
 
-    if ! dpkg-statoverride --list "$LAUNCHER" >/dev/null 2>&1; then
+    if ! dpkg-statoverride --list "$LAUNCHER" >/dev/null; then
         dpkg-statoverride --update --add root "$MESSAGEUSER" 4754 "$LAUNCHER"
     fi
 
