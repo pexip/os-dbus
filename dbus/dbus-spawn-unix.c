@@ -4,6 +4,8 @@
  * Copyright (C) 2002, 2003, 2004  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -560,7 +562,7 @@ close_socket_to_babysitter (DBusBabysitter *sitter)
 
   if (sitter->socket_to_babysitter.fd >= 0)
     {
-      _dbus_close_socket (sitter->socket_to_babysitter, NULL);
+      _dbus_close_socket (&sitter->socket_to_babysitter, NULL);
       sitter->socket_to_babysitter.fd = -1;
     }
 }
@@ -1052,6 +1054,12 @@ do_exec (int                       child_err_report_fd,
 
 #ifdef DBUS_ENABLE_EMBEDDED_TESTS
   max_open = sysconf (_SC_OPEN_MAX);
+
+  /* Because fds are allocated as numerically small as possible, we don't
+   * need to check the entire fd space, which can be prohibitively slow if
+   * the fd limit is very high. */
+  if (max_open > 1024)
+    max_open = 1024;
 
   for (i = 3; i < max_open; i++)
     {

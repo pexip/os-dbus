@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2007 Red Hat Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -36,7 +38,8 @@ typedef enum {
   DBUS_CREDENTIAL_UNIX_GROUP_IDS,
   DBUS_CREDENTIAL_ADT_AUDIT_DATA_ID,
   DBUS_CREDENTIAL_LINUX_SECURITY_LABEL,
-  DBUS_CREDENTIAL_WINDOWS_SID
+  DBUS_CREDENTIAL_WINDOWS_SID,
+  DBUS_CREDENTIAL_UNIX_PROCESS_FD,
 } DBusCredentialType;
 
 DBUS_PRIVATE_EXPORT
@@ -50,6 +53,9 @@ void             _dbus_credentials_unref                    (DBusCredentials    
 DBUS_PRIVATE_EXPORT
 dbus_bool_t      _dbus_credentials_add_pid                  (DBusCredentials    *credentials,
                                                              dbus_pid_t          pid);
+DBUS_PRIVATE_EXPORT
+void             _dbus_credentials_take_pid_fd               (DBusCredentials    *credentials,
+                                                             int                 pid_fd);
 DBUS_PRIVATE_EXPORT
 dbus_bool_t      _dbus_credentials_add_unix_uid             (DBusCredentials    *credentials,
                                                              dbus_uid_t          uid);
@@ -70,6 +76,8 @@ dbus_bool_t      _dbus_credentials_include                  (DBusCredentials    
                                                              DBusCredentialType  type);
 DBUS_PRIVATE_EXPORT
 dbus_pid_t       _dbus_credentials_get_pid                  (DBusCredentials    *credentials);
+DBUS_PRIVATE_EXPORT
+int              _dbus_credentials_get_pid_fd               (DBusCredentials    *credentials);
 DBUS_PRIVATE_EXPORT
 dbus_uid_t       _dbus_credentials_get_unix_uid             (DBusCredentials    *credentials);
 DBUS_PRIVATE_EXPORT

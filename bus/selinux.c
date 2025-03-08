@@ -3,6 +3,8 @@
  *
  * Author: Matthew Rickard <mjricka@epoch.ncsc.mil>
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -494,10 +496,7 @@ bus_selinux_allows_acquire_service (DBusConnection     *connection,
 
   if (spid)
     {
-      if (!_dbus_string_append (&auxdata, " spid="))
-	goto oom;
-
-      if (!_dbus_string_append_uint (&auxdata, spid))
+      if (!_dbus_string_append_printf (&auxdata, " spid=%lu", spid))
 	goto oom;
     }
   
@@ -606,19 +605,13 @@ bus_selinux_allows_send (DBusConnection     *sender,
 
   if (spid)
     {
-      if (!_dbus_string_append (&auxdata, " spid="))
-	goto oom;
-
-      if (!_dbus_string_append_uint (&auxdata, spid))
+      if (!_dbus_string_append_printf (&auxdata, " spid=%lu", spid))
 	goto oom;
     }
 
   if (tpid)
     {
-      if (!_dbus_string_append (&auxdata, " tpid="))
-	goto oom;
-
-      if (!_dbus_string_append_uint (&auxdata, tpid))
+      if (!_dbus_string_append_printf (&auxdata, " tpid=%lu", tpid))
 	goto oom;
     }
 
@@ -932,7 +925,6 @@ bus_selinux_id_table_print (DBusHashTable *service_table)
       security_id_t sid = _dbus_hash_iter_get_value (&iter);
       _dbus_verbose ("The key is %s\n", key);
       _dbus_verbose ("The context is %s\n", sid->ctx);
-      _dbus_verbose ("The refcount is %d\n", sid->refcnt);
     }
 #endif /* DBUS_ENABLE_VERBOSE_MODE && HAVE_SELINUX */
 }

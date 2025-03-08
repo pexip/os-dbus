@@ -17,6 +17,8 @@
  * Copyright (C) 2003 CodeFactory AB
  * Copyright (C) 2005 Novell, Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -160,7 +162,7 @@ close_socket_to_babysitter (DBusBabysitter *sitter)
 
   if (sitter->socket_to_babysitter.sock != INVALID_SOCKET)
     {
-      _dbus_close_socket (sitter->socket_to_babysitter, NULL);
+      _dbus_close_socket (&sitter->socket_to_babysitter, NULL);
       sitter->socket_to_babysitter.sock = INVALID_SOCKET;
     }
 }
@@ -188,7 +190,7 @@ _dbus_babysitter_unref (DBusBabysitter *sitter)
 
       if (sitter->socket_to_main.sock != INVALID_SOCKET)
         {
-          _dbus_close_socket (sitter->socket_to_main, NULL);
+          _dbus_close_socket (&sitter->socket_to_main, NULL);
           sitter->socket_to_main.sock = INVALID_SOCKET;
         }
 

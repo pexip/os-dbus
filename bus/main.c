@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003 Red Hat, Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -387,11 +389,8 @@ close_reload_pipe (DBusWatch **watch)
     _dbus_watch_unref (*watch);
     *watch = NULL;
 
-    _dbus_close_socket (reload_pipe[RELOAD_READ_END], NULL);
-    _dbus_socket_invalidate (&reload_pipe[RELOAD_READ_END]);
-
-    _dbus_close_socket (reload_pipe[RELOAD_WRITE_END], NULL);
-    _dbus_socket_invalidate (&reload_pipe[RELOAD_WRITE_END]);
+    _dbus_close_socket (&reload_pipe[RELOAD_READ_END], NULL);
+    _dbus_close_socket (&reload_pipe[RELOAD_WRITE_END], NULL);
 }
 #endif /* DBUS_UNIX */
 
@@ -587,16 +586,6 @@ main (int argc, char **argv)
 
           print_address = TRUE;
         }
-      else if (prev_arg &&
-               strcmp (prev_arg, "--print-address") == 0)
-        {
-          check_two_addr_descriptors (&addr_fd, "print-address");
-
-          if (!_dbus_string_append (&addr_fd, arg))
-            exit (1);
-
-          print_address = TRUE;
-        }
       else if (strcmp (arg, "--print-address") == 0)
         {
           print_address = TRUE; /* and we'll get the next arg if appropriate */
@@ -611,16 +600,6 @@ main (int argc, char **argv)
           ++desc;
 
           if (!_dbus_string_append (&pid_fd, desc))
-            exit (1);
-
-          print_pid = TRUE;
-        }
-      else if (prev_arg &&
-               strcmp (prev_arg, "--print-pid") == 0)
-        {
-          check_two_pid_descriptors (&pid_fd, "print-pid");
-
-          if (!_dbus_string_append (&pid_fd, arg))
             exit (1);
 
           print_pid = TRUE;
@@ -643,6 +622,26 @@ main (int argc, char **argv)
             }
         }
 #endif
+      else if (prev_arg &&
+               strcmp (prev_arg, "--print-address") == 0)
+        {
+          check_two_addr_descriptors (&addr_fd, "print-address");
+
+          if (!_dbus_string_append (&addr_fd, arg))
+            exit (1);
+
+          print_address = TRUE;
+        }
+      else if (prev_arg &&
+               strcmp (prev_arg, "--print-pid") == 0)
+        {
+          check_two_pid_descriptors (&pid_fd, "print-pid");
+
+          if (!_dbus_string_append (&pid_fd, arg))
+            exit (1);
+
+          print_pid = TRUE;
+        }
       else
         {
           usage ();

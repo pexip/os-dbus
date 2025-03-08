@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003 Red Hat, Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -111,7 +113,6 @@ dbus_bool_t       bus_context_allow_unix_user                    (BusContext    
                                                                   unsigned long     uid);
 dbus_bool_t       bus_context_allow_windows_user                 (BusContext       *context,
                                                                   const char       *windows_sid);
-BusContainers    *bus_context_get_containers                     (BusContext       *context);
 
 BusClientPolicy*  bus_context_create_client_policy               (BusContext       *context,
                                                                   DBusConnection   *connection,

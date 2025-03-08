@@ -1,8 +1,209 @@
-dbus (1.14.10-1~deb12u1) bookworm; urgency=medium
+dbus (1.16.2-2) unstable; urgency=medium
 
-  * Rebuild for bookworm
+  * Pass fewer options to adduser (Closes: #1099086)
+    - Remove --no-create-home. Add a versioned dependency on 3.130
+      instead, so that /nonexistent will be special-cased to not be created.
+    - Remove --home /nonexistent.
+      This is the default for system users since 3.122.
+    - Remove --disabled-password.
+      This is the default since at least 3.118 (Debian 11).
+  * d/p/debian/sysusers.d-Set-user-s-home-directory-to-nonexistent.patch:
+    Add patch so sysusers.d sets home directory /nonexistent, making it
+    consistent with what adduser would do
+  * d/dbus-system-bus-common.postinst: Create system user in more
+    situations, matching the behaviour of dh_installsysusers
+  * d/dbus-system-bus-common.postinst: Use systemd-sysusers if available.
+    This avoids needing an unconditional dependency on adduser.
+  * d/control: Remove alternative dependency on usr-is-merged.
+    Now that a version of base-files that enforces merged /usr has been
+    in testing for a while, we can drop the alternative dependency, which
+    should help apt to realise that usr-is-merged can be autoremoved.
+    The versioned dependency on base-files is intentional (see #1054650,
+    #1072756, #1085407) and should be kept until the beginning of the
+    forky cycle. During upgrades from bookworm to trixie, if a system has
+    been misconfigured to force non-merged /usr (contrary to #978636,
+    #994388), then we want that misconfiguration to be detected by
+    base-files.preinst and stop the upgrade early, without first
+    installing a version of dbus that will not work on that system.
+    (Closes: #1099706)
+  * Standards-Version: 4.7.2 (no changes required)
 
- -- Simon McVittie <smcv@debian.org>  Sat, 16 Sep 2023 11:03:58 +0100
+ -- Simon McVittie <smcv@debian.org>  Sat, 08 Mar 2025 19:04:46 +0000
+
+dbus (1.16.2-1) unstable; urgency=medium
+
+  * New upstream stable release
+    - Fixes a build failure with updated libselinux (Closes: #1096212)
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 27 Feb 2025 16:39:08 +0000
+
+dbus (1.16.0-1) unstable; urgency=medium
+
+  * New upstream stable release
+  * d/gbp.conf: Use upstream/1.16.x branch to import stable releases
+  * d/watch: Only watch for stable releases on this branch
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 16 Dec 2024 14:26:24 +0000
+
+dbus (1.15.92-1) unstable; urgency=medium
+
+  * New upstream release candidate (1.16.0 rc2)
+    - Fixes a build regression on Hurd (Closes: #1089641)
+  * d/rules: Update name of intrusive_tests option
+  * d/control: Specifially document the debug build in dbus-tests as not
+    for production use.
+    This build enables options that are likely to be insecure, and
+    certainly reduce performance and robustness. It should not be
+    considered to be covered by security support.
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 11 Dec 2024 14:32:26 +0000
+
+dbus (1.15.90-1) unstable; urgency=medium
+
+  * New upstream release candidate (effectively 1.16.0 rc1)
+  * Switch packaging branch to debian/unstable.
+    dbus 1.15.90 is a release candidate for 1.16.0, so it can go to
+    testing/unstable.
+  * d/salsa-ci.yml: Use recommended recipe
+  * Drop patches, applied upstream
+  * d/libdbus-1-3.symbols.in: Stop distinguishing between development versions.
+    Behave as though all symbols added in a development branch had been
+    added in the stable release that followed it, instead. This simplifies
+    the generated dependency.
+    Leave the one symbol that was added during 1.15.x as-is, since we
+    have not yet reached 1.16.0.
+  * Add references to #1072756, #1085407 in the 1.14.10-5 changelog entry
+
+ -- Simon McVittie <smcv@debian.org>  Fri, 06 Dec 2024 15:38:26 +0000
+
+dbus (1.15.12-1) experimental; urgency=medium
+
+  * New upstream development release
+  * Merge packaging changes from unstable
+  * d/p/doc-Substitute-DBUS_APIDOC_LINK-from-Meson-build-not-just.patch,
+    d/p/tests-Only-check-whether-the-first-1024-fds-are-close-on-.patch:
+    Drop patches that are included in the new upstream release
+  * Update doc-base registration and documentation symlinks for new layout
+  * d/p/doc-Use-api-html-to-link-to-Doxygen-docs-in-Devhelp-index.patch,
+    d/p/doc-Use-the-top-level-index.html-as-the-table-of-contents.patch:
+    Add proposed patches to fix the Devhelp documentation index
+  * Enable assertions for the debug build.
+    These were always meant to be enabled in the debug build (and disabled
+    in the normal and udeb builds), but were accidentally disabled when
+    switching from Autotools to Meson.
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 29 Oct 2024 16:47:09 +0000
+
+dbus (1.14.10-6) unstable; urgency=medium
+
+  * d/p/tests-Only-check-whether-the-first-1024-fds-are-close-on-.patch:
+    Fix FTBFS when running with a high rlimit.
+    Thanks to Aurelien Jarno for diagnosing the root cause.
+    (Closes: #1086148)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 28 Oct 2024 22:02:49 +0000
+
+dbus (1.14.10-5) unstable; urgency=medium
+
+  [ Simon McVittie ]
+  * d/upstream/metadata: Add Security-Contact field
+
+  [ Michael Biebl ]
+  * Add base-files (>= 13.4~) as alternative dependency for usr-is-merged
+    (Closes: #1072756, #1085407)
+
+ -- Simon McVittie <smcv@debian.org>  Sat, 26 Oct 2024 21:04:23 +0100
+
+dbus (1.15.10-1) experimental; urgency=medium
+
+  * New upstream release
+  * Merge packaging changes from unstable
+    - No functional change, all changes were already in experimental
+  * d/copyright: Update for deletion of m4/
+  * Standards-Version: 4.7.0 (no changes required)
+  * Refresh patch series (no functional change)
+  * d/p/doc-Substitute-DBUS_APIDOC_LINK-from-Meson-build-not-just.patch:
+    Add proposed patch to fix missing link from index to API docs
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 25 Sep 2024 17:35:27 +0100
+
+dbus (1.14.10-4) unstable; urgency=medium
+
+  * Move the shared library from /lib/MULTIARCH to /usr/lib/MULTIARCH
+    (Closes: #1060155)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 08 Jan 2024 21:12:25 +0000
+
+dbus (1.15.8-4) experimental; urgency=medium
+
+  * Move the shared library from /lib/MULTIARCH to /usr/lib/MULTIARCH
+  * Merge packaging changes from unstable
+    - dbus depends on usr-is-merged (>= 38~) (Closes: #1054650)
+    - all other changes were already present in the experimental branch
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 24 Dec 2023 14:29:57 +0000
+
+dbus (1.14.10-3) unstable; urgency=medium
+
+  * d/control: dbus Depends on usr-is-merged (>= 38~).
+    Non-merged /usr has been unsupported since Debian 12, as per Technical
+    Committee resolutions #978636 and #994388 (please see the Debian 12
+    release notes for details).
+    The version of usr-is-merged shipped in Debian 12 had an undocumented
+    opt-out mechanism intended for use on buildds and QA systems targeting
+    Debian 12 (piuparts, reproducible-builds, autopkgtest and similar),
+    to ensure that the upgrade path from Debian 11 to 12 will continue
+    to work and continue to undergo automated tests. That opt-out is
+    no longer applicable or available in trixie/sid, and was removed in
+    usrmerge version 38.
+    Since version 1.14.10-2, dbus ships its systemd units in
+    /usr/lib/systemd/system, as part of the distro-wide transition
+    away from making use of "aliased" paths. This is entirely valid on
+    merged-/usr systems, but will no longer work in the unsupported
+    filesystem layout with non-merged /usr, because for historical
+    reasons, current versions of systemd on non-merged-/usr systems will
+    only read units from /lib/systemd/system.
+    In the case of dbus, the symptom when this assumption is broken is
+    particularly bad (various key system services will not start, with
+    long delays during boot, login and shutdown), so let's hold back
+    this upgrade on unsupported non-merged-/usr systems until they have
+    completed the switch to merged-/usr and can install
+    usr-is-merged (>= 38~).
+    (Closes: #1054650)
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 30 Oct 2023 11:51:35 +0000
+
+dbus (1.14.10-2) unstable; urgency=low
+
+  * Backport packaging changes from experimental:
+    - Install systemd system units into /usr/lib/systemd/system.
+      This was allowed by TC resolution #1053901. The shared library is
+      still in /lib, for now.
+      Build-depend on debhelper 13.11.6~ to ensure that the units are still
+      picked up by dh_installsystemd.
+    - Build-depend on pkgconf rather than pkg-config
+    - dbus-x11: Don't copy XDG_SEAT_PATH, XDG_SESSION_PATH to activation
+      environment. These variables are specific to a single login session.
+  * d/copyright: Drop unused entry for pkg.m4.
+    This is no longer included in the upstream source release since 1.14.6.
+  * d/dbus-tests.lintian-overrides: Drop unused overrides.
+    Lintian no longer flags our RUNPATH as problematic.
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 25 Oct 2023 15:56:36 +0100
+
+dbus (1.15.8-3) experimental; urgency=medium
+
+  * Install systemd system units into /usr/lib/systemd/system.
+    This was allowed by TC resolution #1053901. The shared library is still
+    in /lib, for now.
+    Build-depend on debhelper 13.11.6~ to ensure that the units are still
+    picked up by dh_installsystemd.
+  * Merge 1.14.10-1 packaging from unstable
+    - No functional changes, equivalent fixes were already included in
+      1.15.8 (for the upstream parts) and 1.15.8-2 (for the packaging)
+  * Build-depend on pkgconf rather than pkg-config
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 22 Oct 2023 12:54:29 +0100
 
 dbus (1.14.10-1) unstable; urgency=medium
 
@@ -24,43 +225,66 @@ dbus (1.14.10-1) unstable; urgency=medium
 
  -- Simon McVittie <smcv@debian.org>  Fri, 01 Sep 2023 15:41:38 +0100
 
-dbus (1.14.8-2~deb12u1) bookworm; urgency=medium
+dbus (1.15.8-2) experimental; urgency=medium
 
-  * Rebuild for bookworm
+  * dbus-x11: Don't copy XDG_SEAT_PATH, XDG_SESSION_PATH to activation
+    environment.
+    These variables are specific to a single login session.
+  * dbus-user-session: Copy XDG_CURRENT_DESKTOP to activation environment.
+    This is needed by various freedesktop.org specifications, in particular
+    for xdg-desktop-portal (>= 1.17) to choose the correct portal backend
+    for a desktop session. Some session managers like gnome-session and
+    plasma-workspace already upload this into the activation environment,
+    but many older or simpler session managers do not.
 
- -- Simon McVittie <smcv@debian.org>  Tue, 11 Jul 2023 20:59:33 +0100
+ -- Simon McVittie <smcv@debian.org>  Fri, 01 Sep 2023 10:55:31 +0100
 
-dbus (1.14.8-2) unstable; urgency=high
+dbus (1.15.8-1) experimental; urgency=medium
 
-  * dbus-daemon.postinst: Stop trying to take DPKG_ROOT into account.
-    This unintentionally disabled the code path that would copy systemd's
-    /etc/machine-id in preference to creating an entirely new machine ID.
-    (Closes: #1040790)
-  * d/tests: Add test coverage for #1040790
+  * New upstream development release
+  * d/copyright: Update
+  * d/rules: Pass the correct private library directory to dh_shlibdeps
 
- -- Simon McVittie <smcv@debian.org>  Tue, 11 Jul 2023 18:38:22 +0100
+ -- Simon McVittie <smcv@debian.org>  Mon, 21 Aug 2023 18:37:36 +0100
 
-dbus (1.14.8-1~deb12u1) bookworm; urgency=medium
+dbus (1.15.6-2) experimental; urgency=medium
 
-  * Rebuild for bookworm
-  * d/gbp.conf: Use debian/bookworm branch
-  * d/watch: Only watch for 1.14.x releases
+  * Merge packaging from unstable (Closes: #1040790)
 
- -- Simon McVittie <smcv@debian.org>  Sun, 11 Jun 2023 12:42:56 +0100
+ -- Simon McVittie <smcv@debian.org>  Tue, 11 Jul 2023 21:01:57 +0100
 
-dbus (1.14.8-1) unstable; urgency=medium
+dbus (1.15.6-1) experimental; urgency=medium
 
   [ Simon McVittie ]
-  * New upstream stable release
+  * New upstream development release
     - Fixes a denial of service issue if the root or messagebus user is
       monitoring messages on the system bus with the Monitoring interface
       (dbus-monitor, busctl monitor, gdbus monitor or similar)
       (Closes: #1037151)
+  * d/rules: Tell dh_shlibdeps where to find dbus-tests' private libraries
+    dbus-tests contains an instrumented/debug build of libdbus in a private
+    directory, which has more ABI than the production build, and a second
+    set of tests which depend on that debug build.
+  * d/rules: Extend arbitrary timeout for tests.
+    Some mipsel buildds are very slow and have seen the hash test time out
+    after 30 seconds (it normally takes about 10 on slower machines).
 
   [ Helmut Grohne ]
   * Mark dbus-daemon and dbus-bin Multi-Arch: foreign (Closes: #1033056)
 
- -- Simon McVittie <smcv@debian.org>  Tue, 06 Jun 2023 15:05:50 +0100
+ -- Simon McVittie <smcv@debian.org>  Tue, 06 Jun 2023 15:06:09 +0100
+
+dbus (1.15.4-1) experimental; urgency=medium
+
+  * New upstream development release
+    - Fixes a denial of service issue that is not relevant for the way
+      we compile dbus in Debian
+  * d/copyright: Update
+  * d/rules: Explicitly enable the message bus and tools, which are now
+    compile-time optional
+  * Merge packaging changes from unstable
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 08 Feb 2023 13:34:18 +0000
 
 dbus (1.14.6-1) unstable; urgency=medium
 
@@ -78,6 +302,18 @@ dbus (1.14.6-1) unstable; urgency=medium
   * Remove version constraints unnecessary since Debian 10
 
  -- Simon McVittie <smcv@debian.org>  Wed, 08 Feb 2023 13:21:47 +0000
+
+dbus (1.15.2-1) experimental; urgency=medium
+
+  * New upstream development release
+    - Fix several denial of service issues where an authenticated attacker
+      can crash the system bus by sending crafted messages
+      (CVE-2022-42010, CVE-2022-42011, CVE-2022-42012)
+    - Use a path-based Unix socket for the session bus, avoiding sandbox
+      escape for Flatpak apps with network access (dbus#416)
+  * Merge packaging from unstable
+
+ -- Simon McVittie <smcv@debian.org>  Wed, 05 Oct 2022 12:02:43 +0100
 
 dbus (1.14.4-1) unstable; urgency=high
 
@@ -100,6 +336,64 @@ dbus (1.14.2-1) unstable; urgency=medium
   * Make autopkgtest cross-friendly
 
  -- Simon McVittie <smcv@debian.org>  Mon, 26 Sep 2022 17:09:42 +0100
+
+dbus (1.15.0-1) experimental; urgency=medium
+
+  [ Simon McVittie ]
+  * New upstream development release
+  * Drop most patches, applied upstream
+  * d/copyright: Update
+
+  [ Dave Jones ]
+  * Make autopkgtest cross-friendly
+
+ -- Simon McVittie <smcv@debian.org>  Thu, 22 Sep 2022 12:36:07 +0100
+
+dbus (1.14.99~git20220715-1) experimental; urgency=medium
+
+  * d/control, d/gbp.conf, d/watch: Branch for experimental
+  * New upstream snapshot with Meson build system
+  * Build with Meson instead of Autotools
+  * d/copyright: Update
+  * libdbus-1-dev: Depend on libsystemd-dev.
+    Autotools represented the libsystemd dependency as Libs.private, which
+    meant we would only have needed libsystemd-dev for static linking,
+    but Meson uses Requires.private.
+  * d/p/activation-helper-Never-crash-if-unable-to-write-oom_scor.patch,
+    d/p/sysdeps-Only-open-oom_score_adj-read-write-if-we-need-to-.patch:
+    Add proposed patches to make oom_score_adj handling more robust
+  * d/p/test-bus-Factor-out-common-setup-teardown-code.patch,
+    d/p/test-bus-Break-up-dispatch-test-into-three-separate-tests.patch,
+    d/p/dispatch-test-Pass-in-test-data-directory-as-a-C-string.patch:
+    Add proposed patches to speed up build-time testing
+  * d/rules: Run all tests, even the slow ones.
+    They're a lot less slow now.
+
+ -- Simon McVittie <smcv@debian.org>  Sun, 17 Jul 2022 16:25:37 +0100
+
+dbus (1.14.8-2) unstable; urgency=high
+
+  * dbus-daemon.postinst: Stop trying to take DPKG_ROOT into account.
+    This unintentionally disabled the code path that would copy systemd's
+    /etc/machine-id in preference to creating an entirely new machine ID.
+    (Closes: #1040790)
+  * d/tests: Add test coverage for #1040790
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 11 Jul 2023 18:38:22 +0100
+
+dbus (1.14.8-1) unstable; urgency=medium
+
+  [ Simon McVittie ]
+  * New upstream stable release
+    - Fixes a denial of service issue if the root or messagebus user is
+      monitoring messages on the system bus with the Monitoring interface
+      (dbus-monitor, busctl monitor, gdbus monitor or similar)
+      (Closes: #1037151)
+
+  [ Helmut Grohne ]
+  * Mark dbus-daemon and dbus-bin Multi-Arch: foreign (Closes: #1033056)
+
+ -- Simon McVittie <smcv@debian.org>  Tue, 06 Jun 2023 15:05:50 +0100
 
 dbus (1.14.0-2) unstable; urgency=medium
 

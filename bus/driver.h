@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003  CodeFactory AB
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -56,7 +58,8 @@ dbus_bool_t bus_driver_generate_introspect_string  (DBusString *xml,
                                                     dbus_bool_t canonical_path,
                                                     DBusMessage *message);
 dbus_bool_t bus_driver_fill_connection_credentials (DBusCredentials *credentials,
-                                                    DBusConnection  *conn,
+                                                    DBusConnection  *peer_conn,
+                                                    DBusConnection  *caller_conn,
                                                     DBusMessageIter *asv_iter);
 
 BusDriverFound bus_driver_get_conn_helper (DBusConnection  *connection,

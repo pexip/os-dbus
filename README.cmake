@@ -2,7 +2,7 @@ This file describes how to compile dbus using the cmake build system
 
 Requirements
 ------------
-- cmake version >= 2.6.0 see http://www.cmake.org
+- cmake version >= 3.4 see http://www.cmake.org
 - installed libexpat see http://sourceforge.net/projects/expat/ 
     unsupported RelWithDebInfo builds could be fetched 
     from http://sourceforge.net/projects/kde-windows/files/expat/
@@ -123,6 +123,9 @@ CMAKE_INSTALL_PREFIX:PATH=C:/Program Files/dbus
 
 // enable unit test code
 DBUS_BUILD_TESTS:BOOL=ON
+
+// embed intrusive test code in the library and binaries
+DBUS_ENABLE_INTRUSIVE_TESTS:BOOL=ON
 
 // The name of the dbus daemon executable
 DBUS_DAEMON_NAME:STRING=dbus-daemon

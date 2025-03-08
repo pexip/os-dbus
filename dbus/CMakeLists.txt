@@ -89,7 +89,6 @@ set(DBUS_LIB_HEADERS
     dbus-resources.h
     dbus-server-debug-pipe.h
     dbus-server-protected.h
-    dbus-server-unix.h
     dbus-sha.h
     dbus-timeout.h
     dbus-threads.h
@@ -98,7 +97,7 @@ set(DBUS_LIB_HEADERS
     dbus-transport-protected.h
     dbus-uuidgen.h
     dbus-watch.h
-    ${CMAKE_BINARY_DIR}/config.h
+    ${PROJECT_BINARY_DIR}/config.h
 )
 if(UNIX)
     set(DBUS_LIB_HEADERS ${DBUS_LIB_HEADERS}
@@ -135,6 +134,7 @@ set(DBUS_SHARED_HEADERS
     dbus-hash.h
     dbus-internals.h
     dbus-list.h
+    dbus-macros-internal.h
     dbus-marshal-basic.h
     dbus-mempool.h
     dbus-string.h
@@ -143,7 +143,7 @@ set(DBUS_SHARED_HEADERS
     dbus-sysdeps.h
 )
 
-if(DBUS_ENABLE_EMBEDDED_TESTS)
+if(DBUS_ENABLE_INTRUSIVE_TESTS)
     set(DBUS_SHARED_SOURCES ${DBUS_SHARED_SOURCES} dbus-test-tap.c)
     set(DBUS_SHARED_HEADERS ${DBUS_SHARED_HEADERS} dbus-test-tap.h)
     # ... else they are in the test library instead
@@ -177,6 +177,7 @@ set(DBUS_UTIL_HEADERS
 ### platform specific settings
 if(WIN32)
     set(DBUS_SHARED_SOURCES ${DBUS_SHARED_SOURCES}
+        dbus-backtrace-win.c
         dbus-file-win.c
         dbus-init-win.cpp
         dbus-sysdeps-win.c
@@ -184,6 +185,7 @@ if(WIN32)
         dbus-sysdeps-thread-win.c
     )
     set(DBUS_SHARED_HEADERS ${DBUS_SHARED_HEADERS}
+        dbus-init-win.h
         dbus-sockets-win.h
         dbus-sysdeps-win.h
     )
@@ -208,7 +210,6 @@ else(WIN32)
         dbus-userdb.c
     )
     set(DBUS_SHARED_HEADERS ${DBUS_SHARED_HEADERS}
-        dbus-server-unix.h
         dbus-transport-unix.h
         dbus-sysdeps-unix.h
         dbus-userdb.h
@@ -298,7 +299,9 @@ else(WIN32)
     endif()
 endif()
 
+# target definitions passed to the clients
 target_include_directories(dbus-1 INTERFACE $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/dbus-1.0>;$<INSTALL_INTERFACE:${CMAKE_INSTALL_LIBDIR}/dbus-1.0/include>)
+target_compile_definitions(dbus-1 INTERFACE "")
 
 # Assume that Linux has -Wl,--version-script and other platforms do not
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
