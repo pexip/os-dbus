@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003, 2004  Red Hat Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -94,10 +96,7 @@ typedef struct
 {
   dbus_int32_t id; /**< identifier used to refer to the key */
 
-  long creation_time; /**< when the key was generated,
-                       *   as unix timestamp. signed long
-                       *   matches struct timeval.
-                       */
+  dbus_int64_t creation_time; /**< when the key was generated, in seconds since 1970-01-01 */
   
   DBusString secret; /**< the actual key */
 
@@ -284,7 +283,7 @@ add_new_key (DBusKey  **keys_p,
   DBusKey *new;
   DBusString bytes;
   int id;
-  long timestamp;
+  dbus_int64_t timestamp;
   const unsigned char *s;
   dbus_bool_t retval;
   DBusKey *keys;
@@ -397,7 +396,7 @@ _dbus_keyring_reload (DBusKeyring *keyring,
   DBusKey *keys;
   int n_keys;
   int i;
-  long now;
+  dbus_int64_t now;
   DBusError tmp_error;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
@@ -463,7 +462,7 @@ _dbus_keyring_reload (DBusKeyring *keyring,
       int next;
       long val;
       int id;
-      long timestamp;
+      dbus_int64_t timestamp;
       int len;
       int end;
       DBusKey *new;
@@ -489,7 +488,7 @@ _dbus_keyring_reload (DBusKeyring *keyring,
 
       _dbus_string_skip_blank (&line, next, &next);
       
-      if (!_dbus_string_parse_int (&line, next, &timestamp, &next))
+      if (!_dbus_string_parse_int64 (&line, next, &timestamp, &next))
         {
           _dbus_verbose ("could not parse secret key timestamp\n");
           continue;
@@ -499,7 +498,7 @@ _dbus_keyring_reload (DBusKeyring *keyring,
           (now + MAX_TIME_TRAVEL_SECONDS) < timestamp ||
           (now - EXPIRE_KEYS_TIMEOUT_SECONDS) > timestamp)
         {
-          _dbus_verbose ("dropping/ignoring %ld-seconds old key with timestamp %ld as current time is %ld\n",
+          _dbus_verbose ("dropping/ignoring %" DBUS_INT64_MODIFIER "d-seconds old key with timestamp %" DBUS_INT64_MODIFIER "d as current time is %" DBUS_INT64_MODIFIER "d\n",
                          now - timestamp, timestamp, now);
           continue;
         }
@@ -567,18 +566,8 @@ _dbus_keyring_reload (DBusKeyring *keyring,
       i = 0;
       while (i < n_keys)
         {
-          if (!_dbus_string_append_int (&contents,
-                                        keys[i].id))
-            goto nomem;
-
-          if (!_dbus_string_append_byte (&contents, ' '))
-            goto nomem;
-
-          if (!_dbus_string_append_int (&contents,
-                                        keys[i].creation_time))
-            goto nomem;
-
-          if (!_dbus_string_append_byte (&contents, ' '))
+          if (!_dbus_string_append_printf (&contents, "%d %" DBUS_INT64_MODIFIER "d ",
+                                           keys[i].id, keys[i].creation_time))
             goto nomem;
 
           if (!_dbus_string_hex_encode (&keys[i].secret, 0,
@@ -908,7 +897,8 @@ static DBusKey*
 find_recent_key (DBusKeyring *keyring)
 {
   int i;
-  long tv_sec, tv_usec;
+  dbus_int64_t tv_sec;
+  long tv_usec;
 
   _dbus_get_real_time (&tv_sec, &tv_usec);
   
@@ -917,7 +907,7 @@ find_recent_key (DBusKeyring *keyring)
     {
       DBusKey *key = &keyring->keys[i];
 
-      _dbus_verbose ("Key %d is %ld seconds old\n",
+      _dbus_verbose ("Key %d is %" DBUS_INT64_MODIFIER "d seconds old\n",
                      i, tv_sec - key->creation_time);
       
       if ((tv_sec - NEW_KEY_TIMEOUT_SECONDS) < key->creation_time)
@@ -1112,7 +1102,7 @@ _dbus_keyring_test (const char *test_data_dir _DBUS_GNUC_UNUSED)
 
       if (ring1->keys[i].creation_time != ring2->keys[i].creation_time)
         {
-          fprintf (stderr, "Keyring 1 has first key time %ld and keyring 2 has %ld\n",
+          fprintf (stderr, "Keyring 1 has first key time %" DBUS_INT64_MODIFIER "d and keyring 2 has %" DBUS_INT64_MODIFIER "d\n",
                    ring1->keys[i].creation_time, ring2->keys[i].creation_time);
           goto failure;
         }

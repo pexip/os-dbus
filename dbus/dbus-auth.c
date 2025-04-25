@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2002, 2003, 2004 Red Hat Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -668,15 +670,9 @@ sha1_handle_first_client_response (DBusAuth         *auth,
                           &tmp2, _dbus_string_get_length (&tmp2)))
     goto out;
 
-  if (!_dbus_string_append (&tmp2, " "))
+  if (!_dbus_string_append_printf (&tmp2, " %d ", auth->cookie_id))
     goto out;
 
-  if (!_dbus_string_append_int (&tmp2, auth->cookie_id))
-    goto out;
-
-  if (!_dbus_string_append (&tmp2, " "))
-    goto out;  
-  
   if (!_dbus_generate_random_bytes (&tmp, N_CHALLENGE_BYTES, &error))
     {
       if (dbus_error_has_name (&error, DBUS_ERROR_NO_MEMORY))
@@ -801,8 +797,12 @@ sha1_handle_second_client_response (DBusAuth         *auth,
                                           auth->desired_identity))
     goto out_3;
 
-  /* Copy process ID from the socket credentials if it's there
+  /* Copy process ID (and PID FD) from the socket credentials if it's there
    */
+  if (!_dbus_credentials_add_credential (auth->authorized_identity,
+                                         DBUS_CREDENTIAL_UNIX_PROCESS_FD,
+                                         auth->credentials))
+    goto out_3;
   if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                          DBUS_CREDENTIAL_UNIX_PROCESS_ID,
                                          auth->credentials))
@@ -1186,6 +1186,11 @@ handle_server_data_external_mech (DBusAuth         *auth,
       /* also copy misc process info from the socket credentials
        */
       if (!_dbus_credentials_add_credential (auth->authorized_identity,
+                                             DBUS_CREDENTIAL_UNIX_PROCESS_FD,
+                                             auth->credentials))
+        return FALSE;
+
+      if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                              DBUS_CREDENTIAL_UNIX_PROCESS_ID,
                                              auth->credentials))
         return FALSE;
@@ -1302,8 +1307,13 @@ handle_server_data_anonymous_mech (DBusAuth         *auth,
   /* We want to be anonymous (clear in case some other protocol got midway through I guess) */
   _dbus_credentials_clear (auth->desired_identity);
 
-  /* Copy process ID from the socket credentials
+  /* Copy process ID (and PID FD) from the socket credentials
    */
+  if (!_dbus_credentials_add_credential (auth->authorized_identity,
+                                         DBUS_CREDENTIAL_UNIX_PROCESS_FD,
+                                         auth->credentials))
+    return FALSE;
+
   if (!_dbus_credentials_add_credential (auth->authorized_identity,
                                          DBUS_CREDENTIAL_UNIX_PROCESS_ID,
                                          auth->credentials))

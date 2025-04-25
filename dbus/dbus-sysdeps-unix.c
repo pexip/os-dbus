@@ -4,6 +4,8 @@
  * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -37,6 +39,7 @@
 #include "dbus-credentials.h"
 #include "dbus-nonce.h"
 
+#include <limits.h>
 #include <sys/types.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,6 +65,9 @@
 #ifdef HAVE_ERRNO_H
 #include <errno.h>
 #endif
+#ifdef HAVE_LINUX_CLOSE_RANGE_H
+#include <linux/close_range.h>
+#endif
 #ifdef HAVE_SYSLOG_H
 #include <syslog.h>
 #endif
@@ -80,6 +86,9 @@
 #ifdef HAVE_SYS_RANDOM_H
 #include <sys/random.h>
 #endif
+#ifdef HAVE_SYS_SYSCALL_H
+#include <sys/syscall.h>
+#endif
 
 #ifdef HAVE_ADT
 #include <bsm/adt.h>
@@ -89,7 +98,7 @@
 #include <systemd/sd-daemon.h>
 #endif
 
-#if !DBUS_USE_SYNC
+#if !defined(HAVE_STDATOMIC_H) && !DBUS_USE_SYNC
 #include <pthread.h>
 #endif
 
@@ -136,6 +145,21 @@
 # endif
 
 #endif /* Solaris */
+
+#if defined(__linux__) && defined(__NR_close_range) && !defined(HAVE_CLOSE_RANGE)
+/* The kernel headers are new enough to have the close_range syscall,
+ * but glibc isn't new enough to have the syscall wrapper, so call the
+ * syscall directly. */
+static inline int
+close_range (unsigned int first,
+             unsigned int last,
+             int flags)
+{
+  return syscall (__NR_close_range, first, last, flags);
+}
+/* Now we can call that inline wrapper as though it was provided by glibc. */
+#define HAVE_CLOSE_RANGE
+#endif
 
 /**
  * Ensure that the standard file descriptors stdin, stdout and stderr
@@ -271,22 +295,34 @@ static dbus_bool_t
 _dbus_open_unix_socket (int              *fd,
                         DBusError        *error)
 {
-  return _dbus_open_socket(fd, PF_UNIX, SOCK_STREAM, 0, error);
+  return _dbus_open_socket(fd, AF_UNIX, SOCK_STREAM, 0, error);
 }
 
 /**
- * Closes a socket. Should not be used on non-socket
- * file descriptors or handles.
+ * Closes a socket and invalidates it. Should not be used on non-socket file
+ * descriptors or handles.
+ *
+ * If an error is detected, this function returns #FALSE and sets the error, but
+ * the socket is still closed and invalidated. Callers can use the error in a
+ * diagnostic message, but should not retry closing the socket.
  *
  * @param fd the socket
  * @param error return location for an error
  * @returns #FALSE if error is set
  */
 dbus_bool_t
-_dbus_close_socket (DBusSocket        fd,
+_dbus_close_socket (DBusSocket       *fd,
                     DBusError        *error)
 {
-  return _dbus_close (fd.fd, error);
+  dbus_bool_t rv;
+
+  _dbus_assert (fd != NULL);
+  _DBUS_ASSERT_ERROR_IS_CLEAR (error);
+
+  rv = _dbus_close (fd->fd, error);
+  _dbus_socket_invalidate (fd);
+
+  return rv;
 }
 
 /**
@@ -439,7 +475,7 @@ _dbus_read_socket_with_unix_fds (DBusSocket        fd,
         if (cm->cmsg_level == SOL_SOCKET && cm->cmsg_type == SCM_RIGHTS)
           {
             size_t i;
-            int *payload = (int *) CMSG_DATA (cm);
+            int *payload = (int *) (void *) CMSG_DATA (cm);
             size_t payload_len_bytes = (cm->cmsg_len - CMSG_LEN (0));
             size_t payload_len_fds;
             size_t fds_to_use;
@@ -901,21 +937,6 @@ _dbus_write_two (int               fd,
 #endif /* !HAVE_WRITEV */
 }
 
-#define _DBUS_MAX_SUN_PATH_LENGTH 99
-
-/**
- * @def _DBUS_MAX_SUN_PATH_LENGTH
- *
- * Maximum length of the path to a UNIX domain socket,
- * sockaddr_un::sun_path member. POSIX requires that all systems
- * support at least 100 bytes here, including the nul termination.
- * We use 99 for the max value to allow for the nul.
- *
- * We could probably also do sizeof (addr.sun_path)
- * but this way we are the same on all platforms
- * which is probably a good idea.
- */
-
 /**
  * Creates a socket and connects it to the UNIX domain socket at the
  * given path.  The connection fd is returned, and is set up as
@@ -930,14 +951,14 @@ _dbus_write_two (int               fd,
  * @param path the path to UNIX domain socket
  * @param abstract #TRUE to use abstract namespace
  * @param error return location for error code
- * @returns connection file descriptor or -1 on error
+ * @returns a valid socket on success or an invalid socket on error
  */
-int
+DBusSocket
 _dbus_connect_unix_socket (const char     *path,
                            dbus_bool_t     abstract,
                            DBusError      *error)
 {
-  int fd;
+  DBusSocket fd = DBUS_SOCKET_INIT;
   size_t path_len;
   struct sockaddr_un addr;
   _DBUS_STATIC_ASSERT (sizeof (addr.sun_path) > _DBUS_MAX_SUN_PATH_LENGTH);
@@ -948,10 +969,10 @@ _dbus_connect_unix_socket (const char     *path,
                  path, abstract);
 
 
-  if (!_dbus_open_unix_socket (&fd, error))
+  if (!_dbus_open_unix_socket (&fd.fd, error))
     {
       _DBUS_ASSERT_ERROR_IS_SET(error);
-      return -1;
+      return fd;
     }
   _DBUS_ASSERT_ERROR_IS_CLEAR(error);
 
@@ -969,8 +990,8 @@ _dbus_connect_unix_socket (const char     *path,
         {
           dbus_set_error (error, DBUS_ERROR_BAD_ADDRESS,
                       "Abstract socket name too long\n");
-          _dbus_close (fd, NULL);
-          return -1;
+          _dbus_close_socket (&fd, NULL);
+          return fd;
 	}
 
       strncpy (&addr.sun_path[1], path, sizeof (addr.sun_path) - 2);
@@ -978,8 +999,8 @@ _dbus_connect_unix_socket (const char     *path,
 #else /* !__linux__ */
       dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
                       "Operating system does not support abstract socket namespace\n");
-      _dbus_close (fd, NULL);
-      return -1;
+      _dbus_close_socket (&fd, NULL);
+      return fd;
 #endif /* !__linux__ */
     }
   else
@@ -988,30 +1009,30 @@ _dbus_connect_unix_socket (const char     *path,
         {
           dbus_set_error (error, DBUS_ERROR_BAD_ADDRESS,
                       "Socket name too long\n");
-          _dbus_close (fd, NULL);
-          return -1;
+          _dbus_close_socket (&fd, NULL);
+          return fd;
 	}
 
       strncpy (addr.sun_path, path, sizeof (addr.sun_path) - 1);
     }
 
-  if (connect (fd, (struct sockaddr*) &addr, _DBUS_STRUCT_OFFSET (struct sockaddr_un, sun_path) + path_len) < 0)
+  if (connect (fd.fd, (struct sockaddr*) &addr, _DBUS_STRUCT_OFFSET (struct sockaddr_un, sun_path) + path_len) < 0)
     {
       dbus_set_error (error,
                       _dbus_error_from_errno (errno),
                       "Failed to connect to socket %s: %s",
                       path, _dbus_strerror (errno));
 
-      _dbus_close (fd, NULL);
-      return -1;
+      _dbus_close_socket (&fd, NULL);
+      return fd;
     }
 
-  if (!_dbus_set_fd_nonblocking (fd, error))
+  if (!_dbus_set_fd_nonblocking (fd.fd, error))
     {
       _DBUS_ASSERT_ERROR_IS_SET (error);
 
-      _dbus_close (fd, NULL);
-      return -1;
+      _dbus_close_socket (&fd, NULL);
+      return fd;
     }
 
   return fd;
@@ -1027,13 +1048,14 @@ _dbus_connect_unix_socket (const char     *path,
  * @param argv the argument list for the process to execute.
  * argv[0] typically is identical to the path of the executable
  * @param error return location for error code
- * @returns connection file descriptor or -1 on error
+ * @returns a valid socket on success or an invalid socket on error
  */
-int
+DBusSocket
 _dbus_connect_exec (const char     *path,
                     char *const    argv[],
                     DBusError      *error)
 {
+  DBusSocket s = DBUS_SOCKET_INIT;
   int fds[2];
   pid_t pid;
   int retval;
@@ -1059,7 +1081,8 @@ _dbus_connect_exec (const char     *path,
                       _dbus_error_from_errno (errno),
                       "Failed to create socket pair: %s",
                       _dbus_strerror (errno));
-      return -1;
+      _dbus_assert (!_dbus_socket_is_valid (s));
+      return s;
     }
 
   if (!cloexec_done)
@@ -1082,7 +1105,8 @@ _dbus_connect_exec (const char     *path,
                       path, _dbus_strerror (errno));
       close (fds[0]);
       close (fds[1]);
-      return -1;
+      _dbus_assert (!_dbus_socket_is_valid (s));
+      return s;
     }
 
   if (pid == 0)
@@ -1117,10 +1141,12 @@ _dbus_connect_exec (const char     *path,
       _DBUS_ASSERT_ERROR_IS_SET (error);
 
       close (fds[0]);
-      return -1;
+      _dbus_assert (!_dbus_socket_is_valid (s));
+      return s;
     }
 
-  return fds[0];
+  s.fd = fds[0];
+  return s;
 }
 
 /**
@@ -1138,13 +1164,14 @@ _dbus_connect_exec (const char     *path,
  * @param path the socket name
  * @param abstract #TRUE to use abstract namespace
  * @param error return location for errors
- * @returns the listening file descriptor or -1 on error
+ * @returns a valid socket on success or an invalid socket on error
  */
-int
+DBusSocket
 _dbus_listen_unix_socket (const char     *path,
                           dbus_bool_t     abstract,
                           DBusError      *error)
 {
+  DBusSocket s = DBUS_SOCKET_INIT;
   int listen_fd;
   struct sockaddr_un addr;
   size_t path_len;
@@ -1158,7 +1185,7 @@ _dbus_listen_unix_socket (const char     *path,
   if (!_dbus_open_unix_socket (&listen_fd, error))
     {
       _DBUS_ASSERT_ERROR_IS_SET(error);
-      return -1;
+      return s;
     }
   _DBUS_ASSERT_ERROR_IS_CLEAR(error);
 
@@ -1180,7 +1207,7 @@ _dbus_listen_unix_socket (const char     *path,
           dbus_set_error (error, DBUS_ERROR_BAD_ADDRESS,
                       "Abstract socket name too long\n");
           _dbus_close (listen_fd, NULL);
-          return -1;
+          return s;
 	}
 
       strncpy (&addr.sun_path[1], path, sizeof (addr.sun_path) - 2);
@@ -1189,7 +1216,7 @@ _dbus_listen_unix_socket (const char     *path,
       dbus_set_error (error, DBUS_ERROR_NOT_SUPPORTED,
                       "Operating system does not support abstract socket namespace\n");
       _dbus_close (listen_fd, NULL);
-      return -1;
+      return s;
 #endif /* !__linux__ */
     }
   else
@@ -1217,8 +1244,8 @@ _dbus_listen_unix_socket (const char     *path,
           dbus_set_error (error, DBUS_ERROR_BAD_ADDRESS,
                       "Socket name too long\n");
           _dbus_close (listen_fd, NULL);
-          return -1;
-	}
+          return s;
+        }
 
       strncpy (addr.sun_path, path, sizeof (addr.sun_path) - 1);
     }
@@ -1229,7 +1256,7 @@ _dbus_listen_unix_socket (const char     *path,
                       "Failed to bind socket \"%s\": %s",
                       path, _dbus_strerror (errno));
       _dbus_close (listen_fd, NULL);
-      return -1;
+      return s;
     }
 
   if (listen (listen_fd, SOMAXCONN /* backlog */) < 0)
@@ -1238,14 +1265,14 @@ _dbus_listen_unix_socket (const char     *path,
                       "Failed to listen on socket \"%s\": %s",
                       path, _dbus_strerror (errno));
       _dbus_close (listen_fd, NULL);
-      return -1;
+      return s;
     }
 
   if (!_dbus_set_fd_nonblocking (listen_fd, error))
     {
       _DBUS_ASSERT_ERROR_IS_SET (error);
       _dbus_close (listen_fd, NULL);
-      return -1;
+      return s;
     }
 
   /* Try opening up the permissions, but if we can't, just go ahead
@@ -1254,7 +1281,8 @@ _dbus_listen_unix_socket (const char     *path,
   if (!abstract && chmod (path, 0777) < 0)
     _dbus_warn ("Could not set mode 0777 on socket %s", path);
 
-  return listen_fd;
+  s.fd = listen_fd;
+  return s;
 }
 
 /**
@@ -1469,7 +1497,6 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
                       _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
                       host, port, gai_strerror(res), res);
-      _dbus_socket_invalidate (&fd);
       goto out;
     }
 
@@ -1487,8 +1514,7 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
       if (connect (fd.fd, (struct sockaddr*) tmp->ai_addr, tmp->ai_addrlen) < 0)
         {
           saved_errno = errno;
-          _dbus_close (fd.fd, NULL);
-          _dbus_socket_invalidate (&fd);
+          _dbus_close_socket (&fd, NULL);
 
           connect_error = dbus_new0 (DBusError, 1);
 
@@ -1535,16 +1561,14 @@ _dbus_connect_tcp_socket_with_nonce (const char     *host,
 
       if (!ret)
         {
-          _dbus_close (fd.fd, NULL);
-          _dbus_socket_invalidate (&fd);
+          _dbus_close_socket (&fd, NULL);
           goto out;
         }
     }
 
   if (!_dbus_set_fd_nonblocking (fd.fd, error))
     {
-      _dbus_close (fd.fd, NULL);
-      _dbus_socket_invalidate (&fd);
+      _dbus_close_socket (&fd, NULL);
       goto out;
     }
 
@@ -1628,7 +1652,7 @@ _dbus_listen_tcp_socket (const char     *host,
       dbus_set_error (error,
                       _dbus_error_from_gai (res, errno),
                       "Failed to lookup host/port: \"%s:%s\": %s (%d)",
-                      host ? host : "*", port, gai_strerror(res), res);
+                      host ? host : "*", port ? port : "0", gai_strerror(res), res);
       goto failed;
     }
 
@@ -1649,7 +1673,7 @@ _dbus_listen_tcp_socket (const char     *host,
       if (setsockopt (fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(reuseaddr))==-1)
         {
           _dbus_warn ("Failed to set socket option \"%s:%s\": %s",
-                      host ? host : "*", port, _dbus_strerror (errno));
+                      host ? host : "*", port ? port : "0", _dbus_strerror (errno));
         }
 
       /* Nagle's algorithm imposes a huge delay on the initial messages
@@ -1658,7 +1682,7 @@ _dbus_listen_tcp_socket (const char     *host,
       if (setsockopt (fd, IPPROTO_TCP, TCP_NODELAY, &tcp_nodelay_on, sizeof (tcp_nodelay_on)) == -1)
         {
           _dbus_warn ("Failed to set TCP_NODELAY socket option \"%s:%s\": %s",
-                      host ? host : "*", port, _dbus_strerror (errno));
+                      host ? host : "*", port ? port : "0", _dbus_strerror (errno));
         }
 
       if (bind (fd, (struct sockaddr*) tmp->ai_addr, tmp->ai_addrlen) < 0)
@@ -1759,7 +1783,7 @@ _dbus_listen_tcp_socket (const char     *host,
                   saved_errno = errno;
                   dbus_set_error (error, _dbus_error_from_errno (saved_errno),
                                   "Failed to retrieve socket name for \"%s:%s\": %s",
-                                  host ? host : "*", port, _dbus_strerror (saved_errno));
+                                  host ? host : "*", port ? port : "0", _dbus_strerror (saved_errno));
                   goto failed;
                 }
 
@@ -1770,7 +1794,7 @@ _dbus_listen_tcp_socket (const char     *host,
                   saved_errno = errno;
                   dbus_set_error (error, _dbus_error_from_gai (res, saved_errno),
                                   "Failed to resolve port \"%s:%s\": %s (%d)",
-                                  host ? host : "*", port, gai_strerror(res), res);
+                                  host ? host : "*", port ? port : "0", gai_strerror(res), res);
                   goto failed;
                 }
 
@@ -2193,6 +2217,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
   dbus_gid_t primary_gid_read;
   dbus_pid_t pid_read;
   int bytes_read;
+  int pid_fd_read;
 
 #ifdef HAVE_CMSGCRED
   union {
@@ -2212,6 +2237,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
   uid_read = DBUS_UID_UNSET;
   primary_gid_read = DBUS_GID_UNSET;
   pid_read = DBUS_PID_UNSET;
+  pid_fd_read = -1;
 
   _DBUS_ASSERT_ERROR_IS_CLEAR (error);
 
@@ -2295,15 +2321,37 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
       }
     else
       {
-        pid_read = cr.pid;
-        uid_read = cr.uid;
+        if (cr.pid != 0)
+          pid_read = cr.pid;
+
+        if (cr.uid != (uid_t)-1)
+          uid_read = cr.uid;
 #ifdef __linux__
         /* Do other platforms have cr.gid? (Not that it really matters,
          * because the gid is useless to us unless we know the complete
          * group vector, which we only know on Linux.) */
-        primary_gid_read = cr.gid;
+        if (cr.gid != (gid_t)-1)
+          primary_gid_read = cr.gid;
 #endif
       }
+
+#ifdef SO_PEERPIDFD
+    /* If we have SO_PEERCRED we might also have SO_PEERPIDFD, which
+     * allows to pin the process ID, and is available on Linux since v6.5. */
+    cr_len = sizeof (int);
+
+    if (getsockopt (client_fd.fd, SOL_SOCKET, SO_PEERPIDFD, &pid_fd_read, &cr_len) != 0)
+      {
+        _dbus_verbose ("Failed to getsockopt(SO_PEERPIDFD): %s\n",
+                       _dbus_strerror (errno));
+      }
+    else if (cr_len != sizeof (int))
+      {
+        _dbus_verbose ("Failed to getsockopt(SO_PEERPIDFD), returned %d bytes, expected %d\n",
+                       cr_len, (int) sizeof (int));
+      }
+#endif
+
 #elif defined(HAVE_UNPCBID) && defined(LOCAL_PEEREID)
     /* Another variant of the above - used on NetBSD
      */
@@ -2345,7 +2393,7 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
             cmsgp->cmsg_level == SOL_SOCKET &&
             cmsgp->cmsg_len >= CMSG_LEN (sizeof (struct cmsgcred)))
           {
-            cred = (struct cmsgcred *) CMSG_DATA (cmsgp);
+            cred = (struct cmsgcred *) (void *) CMSG_DATA (cmsgp);
             pid_read = cred->cmcred_pid;
             uid_read = cred->cmcred_euid;
             break;
@@ -2458,6 +2506,11 @@ _dbus_read_credentials_socket  (DBusSocket       client_fd,
                  "\n",
 		 pid_read,
 		 uid_read);
+
+  /* Assign this first, so we don't have to close it manually in case one of
+   * the next steps fails. */
+  if (pid_fd_read >= 0)
+    _dbus_credentials_take_pid_fd (credentials, pid_fd_read);
 
   if (pid_read != DBUS_PID_UNSET)
     {
@@ -2678,12 +2731,12 @@ fill_user_info (DBusUserInfo       *info,
    * checks
    */
 
-#ifdef HAVE_GETPWNAM_R
   {
     struct passwd *p;
+    char *buf = NULL;
     int result;
+#ifdef HAVE_GETPWNAM_R
     size_t buflen;
-    char *buf;
     struct passwd p_str;
 
     /* retrieve maximum needed size for buf */
@@ -2724,7 +2777,36 @@ fill_user_info (DBusUserInfo       *info,
             break;
           }
       }
-    if (result == 0 && p == &p_str)
+
+    /* There are three possibilities:
+     * - an error: result is a nonzero error code, p should be NULL
+     * - name or uid not found: result is 0, p is NULL
+     * - success: result is 0, p should be &p_str
+     *
+     * Ensure that in all failure cases, p is set to NULL, matching the
+     * getpwuid/getpwnam interface. */
+    if (result != 0 || p != &p_str)
+      p = NULL;
+
+#else /* ! HAVE_GETPWNAM_R */
+    /* I guess we're screwed on thread safety here */
+#warning getpwnam_r() not available, please report this to the dbus maintainers with details of your OS
+
+    /* It is unspecified whether "failed to find" counts as an error,
+     * or whether it's reported as p == NULL without touching errno.
+     * Reset errno so we can distinguish. */
+    errno = 0;
+
+    if (uid != DBUS_UID_UNSET)
+      p = getpwuid (uid);
+    else
+      p = getpwnam (username_c);
+
+    /* Always initialized, but only meaningful if p is NULL */
+    result = errno;
+#endif  /* ! HAVE_GETPWNAM_R */
+
+    if (p != NULL)
       {
         if (!fill_user_info_from_passwd (p, info, error))
           {
@@ -2735,43 +2817,29 @@ fill_user_info (DBusUserInfo       *info,
       }
     else
       {
-        dbus_set_error (error, _dbus_error_from_errno (errno),
-                        "User \"%s\" unknown or no memory to allocate password entry\n",
-                        username_c ? username_c : "???");
-        _dbus_verbose ("User %s unknown\n", username_c ? username_c : "???");
+        DBusError local_error = DBUS_ERROR_INIT;
+        const char *error_str;
+
+        if (result == 0)
+          error_str = "not found";
+        else
+          error_str = _dbus_strerror (result);
+
+        if (uid != DBUS_UID_UNSET)
+          dbus_set_error (&local_error, _dbus_error_from_errno (result),
+                          "Looking up user ID " DBUS_UID_FORMAT ": %s",
+                          uid, error_str);
+        else
+          dbus_set_error (&local_error, _dbus_error_from_errno (result),
+                          "Looking up user \"%s\": %s",
+                          username_c ? username_c : "???", error_str);
+
+        _dbus_verbose ("%s", local_error.message);
+        dbus_move_error (&local_error, error);
         dbus_free (buf);
         return FALSE;
       }
   }
-#else /* ! HAVE_GETPWNAM_R */
-  {
-    /* I guess we're screwed on thread safety here */
-    struct passwd *p;
-
-#warning getpwnam_r() not available, please report this to the dbus maintainers with details of your OS
-
-    if (uid != DBUS_UID_UNSET)
-      p = getpwuid (uid);
-    else
-      p = getpwnam (username_c);
-
-    if (p != NULL)
-      {
-        if (!fill_user_info_from_passwd (p, info, error))
-          {
-            return FALSE;
-          }
-      }
-    else
-      {
-        dbus_set_error (error, _dbus_error_from_errno (errno),
-                        "User \"%s\" unknown or no memory to allocate password entry\n",
-                        username_c ? username_c : "???");
-        _dbus_verbose ("User %s unknown\n", username_c ? username_c : "???");
-        return FALSE;
-      }
-  }
-#endif  /* ! HAVE_GETPWNAM_R */
 
   /* Fill this in so we can use it to get groups */
   username_c = info->username;
@@ -2936,6 +3004,8 @@ _dbus_user_info_fill_uid (DBusUserInfo *info,
 dbus_bool_t
 _dbus_credentials_add_from_current_process (DBusCredentials *credentials)
 {
+  dbus_pid_t pid = _dbus_getpid ();
+
   /* The POSIX spec certainly doesn't promise this, but
    * we need these assertions to fail as soon as we're wrong about
    * it so we can do the porting fixups
@@ -2944,12 +3014,92 @@ _dbus_credentials_add_from_current_process (DBusCredentials *credentials)
   _DBUS_STATIC_ASSERT (sizeof (uid_t) <= sizeof (dbus_uid_t));
   _DBUS_STATIC_ASSERT (sizeof (gid_t) <= sizeof (dbus_gid_t));
 
-  if (!_dbus_credentials_add_pid(credentials, _dbus_getpid()))
+#if HAVE_DECL_SYS_PIDFD_OPEN
+  /* Normally this syscall would have a race condition, but we can trust
+   * that our own process isn't going to exit, so the pid won't get reused. */
+  int pid_fd = (int) syscall (SYS_pidfd_open, pid, 0);
+  if (pid_fd >= 0)
+    _dbus_credentials_take_pid_fd (credentials, pid_fd);
+#endif
+  if (!_dbus_credentials_add_pid (credentials, pid))
     return FALSE;
   if (!_dbus_credentials_add_unix_uid(credentials, _dbus_geteuid()))
     return FALSE;
 
   return TRUE;
+}
+
+/**
+ * Resolve the PID from the PID FD, if any. This allows us to avoid
+ * PID reuse attacks. Returns DBUS_PID_UNSET if the PID could not be resolved.
+ * Note that this requires being able to read /proc/self/fdinfo/<FD>,
+ * which is created as 600 and owned by the original UID that the
+ * process started as. So it cannot work when the start as root and
+ * drop privileges mechanism is in use (the systemd unit no longer
+ * does this, but third-party init-scripts might).
+ *
+ * @param pid_fd the PID FD
+ * @returns the resolved PID if found, DBUS_PID_UNSET otherwise
+ */
+dbus_pid_t
+_dbus_resolve_pid_fd (int pid_fd)
+{
+#ifdef __linux__
+  DBusError error = DBUS_ERROR_INIT;
+  DBusString content = _DBUS_STRING_INIT_INVALID;
+  DBusString filename = _DBUS_STRING_INIT_INVALID;
+  dbus_pid_t result = DBUS_PID_UNSET;
+  int pid_index;
+
+  if (pid_fd < 0)
+    goto out;
+
+  if (!_dbus_string_init (&content))
+    goto out;
+
+  if (!_dbus_string_init (&filename))
+    goto out;
+
+  if (!_dbus_string_append_printf (&filename, "/proc/self/fdinfo/%d", pid_fd))
+    goto out;
+
+  if (!_dbus_file_get_contents (&content, &filename, &error))
+    {
+      _dbus_verbose ("Cannot read '/proc/self/fdinfo/%d', unable to resolve PID, %s: %s\n",
+                     pid_fd, error.name, error.message);
+      goto out;
+    }
+
+  /* Ensure we are not reading PPid, either it's the first line of the file or
+   * there's a newline before it. */
+  if (!_dbus_string_find (&content, 0, "Pid:", &pid_index) ||
+      (pid_index > 0 && _dbus_string_get_byte (&content, pid_index - 1) != '\n'))
+    {
+      _dbus_verbose ("Cannot find 'Pid:' in '/proc/self/fdinfo/%d', unable to resolve PID\n",
+                     pid_fd);
+      goto out;
+    }
+
+  if (!_dbus_string_parse_uint (&content, pid_index + strlen ("Pid:"), &result, NULL))
+    {
+      _dbus_verbose ("Cannot parse 'Pid:' from '/proc/self/fdinfo/%d', unable to resolve PID\n",
+                     pid_fd);
+      goto out;
+    }
+
+out:
+  _dbus_string_free (&content);
+  _dbus_string_free (&filename);
+  dbus_error_free (&error);
+
+  if (result <= 0)
+    return DBUS_PID_UNSET;
+
+  return result;
+#else
+  return DBUS_PID_UNSET;
+#endif
+
 }
 
 /**
@@ -2966,8 +3116,7 @@ _dbus_credentials_add_from_current_process (DBusCredentials *credentials)
 dbus_bool_t
 _dbus_append_user_from_current_process (DBusString *str)
 {
-  return _dbus_string_append_uint (str,
-                                   _dbus_geteuid ());
+  return _dbus_string_append_printf (str, DBUS_UID_FORMAT, _dbus_geteuid ());
 }
 
 /**
@@ -3010,7 +3159,7 @@ _dbus_pid_for_log (void)
   return getpid ();
 }
 
-#if !DBUS_USE_SYNC
+#if !defined(HAVE_STDATOMIC_H) && !DBUS_USE_SYNC
 /* To be thread-safe by default on platforms that don't necessarily have
  * atomic operations (notably Debian armel, which is armv4t), we must
  * use a mutex that can be initialized statically, like this.
@@ -3028,7 +3177,11 @@ static pthread_mutex_t atomic_mutex = PTHREAD_MUTEX_INITIALIZER;
 dbus_int32_t
 _dbus_atomic_inc (DBusAtomic *atomic)
 {
-#if DBUS_USE_SYNC
+#ifdef HAVE_STDATOMIC_H
+  /* Atomic version of "old = *atomic; *atomic += 1; return old" */
+  return atomic_fetch_add (&atomic->value, 1);
+#elif DBUS_USE_SYNC
+  /* Atomic version of "*atomic += 1; return *atomic - 1" */
   return __sync_add_and_fetch(&atomic->value, 1)-1;
 #else
   dbus_int32_t res;
@@ -3051,7 +3204,11 @@ _dbus_atomic_inc (DBusAtomic *atomic)
 dbus_int32_t
 _dbus_atomic_dec (DBusAtomic *atomic)
 {
-#if DBUS_USE_SYNC
+#ifdef HAVE_STDATOMIC_H
+  /* Atomic version of "old = *atomic; *atomic -= 1; return old" */
+  return atomic_fetch_sub (&atomic->value, 1);
+#elif DBUS_USE_SYNC
+  /* Atomic version of "*atomic -= 1; return *atomic + 1" */
   return __sync_sub_and_fetch(&atomic->value, 1)+1;
 #else
   dbus_int32_t res;
@@ -3075,7 +3232,10 @@ _dbus_atomic_dec (DBusAtomic *atomic)
 dbus_int32_t
 _dbus_atomic_get (DBusAtomic *atomic)
 {
-#if DBUS_USE_SYNC
+#ifdef HAVE_STDATOMIC_H
+  /* Atomic version of "return *atomic" */
+  return atomic_load (&atomic->value);
+#elif DBUS_USE_SYNC
   __sync_synchronize ();
   return atomic->value;
 #else
@@ -3097,7 +3257,10 @@ _dbus_atomic_get (DBusAtomic *atomic)
 void
 _dbus_atomic_set_zero (DBusAtomic *atomic)
 {
-#if DBUS_USE_SYNC
+#ifdef HAVE_STDATOMIC_H
+  /* Atomic version of "*atomic = 0" */
+  atomic_store (&atomic->value, 0);
+#elif DBUS_USE_SYNC
   /* Atomic version of "*atomic &= 0; return *atomic" */
   __sync_and_and_fetch (&atomic->value, 0);
 #else
@@ -3115,7 +3278,10 @@ _dbus_atomic_set_zero (DBusAtomic *atomic)
 void
 _dbus_atomic_set_nonzero (DBusAtomic *atomic)
 {
-#if DBUS_USE_SYNC
+#ifdef HAVE_STDATOMIC_H
+  /* Atomic version of "*atomic = 1" */
+  atomic_store (&atomic->value, 1);
+#elif DBUS_USE_SYNC
   /* Atomic version of "*atomic |= 1; return *atomic" */
   __sync_or_and_fetch (&atomic->value, 1);
 #else
@@ -3212,7 +3378,7 @@ _dbus_poll (DBusPollFD *fds,
  * @param tv_usec return location for number of microseconds
  */
 void
-_dbus_get_monotonic_time (long *tv_sec,
+_dbus_get_monotonic_time (dbus_int64_t *tv_sec,
                           long *tv_usec)
 {
 #ifdef HAVE_MONOTONIC_CLOCK
@@ -3243,7 +3409,7 @@ _dbus_get_monotonic_time (long *tv_sec,
  * @param tv_usec return location for number of microseconds
  */
 void
-_dbus_get_real_time (long *tv_sec,
+_dbus_get_real_time (dbus_int64_t *tv_sec,
                      long *tv_usec)
 {
   struct timeval t;
@@ -3798,7 +3964,7 @@ _dbus_printf_string_upper_bound (const char *format,
   int len;
   va_list args_copy;
 
-  DBUS_VA_COPY (args_copy, args);
+  va_copy (args_copy, args);
   len = vsnprintf (static_buf, bufsize, format, args_copy);
   va_end (args_copy);
 
@@ -3816,7 +3982,7 @@ _dbus_printf_string_upper_bound (const char *format,
        * or the real length could be coincidentally the same. Which is it?
        * If vsnprintf returns the truncated length, we'll go to the slow
        * path. */
-      DBUS_VA_COPY (args_copy, args);
+      va_copy (args_copy, args);
 
       if (vsnprintf (static_buf, 1, format, args_copy) == 1)
         len = -1;
@@ -3837,7 +4003,7 @@ _dbus_printf_string_upper_bound (const char *format,
       if (buf == NULL)
         return -1;
 
-      DBUS_VA_COPY (args_copy, args);
+      va_copy (args_copy, args);
       len = vsnprintf (buf, bufsize, format, args_copy);
       va_end (args_copy);
 
@@ -4225,6 +4391,9 @@ _dbus_get_autolaunch_address (const char *scope,
 #else
   dbus_set_error_const (error, DBUS_ERROR_NOT_SUPPORTED,
       "Using X11 for dbus-daemon autolaunch was disabled at compile time, "
+#ifdef DBUS_ENABLE_LAUNCHD
+      "verify that org.freedesktop.dbus-session.plist is loaded or "
+#endif
       "set your DBUS_SESSION_BUS_ADDRESS instead");
   return FALSE;
 #endif
@@ -4366,17 +4535,12 @@ _dbus_lookup_launchd_socket (DBusString *socket_path,
 
 #ifdef DBUS_ENABLE_LAUNCHD
 static dbus_bool_t
-_dbus_lookup_session_address_launchd (DBusString *address, DBusError  *error)
+_dbus_lookup_session_address_launchd (dbus_bool_t *supported,
+                                      DBusString  *address,
+                                      DBusError   *error)
 {
   dbus_bool_t valid_socket;
   DBusString socket_path;
-
-  if (_dbus_check_setuid ())
-    {
-      dbus_set_error_const (error, DBUS_ERROR_NOT_SUPPORTED,
-                            "Unable to find launchd socket when setuid");
-      return FALSE;
-    }
 
   if (!_dbus_string_init (&socket_path))
     {
@@ -4384,21 +4548,14 @@ _dbus_lookup_session_address_launchd (DBusString *address, DBusError  *error)
       return FALSE;
     }
 
-  valid_socket = _dbus_lookup_launchd_socket (&socket_path, "DBUS_LAUNCHD_SESSION_BUS_SOCKET", error);
-
-  if (dbus_error_is_set(error))
-    {
-      _dbus_string_free(&socket_path);
-      return FALSE;
-    }
+  valid_socket = _dbus_lookup_launchd_socket (&socket_path, "DBUS_LAUNCHD_SESSION_BUS_SOCKET", NULL);
 
   if (!valid_socket)
     {
-      dbus_set_error(error, "no socket path",
-                "launchd did not provide a socket path, "
-                "verify that org.freedesktop.dbus-session.plist is loaded!");
+      _dbus_verbose ("launchd did not provide a socket path");
       _dbus_string_free(&socket_path);
-      return FALSE;
+      *supported = FALSE;
+      return TRUE;        /* Cannot use it, but not an error */
     }
   if (!_dbus_string_append (address, "unix:path="))
     {
@@ -4419,7 +4576,7 @@ _dbus_lookup_session_address_launchd (DBusString *address, DBusError  *error)
 }
 #endif
 
-dbus_bool_t
+static dbus_bool_t
 _dbus_lookup_user_bus (dbus_bool_t *supported,
                        DBusString  *address,
                        DBusError   *error)
@@ -4516,7 +4673,7 @@ _dbus_lookup_session_address (dbus_bool_t *supported,
 {
 #ifdef DBUS_ENABLE_LAUNCHD
   *supported = TRUE;
-  return _dbus_lookup_session_address_launchd (address, error);
+  return _dbus_lookup_session_address_launchd (supported, address, error);
 #else
   *supported = FALSE;
 
@@ -4628,9 +4785,10 @@ _dbus_append_keyring_directory_for_credentials (DBusString      *directory,
 }
 
 /* Documented in dbus-sysdeps-win.c, does nothing on Unix */
-void
+dbus_bool_t
 _dbus_daemon_unpublish_session_bus_address (void)
 {
+  return TRUE;
 }
 
 /**
@@ -4713,12 +4871,6 @@ _dbus_socket_can_pass_unix_fd (DBusSocket fd)
 #endif
 }
 
-static void
-close_ignore_error (int fd)
-{
-  close (fd);
-}
-
 /*
  * Similar to Solaris fdwalk(3), but without the ability to stop iteration,
  * and may call func for integers that are not actually valid fds.
@@ -4784,6 +4936,25 @@ act_on_fds_3_and_up (void (*func) (int fd))
     func (i);
 }
 
+/* Some library implementations of closefrom() are not async-signal-safe,
+ * and we call _dbus_close_all() after forking, so we only do this on
+ * operating systems where we know that closefrom() is a system call */
+#if defined(HAVE_CLOSEFROM) && ( \
+    defined(__FreeBSD__) || \
+    defined(__NetBSD__) || \
+    defined(__OpenBSD__) || \
+    defined(__sun__) && defined(F_CLOSEFROM) \
+)
+#define CLOSEFROM_SIGNAL_SAFE 1
+#else
+#define CLOSEFROM_SIGNAL_SAFE 0
+static void
+close_ignore_error (int fd)
+{
+  close (fd);
+}
+#endif
+
 /**
  * Closes all file descriptors except the first three (i.e. stdin,
  * stdout, stderr).
@@ -4791,7 +4962,16 @@ act_on_fds_3_and_up (void (*func) (int fd))
 void
 _dbus_close_all (void)
 {
+#ifdef HAVE_CLOSE_RANGE
+  if (close_range (3, INT_MAX, 0) == 0)
+    return;
+#endif
+
+#if CLOSEFROM_SIGNAL_SAFE
+  closefrom (3);
+#else
   act_on_fds_3_and_up (close_ignore_error);
+#endif
 }
 
 /**
@@ -4801,6 +4981,11 @@ _dbus_close_all (void)
 void
 _dbus_fd_set_all_close_on_exec (void)
 {
+#if defined(HAVE_CLOSE_RANGE) && defined(CLOSE_RANGE_CLOEXEC)
+  if (close_range (3, INT_MAX, CLOSE_RANGE_CLOEXEC) == 0)
+    return;
+#endif
+
   act_on_fds_3_and_up (_dbus_fd_set_close_on_exec);
 }
 
@@ -5028,7 +5213,7 @@ _dbus_logv (DBusSystemLogSeverity  severity,
 #ifdef HAVE_SYSLOG_H
   if (log_flags & DBUS_LOG_FLAGS_SYSTEM_LOG)
     {
-      int flags;
+      int flags = LOG_DAEMON | LOG_WARNING;
       switch (severity)
         {
           case DBUS_SYSTEM_LOG_INFO:
@@ -5047,7 +5232,7 @@ _dbus_logv (DBusSystemLogSeverity  severity,
             _dbus_assert_not_reached ("invalid log severity");
         }
 
-      DBUS_VA_COPY (tmp, args);
+      va_copy (tmp, args);
       vsyslog (flags, msg, tmp);
       va_end (tmp);
     }
@@ -5057,7 +5242,7 @@ _dbus_logv (DBusSystemLogSeverity  severity,
   if (log_flags & DBUS_LOG_FLAGS_STDERR)
 #endif
     {
-      DBUS_VA_COPY (tmp, args);
+      va_copy (tmp, args);
       fprintf (stderr, "%s[" DBUS_PID_FORMAT "]: ", syslog_tag, _dbus_getpid ());
       vfprintf (stderr, msg, tmp);
       fputc ('\n', stderr);

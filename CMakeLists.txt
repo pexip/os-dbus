@@ -1,53 +1,35 @@
-# where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
+cmake_minimum_required(VERSION 3.10)
 
 # we do not need to have WIN32 defined
 set(CMAKE_LEGACY_CYGWIN_WIN32 0)
 
-project(dbus)
-
-# we need to be up to date
-cmake_minimum_required(VERSION 3.4 FATAL_ERROR)
-if(COMMAND cmake_policy)
-    cmake_policy(SET CMP0003 NEW)
-endif()
-
-if(CMAKE_MAJOR_VERSION GREATER 2)
-    cmake_policy(SET CMP0026 NEW)
-    if(CMAKE_MAJOR_VERSION GREATER 4 OR CMAKE_MINOR_VERSION GREATER 1)
-        cmake_policy(SET CMP0053 NEW)
-        cmake_policy(SET CMP0054 NEW)
-    endif()
-endif()
-
-option(DBUS_BUILD_TESTS "enable unit test code" ON)
+# where to look first for cmake modules, before ${CMAKE_ROOT}/Modules/ is checked
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
 
 # detect version
-include(MacrosAutotools)
-autoinit(configure.ac)
-autoversion(dbus)
+include(MacrosMeson)
+meson_init(meson.build)
+meson_version(dbus)
+set(DBUS_PATCH_VERSION 0)
+set(VERSION "${DBUS_VERSION}")
+
+if(WIN32)
+    set(LANGUAGES C CXX)
+else()
+    set(LANGUAGES C)
+endif()
+project(dbus
+    VERSION ${DBUS_VERSION}
+    LANGUAGES C CXX
+)
+
+option(DBUS_BUILD_TESTS "enable unit test code" ON)
+option(DBUS_ENABLE_INTRUSIVE_TESTS "enable tests that require insecure extra code in the library and binaries" OFF)
 
 # replacement for AC_C_BIGENDIAN
 include (TestBigEndian)
 test_big_endian(WORDS_BIGENDIAN)
-
-if(EXISTS ${CMAKE_SOURCE_DIR}/config.h.in)
-    autoheaderchecks(${CMAKE_SOURCE_DIR}/config.h.in ${CMAKE_SOURCE_DIR}/cmake/ConfigureChecks.cmake ${CMAKE_SOURCE_DIR}/cmake/config.h.cmake)
-else()
-    message(STATUS "Generate config.h.in with autogen.sh to enable cmake header difference check.")
-endif()
-
-# used by file version info
-set(DBUS_PATCH_VERSION "0")
-
-# set PACKAGE_... variables
-autopackage(
-    dbus
-    ${DBUS_VERSION_STRING}
-    "http://dbus.freedesktop.org"
-    "https://gitlab.freedesktop.org/dbus/dbus/issues"
-)
 
 include(Macros)
 string(TIMESTAMP DBUS_BUILD_TIMESTAMP "%Y%m%d%H%M" UTC)
@@ -83,7 +65,7 @@ set(DBUS_MACHINE_UUID_FILE   ${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/lib/dbus/machin
 set(DBUS_BINDIR              ${CMAKE_INSTALL_FULL_BINDIR})
 set(DBUS_DAEMONDIR           ${CMAKE_INSTALL_FULL_BINDIR})
 set(DBUS_LOCALSTATEDIR       ${CMAKE_INSTALL_FULL_LOCALSTATEDIR})
-set(DBUS_RUNSTATEDIR         ${CMAKE_INSTALL_FULL_LOCALSTATEDIR}/run)
+set(DBUS_RUNSTATEDIR         ${CMAKE_INSTALL_FULL_RUNSTATEDIR})
 
 # On Windows this is relative to where we put the bus setup, in
 # ${datadir}/dbus-1. For simplicity, we only do this if
@@ -123,13 +105,14 @@ set(BUILD_SHARED_LIBS ON)
 set(INSTALL_TARGETS_DEFAULT_ARGS EXPORT DBus1Targets RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 if(CYGWIN)
+    # TODO cygwin is not using WIN32 api
     set(WIN32)
 endif()
 
 # search for required packages
 if(WIN32)
     # include local header first to avoid using old installed header
-    set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} ${CMAKE_SOURCE_DIR}/..)
+    set(CMAKE_INCLUDE_PATH ${CMAKE_INCLUDE_PATH} ${PROJECT_SOURCE_DIR})
     include(Win32Macros)
     addExplorerWrapper(${CMAKE_PROJECT_NAME})
 endif()
@@ -212,10 +195,6 @@ include(ConfigureChecks)
 
 # make some more macros available
 include(MacroLibrary)
-
-if(VCS)
-    set(DBUS_VERBOSE_C_S 1 CACHE STRING "verbose mode" FORCE)
-endif()
 
 if(MSVC)
     # controll folders in msvc projects
@@ -336,9 +315,13 @@ else()
         pointer-sign
     )
     set(WARNINGS_DISABLED
+        error=inline
         error=overloaded-virtual
         error=missing-field-initializers
+        error=null-dereference
+        error=strict-aliasing
         error=unused-parameter
+        inline
         unused-parameter
     )
     set(WARNINGS_ERRORS
@@ -360,6 +343,7 @@ generate_compiler_warning_flags(
         ${WARNINGS_ERRORS}
 )
 generate_compiler_warning_flags(
+    CXX
     RESULTVAR
         WARNINGS_CXXFLAGS
     WARNINGS
@@ -371,12 +355,12 @@ generate_compiler_warning_flags(
 )
 
 string(APPEND CMAKE_C_FLAGS " ${WARNINGS_CFLAGS}")
-string(APPEND CMAKE_CXX_FLAGS " ${WARNINGS_CFLAGS}")
+string(APPEND CMAKE_CXX_FLAGS " ${WARNINGS_CXXFLAGS}")
 
 # let wine be able to show file and lines in backtrace
 if(DBUS_USE_WINE)
-    string(APPEND CMAKE_C_FLAGS " -gstabs")
-    string(APPEND CMAKE_CXX_FLAGS " -gstabs")
+    string(APPEND CMAKE_C_FLAGS " -gdwarf-2")
+    string(APPEND CMAKE_CXX_FLAGS " -gdwarf-2")
 endif()
 
 if(UNIX AND NOT DBUS_DISABLE_ASSERT)
@@ -392,8 +376,9 @@ if(UNIX AND NOT DBUS_DISABLE_ASSERT)
 endif()
 
 if(DBUS_WITH_GLIB)
-    autodefine(GLIB_VERSION_MIN_REQUIRED)
-    autodefine(GLIB_VERSION_MAX_ALLOWED)
+    # keep in sync with meson.build
+    set(GLIB_VERSION_MIN_REQUIRED GLIB_VERSION_2_38)
+    set(GLIB_VERSION_MAX_ALLOWED "G_ENCODE_VERSION(2,44)")
 endif()
 
 string(APPEND CMAKE_C_FLAGS_DEBUG " -D_DEBUG")
@@ -431,23 +416,23 @@ enable_testing()
 #macro_ensure_out_of_source_build("dbus requires an out of source build. Please create a separate build directory and run 'cmake path_to_dbus [options]' there.")
 
 # ... and warn in case of an earlier in-source build
-#set(generatedFileInSourceDir EXISTS ${CMAKE_SOURCE_DIR}/config.h)
+#set(generatedFileInSourceDir EXISTS ${PROJECT_SOURCE_DIR}/config.h)
 #if(${generatedFileInSourceDir})
 #   message(STATUS "config.h exists in your source directory.")
 #endif(${generatedFileInSourceDir})
 #########################################################################
 
 ########### build output path definitions ###############
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 if(WIN32 OR CYGWIN)
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/bin)
 else()
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 endif()
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/lib)
 
 # for including config.h and for includes like <dir/foo.h>
-include_directories(. ${CMAKE_BINARY_DIR} ${CMAKE_INCLUDE_PATH})
+include_directories(. ${PROJECT_BINARY_DIR} ${CMAKE_INCLUDE_PATH})
 
 # linker search directories
 link_directories(${DBUS_LIB_DIR} ${CMAKE_LIBRARY_OUTPUT_DIRECTORY} )
@@ -459,7 +444,6 @@ enable_testing()
 
 ########### command line options ###############
 if(DBUS_BUILD_TESTS)
-    set(DBUS_ENABLE_EMBEDDED_TESTS ON)
     set(DBUS_ENABLE_MODULAR_TESTS ON)
 endif()
 
@@ -575,7 +559,7 @@ if(MSVC_IDE)
         message(STATUS)
     endif()
     set(TEST_PATH_FORCE FORCE)
-    file(REMOVE ${CMAKE_BINARY_DIR}/data/dbus-1/services)
+    file(REMOVE ${PROJECT_BINARY_DIR}/data/dbus-1/services)
 endif()
 
 #### Find socket directories
@@ -600,8 +584,6 @@ endif()
  # Not used on Windows, where there is no system bus
 set(DBUS_SYSTEM_PID_FILE ${DBUS_RUNSTATEDIR}/dbus/pid)
 
-set(DBUS_CONSOLE_AUTH_DIR "" CACHE STRING "Directory to check for pam_console/pam_foreground flag files, or empty to ignore")
-
 # This won't work on Windows. It's not meant to - the system bus is
 # meaningless on Windows anyway.
 #
@@ -611,6 +593,18 @@ set(DBUS_CONSOLE_AUTH_DIR "" CACHE STRING "Directory to check for pam_console/pa
 # two variables, one for the listening address and one for the connecting
 # address.
 set(DBUS_SYSTEM_BUS_DEFAULT_ADDRESS "unix:path=${DBUS_RUNSTATEDIR}/dbus/system_bus_socket" CACHE STRING "system bus default address")
+
+# This check assumes that the disposition of /run and /var/run on the
+# system where we're building is the same as on the system we're building
+# for, so we can't usefully do this check if we're building for Windows,
+# or if we're cross-building for Unix on a Windows machine.
+#
+# The check is shared between Autotools and CMake.
+# Because we only run it on Unix, it's fine to make it a shell script.
+if(UNIX AND (NOT CMAKE_HOST_SYSTEM_NAME STREQUAL "Windows"))
+    execute_process(
+        COMMAND "${CMAKE_SOURCE_DIR}/tools/check-runstatedir.sh" "${DBUS_RUNSTATEDIR}/dbus/system_bus_socket")
+endif()
 
 if(WIN32)
     set(DBUS_SESSION_BUS_LISTEN_ADDRESS "autolaunch:" CACHE STRING "session bus default listening address")
@@ -645,7 +639,7 @@ add_definitions(-DHAVE_CONFIG_H)
 add_definitions(${DBUS_BUS_CFLAGS})
 
 
-if(DBUS_BUILD_TESTS)
+if(DBUS_ENABLE_MODULAR_TESTS OR DBUS_ENABLE_INTRUSIVE_TESTS)
     # set variables used for the .in files (substituted by configure_file) in test/data:
     set(DBUS_TEST_EXEC ${Z_DRIVE_IF_WINE}${CMAKE_RUNTIME_OUTPUT_DIRECTORY}${IDE_BIN})
     # Working directory for build-time tests, so that they'll pick up
@@ -654,14 +648,14 @@ if(DBUS_BUILD_TESTS)
     # different, and it has no direct Autotools equivalent (Autotools
     # tests automatically get their own ${builddir} as working directory).
     set(DBUS_TEST_WORKING_DIR ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}${IDE_BIN})
-    set(DBUS_TEST_DATA ${Z_DRIVE_IF_WINE}${CMAKE_BINARY_DIR}/test/data)
+    set(DBUS_TEST_DATA ${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test/data)
     set(DBUS_TEST_DAEMON ${Z_DRIVE_IF_WINE}${CMAKE_RUNTIME_OUTPUT_DIRECTORY}${IDE_BIN}/dbus-daemon${EXEEXT})
     set(DBUS_TEST_DBUS_LAUNCH ${Z_DRIVE_IF_WINE}${CMAKE_RUNTIME_OUTPUT_DIRECTORY}${IDE_BIN}/dbus-launch${EXEEXT})
-    set(DBUS_TEST_HOMEDIR ${Z_DRIVE_IF_WINE}${CMAKE_BINARY_DIR}/dbus)
+    set(DBUS_TEST_HOMEDIR ${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/dbus)
     set(DBUS_TEST_RUN_SESSION ${Z_DRIVE_IF_WINE}${CMAKE_RUNTIME_OUTPUT_DIRECTORY}${IDE_BIN}/dbus-run-session${EXEEXT})
     set(TEST_LAUNCH_HELPER_BINARY ${Z_DRIVE_IF_WINE}${DBUS_TEST_EXEC}/dbus-daemon-launch-helper-for-tests${EXEEXT})
     if(UNIX)
-        set(TEST_SOCKET_DIR ${DBUS_SESSION_SOCKET_DIR})
+        set(TEST_SOCKET_DIR ${DBUS_SESSION_SOCKET_DIR} CACHE STRING "Where to put test sockets")
         set(TEST_LISTEN "unix:tmpdir=${TEST_SOCKET_DIR}")
     endif()
     if(WIN32)
@@ -675,11 +669,11 @@ set(DBUS_INTERNAL_LIBRARIES dbus-internal)
 set(DBUS_INTERNAL_ADD_LIBRARY_OPTIONS STATIC)
 set(DBUS_INTERNAL_CLIENT_DEFINITIONS "-DDBUS_COMPILATION")
 
-configure_file(cmake/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h )
+configure_file(cmake/config.h.cmake ${PROJECT_BINARY_DIR}/config.h)
 
 if(WIN32)
-configure_file(cmake/dbus-env.bat.cmake ${CMAKE_BINARY_DIR}/bin/dbus-env.bat )
-    install(FILES ${CMAKE_BINARY_DIR}/bin/dbus-env.bat DESTINATION ${CMAKE_INSTALL_BINDIR})
+configure_file(cmake/dbus-env.bat.cmake ${PROJECT_BINARY_DIR}/bin/dbus-env.bat)
+    install(FILES ${PROJECT_BINARY_DIR}/bin/dbus-env.bat DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 #
@@ -687,14 +681,14 @@ endif()
 #
 set(INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/DBus1)
 if(WIN32)
-    configure_file(cmake/DBus1Config.cmake.in "${CMAKE_BINARY_DIR}/DBus1Config.cmake" @ONLY)
+    configure_file(cmake/DBus1Config.cmake.in "${PROJECT_BINARY_DIR}/DBus1Config.cmake" @ONLY)
 else()
-    configure_file(cmake/DBus1Config.pkgconfig.in "${CMAKE_BINARY_DIR}/DBus1Config.cmake" @ONLY)
+    configure_file(cmake/DBus1Config.pkgconfig.in "${PROJECT_BINARY_DIR}/DBus1Config.cmake" @ONLY)
 endif()
-configure_file(cmake/DBus1ConfigVersion.cmake.in "${CMAKE_BINARY_DIR}/DBus1ConfigVersion.cmake" @ONLY)
+configure_file(cmake/DBus1ConfigVersion.cmake.in "${PROJECT_BINARY_DIR}/DBus1ConfigVersion.cmake" @ONLY)
 install(FILES
-    "${CMAKE_BINARY_DIR}/DBus1Config.cmake"
-    "${CMAKE_BINARY_DIR}/DBus1ConfigVersion.cmake"
+    "${PROJECT_BINARY_DIR}/DBus1Config.cmake"
+    "${PROJECT_BINARY_DIR}/DBus1ConfigVersion.cmake"
     DESTINATION "${INSTALL_CMAKE_DIR}"
 )
 
@@ -706,7 +700,7 @@ endif()
 
 add_subdirectory( dbus )
 add_subdirectory( bus )
-if(DBUS_BUILD_TESTS)
+if(DBUS_ENABLE_MODULAR_TESTS OR DBUS_ENABLE_INTRUSIVE_TESTS)
     add_subdirectory( test )
     add_custom_target(check
         COMMAND ctest -R ^test-.*
@@ -748,6 +742,7 @@ message("        cxxflags release:         ${CMAKE_CXX_FLAGS_RELEASE}          "
 message("        64-bit int:               ${DBUS_INT64_TYPE}                  ")
 message("        32-bit int:               ${DBUS_INT32_TYPE}                  ")
 message("        16-bit int:               ${DBUS_INT16_TYPE}                  ")
+message("        pointer size:             ${DBUS_SIZEOF_VOID_P}               ")
 message("        Doxygen:                  ${DOXYGEN}                          ")
 message("        Docbook Generator:        ${DOCBOOK_GENERATOR_NAME}           ")
 
@@ -757,6 +752,7 @@ if(MSVC)
 message("        MSVC code analyze mode:   ${DBUS_MSVC_ANALYZE}                ")
 endif()
 message("        Building unit tests:      ${DBUS_BUILD_TESTS}                 ")
+message("        Building intrusive tests: ${DBUS_ENABLE_INTRUSIVE_TESTS}      ")
 message("        Building with GLib:       ${DBUS_WITH_GLIB}                   ")
 message("        Building verbose mode:    ${DBUS_ENABLE_VERBOSE_MODE}         ")
 message("        Building w/o assertions:  ${DBUS_DISABLE_ASSERT}              ")
@@ -783,12 +779,6 @@ message("        System bus PID file:      ${DBUS_SYSTEM_PID_FILE}             "
 message("        System bus user:          ${DBUS_USER}                        ")
 message("        Session bus socket dir:   ${DBUS_SESSION_SOCKET_DIR}          ")
 
-if(DBUS_CONSOLE_AUTH_DIR)
-message("        pam_console auth dir:     ${DBUS_CONSOLE_AUTH_DIR}            ")
-else()
-message("        pam_console auth dir:     (none)                              ")
-endif()
-
 message("        'make check' socket dir:  ${TEST_SOCKET_DIR}                  ")
 endif()
 message("        Test listen address:      ${TEST_LISTEN}                      ")
@@ -797,11 +787,11 @@ message("        build timestamp:          ${DBUS_BUILD_TIMESTAMP}             "
 endif()
 
 message(" ")
-if(DBUS_BUILD_TESTS)
-    message("NOTE: building with unit tests increases the size of the installed library and renders it insecure.")
+if(DBUS_ENABLE_INTRUSIVE_TESTS)
+    message("NOTE: building with intrusive test code increases the size of the installed library and renders it insecure.")
 endif()
 
-if(DBUS_BUILD_TESTS AND DBUS_DISABLE_ASSERT)
+if(DBUS_ENABLE_INTRUSIVE_TESTS AND DBUS_DISABLE_ASSERT)
     message("NOTE: building with unit tests but without assertions means tests may not properly report failures (this configuration is only useful when doing something like profiling the tests)")
 endif()
 
@@ -831,7 +821,7 @@ include(CPackInstallConfig)
 
 add_custom_target(help-options
     cmake -LH
-    WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
 )
 
 #
@@ -858,7 +848,7 @@ if(DBUS_ENABLE_PKGCONFIG)
         set(datadir "\${prefix}/${CMAKE_INSTALL_DATADIR}")
         set(datarootdir "\${prefix}/${CMAKE_INSTALL_DATADIR}")
         set(dbus_daemondir "\${prefix}/${CMAKE_INSTALL_BINDIR}")
-        configure_file(dbus-1.pc.in ${CMAKE_BINARY_DIR}/dbus-1.pc @ONLY)
-        install(FILES ${CMAKE_BINARY_DIR}/dbus-1.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+        configure_file(dbus-1.pc.in ${PROJECT_BINARY_DIR}/dbus-1.pc @ONLY)
+        install(FILES ${PROJECT_BINARY_DIR}/dbus-1.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
     endif()
 endif()

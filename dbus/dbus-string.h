@@ -4,6 +4,8 @@
  * Copyright (C) 2002, 2003 Red Hat, Inc.
  * Copyright (C) 2006 Ralf Habacker <ralf.habacker@freenet.de>
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,6 +32,8 @@
 #include <dbus/dbus-memory.h>
 
 #include <stdarg.h>
+
+#include <dbus/dbus-macros-internal.h>
 
 DBUS_BEGIN_DECLS
 
@@ -105,6 +109,8 @@ void          _dbus_string_lock                  (DBusString        *str);
 DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_compact               (DBusString        *str,
                                                   int                max_waste);
+DBUS_PRIVATE_EXPORT
+int           _dbus_string_get_allocated_size    (const DBusString *str);
 #ifndef _dbus_string_get_data
 DBUS_PRIVATE_EXPORT
 char*         _dbus_string_get_data              (DBusString        *str);
@@ -206,12 +212,6 @@ dbus_bool_t   _dbus_string_append_len            (DBusString        *str,
                                                   const char        *buffer,
                                                   int                len);
 DBUS_PRIVATE_EXPORT
-dbus_bool_t   _dbus_string_append_int            (DBusString        *str,
-                                                  long               value);
-DBUS_PRIVATE_EXPORT
-dbus_bool_t   _dbus_string_append_uint           (DBusString        *str,
-                                                  unsigned long      value);
-DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_append_byte           (DBusString        *str,
                                                   unsigned char      byte);
 DBUS_PRIVATE_EXPORT
@@ -286,6 +286,11 @@ dbus_bool_t   _dbus_string_parse_uint            (const DBusString  *str,
                                                   unsigned long     *value_return,
                                                   int               *end_return);
 DBUS_PRIVATE_EXPORT
+dbus_bool_t   _dbus_string_parse_int64           (const DBusString  *str,
+                                                  int                start,
+                                                  dbus_int64_t      *value_return,
+                                                  int               *end_return);
+DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_find                  (const DBusString  *str,
                                                   int                start,
                                                   const char        *substr,
@@ -356,6 +361,10 @@ DBUS_PRIVATE_EXPORT
 void          _dbus_string_chop_white            (DBusString        *str); 
 dbus_bool_t   _dbus_string_append_byte_as_hex    (DBusString        *str,
                                                   unsigned char      byte);
+DBUS_EMBEDDED_TESTS_EXPORT
+dbus_bool_t _dbus_string_append_buffer_as_hex    (DBusString        *str,
+                                                  void              *buf,
+                                                  int                size);
 DBUS_PRIVATE_EXPORT
 dbus_bool_t   _dbus_string_hex_encode            (const DBusString  *source,
                                                   int                start,

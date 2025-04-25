@@ -1,6 +1,6 @@
 option(DBUS_USE_WINE "set to 1 or ON to support running test cases with Wine" OFF)
 
-if(DBUS_BUILD_TESTS AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if((DBUS_ENABLE_MODULAR_TESTS OR DBUS_ENABLE_INTRUSIVE_TESTS) AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Windows")
     if(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
         find_file(WINE_EXECUTABLE
             NAMES wine
@@ -39,6 +39,34 @@ if(DBUS_BUILD_TESTS AND CMAKE_CROSSCOMPILING AND CMAKE_SYSTEM_NAME STREQUAL "Win
 endif()
 
 #
+# unit test setup
+#
+macro(setup_unit_tests)
+    if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        set(DBUS_PATH_DELIMITER ";")
+    else()
+        set(DBUS_PATH_DELIMITER ":")
+    endif()
+
+    # Tests in bus/config-parser.c rely on these specific values for XDG_*
+    set(DBUS_TEST_XDG_DATA_DIRS "${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test/XDG_DATA_DIRS" "${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test/XDG_DATA_DIRS2")
+    set(DBUS_TEST_XDG_DATA_HOME "${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test/XDG_DATA_HOME")
+    set(DBUS_TEST_XDG_RUNTIME_DIR "${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test/XDG_RUNTIME_DIR")
+    list(JOIN DBUS_TEST_XDG_DATA_DIRS "${DBUS_PATH_DELIMITER}" DBUS_TEST_XDG_DATA_DIRS_JOINED)
+
+    # the test environment expects these directories to be present
+    foreach(_dir ${DBUS_TEST_XDG_RUNTIME_DIR})
+        if(NOT EXISTS ${_dir})
+            message(STATUS "creating directory '${_dir}' for test environment")
+            file(MAKE_DIRECTORY ${_dir})
+            if(NOT WIN32)
+                file(CHMOD ${_dir} DIRECTORY_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE)
+            endif()
+        endif()
+    endforeach()
+endmacro()
+
+#
 # add dbus specific test
 #
 # @param _name test name
@@ -56,17 +84,28 @@ macro(add_unit_test _name _target)
         COMMAND ${TEST_WRAPPER} ${__ARGS} ${Z_DRIVE_IF_WINE}$<TARGET_FILE:${_target}> --tap
         WORKING_DIRECTORY ${DBUS_TEST_WORKING_DIR}
     )
+
+    if(NOT setup_unit_tests_called)
+        setup_unit_tests()
+        set(setup_unit_test_called 1)
+    endif()
+
     set(_env)
     list(APPEND _env "DBUS_SESSION_BUS_ADDRESS=")
     list(APPEND _env "DBUS_FATAL_WARNINGS=1")
+    list(APPEND _env "DBUS_TEST_BUILDDIR=${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test")
     list(APPEND _env "DBUS_TEST_DAEMON=${DBUS_TEST_DAEMON}")
     list(APPEND _env "DBUS_TEST_DATA=${DBUS_TEST_DATA}")
     list(APPEND _env "DBUS_TEST_DBUS_LAUNCH=${DBUS_TEST_DBUS_LAUNCH}")
     list(APPEND _env "DBUS_TEST_EXEC=${DBUS_TEST_EXEC}")
     list(APPEND _env "DBUS_TEST_HOMEDIR=${DBUS_TEST_HOMEDIR}")
     list(APPEND _env "DBUS_TEST_UNINSTALLED=1")
+    # used by GLib-based tests to implement g_test_build_filename(), etc.
     list(APPEND _env "G_TEST_BUILDDIR=${Z_DRIVE_IF_WINE}${PROJECT_BINARY_DIR}/test")
     list(APPEND _env "G_TEST_SRCDIR=${Z_DRIVE_IF_WINE}${PROJECT_SOURCE_DIR}/test")
+    list(APPEND _env "XDG_DATA_DIRS=${DBUS_TEST_XDG_DATA_DIRS_JOINED}")
+    list(APPEND _env "XDG_DATA_HOME=${DBUS_TEST_XDG_DATA_HOME}")
+    list(APPEND _env "XDG_RUNTIME_DIR=${DBUS_TEST_XDG_RUNTIME_DIR}")
     list(APPEND _env ${__ENV})
     set_tests_properties(${_name} PROPERTIES ENVIRONMENT "${_env}")
 endmacro()
@@ -122,17 +161,36 @@ macro(add_session_test_executable _target _source)
     )
 endmacro()
 
+include(CheckCCompilerFlag)
+include(CheckCXXCompilerFlag)
+function(check_compiler_warning_flag _flag _result _cxx)
+    string(MAKE_C_IDENTIFIER "${_flag}" _varname)
+    # required to get errors
+    list(APPEND _flag -Werror)
+    if(_flag MATCHES "-Wformat-.*")
+        list(APPEND _flag -Wformat)
+    endif()
+    if (_cxx)
+        check_cxx_compiler_flag("${_flag}" HAVE_CXX_FLAG${_varname})
+        set(${_result} ${HAVE_CXX_FLAG${_varname}} PARENT_SCOPE)
+    else()
+        check_c_compiler_flag("${_flag}" HAVE_C_FLAG${_varname})
+        set(${_result} ${HAVE_C_FLAG${_varname}} PARENT_SCOPE)
+    endif()
+endfunction()
+
 # generate compiler flags from MSVC warning identifiers (e.g. '4114') or gcc warning keys (e.g. 'pointer-sign')
 # Options:
 #   [DISABLED <list>] list of warnings to disable
 #   [ERRORS <list>] list of warnings to report as error
 #   RESULTVAR <var> variable name to get results
 #   WARNINGS <list> list of warnings to add
+#   [CXX] Check if the flag is supported using the C++ compiler instead of the C compiler
 #
 macro(generate_compiler_warning_flags)
     # Support if() IN_LIST operator
     cmake_policy(SET CMP0057 NEW)
-    set(options)
+    set(options CXX)
     set(oneValueArgs RESULTVAR)
     set(multiValueArgs WARNINGS DISABLED ERRORS)
     cmake_parse_arguments(ARGS "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
@@ -140,6 +198,7 @@ macro(generate_compiler_warning_flags)
     unset(USED)
     unset(USED_WARNINGS)
     unset(USED_DISABLED)
+    unset(USED_UNSUPPORTED)
 
     if(MSVC)
         # level 1 is default
@@ -154,18 +213,29 @@ macro(generate_compiler_warning_flags)
 
     set(temp)
     foreach(warning ${ARGS_ERRORS})
-        set(temp "${temp} ${error_prefix}${warning}")
-        list(APPEND USED ${warning})
+        check_compiler_warning_flag("${error_prefix}${warning}" _flag_supported "${ARGS_CXX}")
+        if(_flag_supported)
+            set(temp "${temp} ${error_prefix}${warning}")
+            list(APPEND USED ${warning})
+        elseif(NOT warning IN_LIST USED_UNSUPPORTED)
+            list(APPEND USED_UNSUPPORTED ${warning})
+        endif()
     endforeach()
+
     foreach(warning ${ARGS_WARNINGS})
         if(warning IN_LIST ARGS_ERRORS)
             message(WARNING "warning '${warning}' already specified as error, ignored")
         elseif(warning IN_LIST ARGS_DISABLED)
             message(WARNING "warning '${warning}' already specified as disabled, ignored")
         elseif(NOT warning IN_LIST USED)
-            set(temp "${temp} ${enabled_prefix}${warning}")
-            list(APPEND USED_WARNINGS ${warning})
-            list(APPEND USED ${warning})
+            check_compiler_warning_flag("${enabled_prefix}${warning}" _flag_supported "${ARGS_CXX}")
+            if(_flag_supported)
+                set(temp "${temp} ${enabled_prefix}${warning}")
+                list(APPEND USED_WARNINGS ${warning})
+                list(APPEND USED ${warning})
+            elseif(NOT warning IN_LIST USED_UNSUPPORTED)
+                list(APPEND USED_UNSUPPORTED ${warning})
+            endif()
         endif()
     endforeach()
 
@@ -175,18 +245,21 @@ macro(generate_compiler_warning_flags)
         elseif(warning IN_LIST ARGS_WARNINGS)
             message(WARNING "disabled warning '${warning}' already specified as warning, ignored")
         elseif(NOT warning IN_LIST USED)
-            set(temp "${temp} ${disabled_prefix}${warning}")
-            list(APPEND USED_DISABLED ${warning})
-            list(APPEND USED ${warning})
+            check_compiler_warning_flag("${disabled_prefix}${warning}" _flag_supported "${ARGS_CXX}")
+            if(_flag_supported)
+                set(temp "${temp} ${disabled_prefix}${warning}")
+                list(APPEND USED_DISABLED ${warning})
+                list(APPEND USED ${warning})
+            elseif(NOT warning IN_LIST USED_UNSUPPORTED)
+                list(APPEND USED_UNSUPPORTED ${warning})
+            endif()
         endif()
     endforeach()
 
-    foreach(warning ${ARGS_ERRORS})
-        set(temp "${temp} ${error_prefix}${warning}")
-    endforeach()
     set(${ARGS_RESULTVAR} "${temp}")
     message(STATUS "effectively used warnings for '${ARGS_RESULTVAR}': ${USED_WARNINGS}")
     message(STATUS "effectively used disabled warnings for '${ARGS_RESULTVAR}': ${USED_DISABLED}")
+    message(STATUS "unsupported warnings for '${ARGS_RESULTVAR}': ${USED_UNSUPPORTED}")
 endmacro()
 
 #
@@ -201,8 +274,8 @@ macro(add_uac_manifest _sources)
     # 24 is the resource type, RT_MANIFEST
     # constants are used because of a bug in windres
     # see https://stackoverflow.com/questions/33000158/embed-manifest-file-to-require-administrator-execution-level-with-mingw32
-    get_filename_component(UAC_FILE ${CMAKE_SOURCE_DIR}/tools/Win32.Manifest REALPATH)
-    set(outfile ${CMAKE_BINARY_DIR}/disable-uac.rc)
+    get_filename_component(UAC_FILE ${PROJECT_SOURCE_DIR}/tools/Win32.Manifest REALPATH)
+    set(outfile ${PROJECT_BINARY_DIR}/disable-uac.rc)
     if(NOT EXISTS outfile)
         file(WRITE ${outfile} "1 24 \"${UAC_FILE}\"\n")
     endif()
@@ -213,7 +286,7 @@ macro(add_executable_version_info _sources _name)
     set(DBUS_VER_INTERNAL_NAME "${_name}")
     set(DBUS_VER_ORIGINAL_NAME "${DBUS_VER_INTERNAL_NAME}${CMAKE_EXECUTABLE_SUFFIX}")
     set(DBUS_VER_FILE_TYPE "VFT_APP")
-    configure_file(${CMAKE_SOURCE_DIR}/dbus/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo-${DBUS_VER_INTERNAL_NAME}.rc)
+    configure_file(${PROJECT_SOURCE_DIR}/dbus/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo-${DBUS_VER_INTERNAL_NAME}.rc)
     # version info and uac manifest can be combined in a binary because they use different resource types
     list(APPEND ${_sources} ${CMAKE_CURRENT_BINARY_DIR}/versioninfo-${DBUS_VER_INTERNAL_NAME}.rc)
 endmacro()
@@ -222,7 +295,7 @@ macro(add_library_version_info _sources _name)
     set(DBUS_VER_INTERNAL_NAME "${_name}")
     set(DBUS_VER_ORIGINAL_NAME "${DBUS_VER_INTERNAL_NAME}${CMAKE_SHARED_LIBRARY_SUFFIX}")
     set(DBUS_VER_FILE_TYPE "VFT_DLL")
-    configure_file(${CMAKE_SOURCE_DIR}/dbus/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo-${DBUS_VER_INTERNAL_NAME}.rc)
+    configure_file(${PROJECT_SOURCE_DIR}/dbus/versioninfo.rc.in ${CMAKE_CURRENT_BINARY_DIR}/versioninfo-${DBUS_VER_INTERNAL_NAME}.rc)
     # version info and uac manifest can be combined in a binary because they use different resource types
     list(APPEND ${_sources} ${CMAKE_CURRENT_BINARY_DIR}/versioninfo-${DBUS_VER_INTERNAL_NAME}.rc)
 endmacro()

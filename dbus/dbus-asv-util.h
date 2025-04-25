@@ -3,6 +3,8 @@
  * Copyright © 2011-2012 Nokia Corporation
  * Copyright © 2012-2013 Collabora Ltd.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -65,5 +67,8 @@ dbus_bool_t  _dbus_asv_close_entry       (DBusMessageIter *arr_iter,
 void         _dbus_asv_abandon_entry     (DBusMessageIter *arr_iter,
                                           DBusMessageIter *entry_iter,
                                           DBusMessageIter *var_iter);
+dbus_bool_t  _dbus_asv_add_unix_fd       (DBusMessageIter *arr_iter,
+                                          const char      *key,
+                                          int              value);
 
 #endif

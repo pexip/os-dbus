@@ -1,6 +1,2 @@
 # false positive: we only say dbus when talking about an executable
 dbus-tests: capitalization-error-in-description dbus D-Bus
-
-# intentional
-dbus-tests: custom-library-search-path usr/lib/dbus-1.0/debug-build/bin/* RUNPATH usr/lib/dbus-1.0/debug-build/lib/
-dbus-tests: custom-library-search-path usr/lib/dbus-1.0/debug-build/libexec/* RUNPATH usr/lib/dbus-1.0/debug-build/lib/

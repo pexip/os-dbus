@@ -4,7 +4,7 @@ Windows port of the freedesktop.org D-Bus
 
 Features and completeness
 -------------------------
-The windows port of dbus provides the dbus-1 library and mostly
+The Windows port of dbus provides the dbus-1 library and mostly
 applications which are already available on unix. These applications
 are: dbus-daemon, dbus-launch, dbus-monitor and dbus-send.
 DBus comes with a test suite which is used on unix to guarantate
@@ -13,19 +13,24 @@ test not running yet and there is help needed to get them running.
 
 Supported compilers
 -------------------
-On windows Microsoft Visual Studio 2010 (Express and professional variants)
-and mingw-w64|32 are known to work.
+Building dbus for Windows requires either Microsoft Visual Studio 2015
+or later, or a recent mingw-w64 compiler.
+
+Compilers older than the ones we test in continuous integration are
+not supported.
 
 Building
 --------
-DBus can be built on windows using automake or cmake. See the
+DBus can be built on Windows using Meson or cmake. See the
 file INSTALL for more information.
 
 windbus and dbus4win Ports
 --------------------------
-The Windows ports from the windbus and dbus4win projects has been merged
-into the freedesktop git master branch, as applicable. The spec has been
-updated with windows specific stuff.
+Very old versions of dbus only supported Unix plaforms, with third-party
+Windows ports available from the windbus and dbus4win projects.
+Those projects have been merged into dbus' main git repository,
+making the third-party ports obsolete. Similarly, the specification
+has been updated with Windows-specific details.
 
 
 Tests

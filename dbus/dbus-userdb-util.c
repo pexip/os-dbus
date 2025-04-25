@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003, 2004, 2005  Red Hat, Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -65,11 +67,6 @@ dbus_bool_t
 _dbus_is_console_user (dbus_uid_t uid,
 		       DBusError *error)
 {
-
-  DBusUserDatabase *db;
-  const DBusUserInfo *info;
-  dbus_bool_t result = FALSE;
-
 #ifdef HAVE_SYSTEMD
   /* check if we have logind */
   if (access ("/run/systemd/seats/", F_OK) >= 0)
@@ -120,35 +117,7 @@ _dbus_is_console_user (dbus_uid_t uid,
 
 #endif /* HAVE_CONSOLE_OWNER_FILE */
 
-  if (!_dbus_user_database_lock_system ())
-    {
-      _DBUS_SET_OOM (error);
-      return FALSE;
-    }
-
-  db = _dbus_user_database_get_system ();
-  if (db == NULL)
-    {
-      dbus_set_error (error, DBUS_ERROR_FAILED, "Could not get system database.");
-      _dbus_user_database_unlock_system ();
-      return FALSE;
-    }
-
-  /* TPTD: this should be cache-safe, we've locked the DB and
-    _dbus_user_at_console doesn't pass it on. */
-  info = _dbus_user_database_lookup (db, uid, NULL, error);
-
-  if (info == NULL)
-    {
-      _dbus_user_database_unlock_system ();
-       return FALSE;
-    }
-
-  result = _dbus_user_at_console (info->username, error);
-
-  _dbus_user_database_unlock_system ();
-
-  return result;
+  return FALSE;
 }
 
 /**
@@ -384,6 +353,8 @@ _dbus_groups_from_uid (dbus_uid_t         uid,
 {
   DBusUserDatabase *db;
   const DBusUserInfo *info;
+  dbus_bool_t ret = FALSE;
+
   *group_ids = NULL;
   *n_group_ids = 0;
 
@@ -397,15 +368,11 @@ _dbus_groups_from_uid (dbus_uid_t         uid,
   if (db == NULL)
     {
       _DBUS_SET_OOM (error);
-      _dbus_user_database_unlock_system ();
-      return FALSE;
+      goto out;
     }
 
   if (!_dbus_user_database_get_uid (db, uid, &info, error))
-    {
-      _dbus_user_database_unlock_system ();
-      return FALSE;
-    }
+    goto out;
 
   _dbus_assert (info->uid == uid);
   
@@ -415,8 +382,7 @@ _dbus_groups_from_uid (dbus_uid_t         uid,
       if (*group_ids == NULL)
         {
           _DBUS_SET_OOM (error);
-	  _dbus_user_database_unlock_system ();
-          return FALSE;
+          goto out;
         }
 
       *n_group_ids = info->n_group_ids;
@@ -424,7 +390,10 @@ _dbus_groups_from_uid (dbus_uid_t         uid,
       memcpy (*group_ids, info->group_ids, info->n_group_ids * sizeof (dbus_gid_t));
     }
 
+  ret = TRUE;
+out:
+  _DBUS_ASSERT_ERROR_XOR_BOOL (error, ret);
   _dbus_user_database_unlock_system ();
-  return TRUE;
+  return ret;
 }
 /** @} */

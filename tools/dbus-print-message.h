@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2003 Philip Blundell <philb@gnu.org>
  * Copyright (C) 2003 Red Hat, Inc.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +27,6 @@
 #include <string.h>
 #include <dbus/dbus.h>
 
-void print_message (DBusMessage *message, dbus_bool_t literal, long sec, long usec);
+void print_message (DBusMessage *message, dbus_bool_t literal, dbus_int64_t sec, long usec);
 
 #endif /* DBUS_PRINT_MESSAGE_H */

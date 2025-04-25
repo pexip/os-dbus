@@ -2,6 +2,7 @@
  *
  * Copyright © 2010-2011 Nokia Corporation
  * Copyright © 2013-2015 Collabora Ltd.
+ * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -91,7 +92,7 @@ can_become_user_or_skip (uid_t uid)
         {
           /* make sure we report failure even if errno is wrong */
           if (errno == 0)
-            errno = ENODATA;
+            errno = EPERM;
 
           _exit (errno);
         }
@@ -553,16 +554,20 @@ become_other_user (TestUser user,
 }
 
 /* Undo the effect of a successful call to become_other_user() */
+#if defined(HAVE_GETRESUID) && defined(HAVE_SETRESUID) && defined(__linux__)
 static void
 back_to_root (void)
 {
-#if defined(HAVE_GETRESUID) && defined(HAVE_SETRESUID) && defined(__linux__)
-  if (setresuid (0, 0, 0) != 0)
-    g_error ("setresuid(0, 0, 0): %s", g_strerror (errno));
-#else
-  g_error ("become_other_user() cannot succeed on this platform");
-#endif
+  if (setresuid(0, 0, 0) != 0)
+    g_error ("setresuid(0, 0, 0): %s", g_strerror(errno));
 }
+#else
+_DBUS_GNUC_NORETURN static void
+back_to_root (void)
+{
+  g_error ("become_other_user() cannot succeed on this platform");
+}
+#endif
 
 /*
  * Raise G_IO_ERROR_NOT_SUPPORTED if the requested user is impossible.
@@ -958,6 +963,25 @@ test_check_tcp_works (void)
 #else
   /* Assume that on Windows, TCP always works */
   return TRUE;
+#endif
+}
+
+gboolean
+test_check_af_unix_works (void)
+{
+#if defined(G_OS_WIN32) && !defined(HAVE_AFUNIX_H)
+  /* AFUNIX support is compiled out, skip system check */
+  return FALSE;
+#else
+#ifdef G_OS_WIN32
+  SOCKET fd = socket (AF_UNIX, SOCK_STREAM, 0);
+  closesocket (fd);
+  return fd != INVALID_SOCKET;
+#else
+  int fd = socket (AF_UNIX, SOCK_STREAM, 0);
+  close (fd);
+  return fd >= 0;
+#endif
 #endif
 }
 

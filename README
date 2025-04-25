@@ -15,7 +15,7 @@ The "and coordination" part is important; D-Bus provides a bus daemon that does 
  - start services on demand
  - support single-instance applications
 
-See http://www.freedesktop.org/software/dbus/ for lots of documentation, 
+See https://www.freedesktop.org/wiki/Software/dbus/ for lots of documentation,
 mailing lists, etc.
 
 See also the file CONTRIBUTING.md for notes of interest to developers
@@ -31,13 +31,16 @@ only by accident; so you should evaluate carefully whether D-Bus makes
 sense for your project.
 
 Security
-==
+===
 
 If you find a security vulnerability that is not known to the public,
 please report it privately to dbus-security@lists.freedesktop.org
 or by reporting a Gitlab issue at
 https://gitlab.freedesktop.org/dbus/dbus/issues/new and marking it
 as "confidential".
+Please do not open merge requests for security issues: if you have a
+proposed patch, it can be discussed on the confidential issue or by
+private email.
 
 On Unix systems, the system bus (dbus-daemon --system) is designed
 to be a security boundary between users with different privileges.
@@ -67,9 +70,9 @@ high-level API as analogous to Qt/GTK+/HTML.
 Version numbers
 ===
 
-D-Bus uses the common "Linux kernel" versioning system, where
-even-numbered minor versions are stable and odd-numbered minor
-versions are development snapshots.
+D-Bus uses the same odd/even versioning system as GLib, SDL and older
+Linux kernels, where even-numbered minor versions are stable and
+odd-numbered minor versions are development snapshots.
 
 So for example, development snapshots: 1.1.1, 1.1.2, 1.1.3, 1.3.4
 Stable versions: 1.0, 1.0.1, 1.0.2, 1.2.1, 1.2.3
@@ -80,28 +83,19 @@ Development snapshots make no ABI stability guarantees for new ABI
 introduced since the last stable release. Development snapshots are
 likely to have more bugs than stable releases, obviously.
 
-Configuration 
+Since 1.16.0, development snapshots will also have an -alpha, -beta or -rc
+suffix on the version number to make their development status more obvious.
+
+Configuration and installation
 ===
 
-dbus could be build by using autotools or cmake. 
+This branch of dbus can be built by using Meson or CMake.
+The Meson build system is the recommended build system since version 1.16.0,
+except when building on Windows, for which CMake is recommended (this
+recommendation might change to Meson in future).
 
-When using autotools the configure step is initiated by running ./configure 
-with or without additional configuration flags. dbus requires GNU Make
-(on BSD systems, this is typically called gmake) or a "make" implementation
-with compatible extensions.
+Please see `INSTALL` for full details.
 
-When using cmake the configure step is initiated by running the cmake 
-program with or without additional configuration flags. 
-
-Configuration flags
-===
-
-When using autotools, run "./configure --help" to see the possible
-configuration options and environment variables.
-
-When using cmake, inspect README.cmake to see the possible
-configuration options and environment variables.
-    
 API/ABI Policy
 ===
 

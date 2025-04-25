@@ -4,6 +4,8 @@
  * Copyright (C) 2002, 2003, 2004, 2005  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -271,8 +273,7 @@ _dbus_write_pid_to_file_and_pipe (const DBusString *pidfile,
           return FALSE;
         }
 	  
-      if (!_dbus_string_append_int (&pid, pid_to_write) ||
-          !_dbus_string_append (&pid, "\n"))
+      if (!_dbus_string_append_printf (&pid, DBUS_PID_FORMAT "\n", pid_to_write))
         {
           _dbus_string_free (&pid);
           _DBUS_SET_OOM (error);
@@ -564,53 +565,6 @@ _dbus_file_exists (const char *file)
 {
   return (access (file, F_OK) == 0);
 }
-
-/** Checks if user is at the console
-*
-* @param username user to check
-* @param error return location for errors
-* @returns #TRUE is the user is at the consolei and there are no errors
-*/
-dbus_bool_t 
-_dbus_user_at_console (const char *username,
-                       DBusError  *error)
-{
-#ifdef DBUS_CONSOLE_AUTH_DIR
-  DBusString u, f;
-  dbus_bool_t result;
-
-  result = FALSE;
-  if (!_dbus_string_init (&f))
-    {
-      _DBUS_SET_OOM (error);
-      return FALSE;
-    }
-
-  if (!_dbus_string_append (&f, DBUS_CONSOLE_AUTH_DIR))
-    {
-      _DBUS_SET_OOM (error);
-      goto out;
-    }
-
-  _dbus_string_init_const (&u, username);
-
-  if (!_dbus_concat_dir_and_file (&f, &u))
-    {
-      _DBUS_SET_OOM (error);
-      goto out;
-    }
-
-  result = _dbus_file_exists (_dbus_string_get_const_data (&f));
-
- out:
-  _dbus_string_free (&f);
-
-  return result;
-#else
-  return FALSE;
-#endif
-}
-
 
 /**
  * Checks whether the filename is an absolute path
@@ -1515,6 +1469,34 @@ _dbus_get_standard_system_servicedirs (DBusList **dirs)
     "/usr/share:"
     DBUS_DATADIR ":"
     "/lib";
+  DBusString servicedir_path;
+
+  _dbus_string_init_const (&servicedir_path, standard_search_path);
+
+  return _dbus_split_paths_and_append (&servicedir_path,
+                                       DBUS_UNIX_STANDARD_SYSTEM_SERVICEDIR,
+                                       dirs);
+}
+
+
+/**
+ * Returns the local admin directories for a system bus to look for service
+ * activation files
+ *
+ * On UNIX this should be the /etc/ and /run/ directories.
+ *
+ * On Windows there is no system bus and this function can return nothing.
+ *
+ * @param dirs the directory list we are returning
+ * @returns #FALSE on OOM
+ */
+
+dbus_bool_t
+_dbus_get_local_system_servicedirs (DBusList **dirs)
+{
+  static const char standard_search_path[] =
+    "/etc:"
+    "/run";
   DBusString servicedir_path;
 
   _dbus_string_init_const (&servicedir_path, standard_search_path);

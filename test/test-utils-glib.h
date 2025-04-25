@@ -2,6 +2,7 @@
  *
  * Copyright © 2010-2011 Nokia Corporation
  * Copyright © 2013-2015 Collabora Ltd.
+ * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -126,11 +127,24 @@ backported_g_steal_pointer (gpointer pointer_to_pointer)
 }
 #endif
 
+#ifndef g_assert_true
+#define g_assert_true(a) g_assert (a)
+#endif
+
+#ifndef g_assert_false
+#define g_assert_false(a) g_assert (!(a))
+#endif
+
+#ifndef g_assert_null
+#define g_assert_null(a) g_assert ((a) == NULL)
+#endif
+
 #ifndef g_assert_nonnull
-#define g_assert_nonnull(a) g_assert (a != NULL)
+#define g_assert_nonnull(a) g_assert ((a) != NULL)
 #endif
 
 gboolean test_check_tcp_works (void);
+gboolean test_check_af_unix_works (void);
 
 void test_store_result_cb (GObject *source_object,
                            GAsyncResult *result,

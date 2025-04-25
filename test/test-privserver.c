@@ -3,6 +3,7 @@
  * Copyright 2010 Ralf Habacker
  * Copyright 2016-2018 Collabora Ltd.
  * Copyright 2017 Endless Mobile, Inc.
+ * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -49,6 +50,14 @@ struct TestServiceData
   DBusLoop *loop;
   char *private_addr;
 };
+
+static void
+test_service_data_free (TestServiceData *self)
+{
+  _dbus_loop_unref (self->loop);
+  dbus_free (self->private_addr);
+  dbus_free (self);
+}
 
 static void
 new_connection_callback (DBusServer     *server,
@@ -105,7 +114,6 @@ main (int argc, char *argv[])
 {
   DBusServer *server;
   DBusError error;
-  DBusLoop *loop;
   DBusConnection *session;
   TestServiceData *testdata;
 
@@ -117,16 +125,17 @@ main (int argc, char *argv[])
 
   dbus_error_init (&error);
 
-  loop = _dbus_loop_new ();
-
   testdata = dbus_new (TestServiceData, 1);
-  testdata->loop = loop;
+  testdata->loop = _dbus_loop_new ();
+
+  if (testdata->loop == NULL)
+    die ("out of memory");
 
   session = dbus_bus_get (DBUS_BUS_SESSION, &error);
   if (!session)
     die ("couldn't access session bus");
 
-  test_connection_setup (loop, session);
+  test_connection_setup (testdata->loop, session);
 
   dbus_bus_request_name (session, "org.freedesktop.DBus.TestSuite.PrivServer", 0, &error);
   if (dbus_error_is_set (&error))
@@ -135,11 +144,7 @@ main (int argc, char *argv[])
   if (!dbus_connection_add_filter (session, filter_session_message, testdata, NULL))
     die ("couldn't add filter");
 
-#ifdef DBUS_CMAKE
   server = dbus_server_listen (TEST_LISTEN, &error);
-#else
-  server = dbus_server_listen ("unix:tmpdir=/tmp", &error);
-#endif
   if (!server)
     die ("%s", error.message);
   testdata->private_addr = dbus_server_get_address (server);
@@ -148,23 +153,21 @@ main (int argc, char *argv[])
   dbus_server_set_new_connection_function (server, new_connection_callback,
                                            testdata, NULL);
 
-  test_server_setup (loop, server);
+  test_server_setup (testdata->loop, server);
 
   fprintf (stderr, "server running mainloop\n");
-  _dbus_loop_run (loop);
+  _dbus_loop_run (testdata->loop);
   fprintf (stderr, "server mainloop quit\n");
 
-  test_server_shutdown (loop, server);
+  test_server_shutdown (testdata->loop, server);
 
-  test_connection_shutdown (loop, session);
+  test_connection_shutdown (testdata->loop, session);
 
   dbus_connection_unref (session);
 
   dbus_server_unref (server);
 
-  _dbus_loop_unref (loop);
-
-  dbus_free (testdata);
+  test_service_data_free (testdata);
 
   return 0;
 }

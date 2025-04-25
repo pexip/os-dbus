@@ -2,6 +2,7 @@
  *
  * Copyright © 2010-2011 Nokia Corporation
  * Copyright © 2015 Collabora Ltd.
+ * SPDX-License-Identifier: MIT
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation files
@@ -27,8 +28,6 @@
 #include <config.h>
 
 #include <string.h>
-
-#include "dbus/dbus-connection-internal.h"
 
 #include "test-utils-glib.h"
 
@@ -548,7 +547,7 @@ become_monitor (Fixture *f,
   int i;
   dbus_uint32_t zero = 0;
 
-  _dbus_connection_set_builtin_filters_enabled (f->monitor, FALSE);
+  dbus_connection_set_builtin_filters_enabled (f->monitor, FALSE);
 
   if (config == NULL)
     config = f->config;

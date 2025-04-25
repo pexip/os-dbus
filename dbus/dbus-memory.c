@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2002, 2003  Red Hat Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -103,7 +105,7 @@
 static dbus_bool_t debug_initialized = FALSE;
 static int fail_nth = -1;
 static size_t fail_size = 0;
-static int fail_alloc_counter = _DBUS_INT_MAX;
+static int fail_alloc_counter = -1;
 static int n_failures_per_failure = 1;
 static int n_failures_this_failure = 0;
 static dbus_bool_t guards = FALSE;
@@ -188,7 +190,11 @@ _dbus_disable_mem_pools (void)
  * Sets the number of allocations until we simulate a failed
  * allocation. If set to 0, the next allocation to run
  * fails; if set to 1, one succeeds then the next fails; etc.
- * Set to _DBUS_INT_MAX to not fail anything. 
+ *
+ * Set to a negative number to not fail anything.
+ * In this case, the counter is still decremented every time we allocate
+ * memory (until it reaches _DBUS_INT_MIN), which can be used to estimate
+ * the number of allocations in a particular unit test case.
  *
  * @param until_next_fail number of successful allocs before one fails
  */
@@ -206,7 +212,11 @@ _dbus_set_fail_alloc_counter (int until_next_fail)
 
 /**
  * Gets the number of successful allocs until we'll simulate
- * a failed alloc.
+ * a failed alloc, or negative if we will not simulate a failed alloc.
+ *
+ * If negative, the counter indicates the number of allocations since
+ * it was set to a known value, which can be used to count allocations:
+ * see _dbus_set_fail_alloc_counter() for details.
  *
  * @returns current counter value
  */
@@ -242,7 +252,6 @@ _dbus_get_fail_alloc_failures (void)
   return n_failures_per_failure;
 }
 
-#ifdef DBUS_ENABLE_EMBEDDED_TESTS
 /**
  * Called when about to alloc some memory; if
  * it returns #TRUE, then the allocation should
@@ -256,8 +265,20 @@ _dbus_decrement_fail_alloc_counter (void)
 {
   _dbus_initialize_malloc_debug ();
 
-  if (fail_alloc_counter <= 0)
+  if (fail_alloc_counter < 0)
     {
+      /* We never fail in this case, but we still decrement the counter,
+       * so that _dbus_test_oom_handling() can use it to count allocations.
+       * Saturate at _DBUS_INT_MIN to avoid undefined integer overflow
+       * (or in this case underflow). */
+      if (fail_alloc_counter > _DBUS_INT_MIN)
+        fail_alloc_counter -= 1;
+
+      return FALSE;
+    }
+  else if (fail_alloc_counter == 0)
+    {
+      /* It's time to pretend we ran out of memory. */
       if (backtrace_on_fail_alloc)
         _dbus_print_backtrace ();
 
@@ -266,11 +287,7 @@ _dbus_decrement_fail_alloc_counter (void)
       n_failures_this_failure += 1;
       if (n_failures_this_failure >= n_failures_per_failure)
         {
-          if (fail_nth >= 0)
-            fail_alloc_counter = fail_nth;
-          else
-            fail_alloc_counter = _DBUS_INT_MAX;
-
+          fail_alloc_counter = fail_nth;
           n_failures_this_failure = 0;
 
           _dbus_verbose ("reset fail alloc counter to %d\n", fail_alloc_counter);
@@ -280,11 +297,12 @@ _dbus_decrement_fail_alloc_counter (void)
     }
   else
     {
+      /* Don't fail this allocation, but count down to the next time we
+       * will fail an allocation. */
       fail_alloc_counter -= 1;
       return FALSE;
     }
 }
-#endif /* DBUS_ENABLE_EMBEDDED_TESTS */
 
 /**
  * Get the number of outstanding malloc()'d blocks.
@@ -337,8 +355,8 @@ check_guards (void       *free_block,
   if (free_block != NULL)
     {
       unsigned char *block = ((unsigned char*)free_block) - GUARD_START_OFFSET;
-      size_t requested_bytes = *(dbus_uint32_t*)block;
-      BlockSource source = *(dbus_uint32_t*)(block + 4);
+      size_t requested_bytes = *(dbus_uint32_t *) (void *) block;
+      BlockSource source = *(dbus_uint32_t *) (void *) (block + 4);
       unsigned int i;
       dbus_bool_t failed;
 
@@ -352,7 +370,7 @@ check_guards (void       *free_block,
       i = GUARD_INFO_SIZE;
       while (i < GUARD_START_OFFSET)
         {
-          dbus_uint32_t value = *(dbus_uint32_t*) &block[i];
+          dbus_uint32_t value = *(dbus_uint32_t *) (void *) &block[i];
           if (value != GUARD_VALUE)
             {
               _dbus_warn ("Block of %lu bytes from %s had start guard value 0x%ux at %d expected 0x%x",
@@ -367,7 +385,7 @@ check_guards (void       *free_block,
       i = GUARD_START_OFFSET + requested_bytes;
       while (i < (GUARD_START_OFFSET + requested_bytes + GUARD_END_PAD))
         {
-          dbus_uint32_t value = *(dbus_uint32_t*) &block[i];
+          dbus_uint32_t value = *(dbus_uint32_t *) (void *) &block[i];
           if (value != GUARD_VALUE)
             {
               _dbus_warn ("Block of %lu bytes from %s had end guard value 0x%ux at %d expected 0x%x",
@@ -400,23 +418,23 @@ set_guards (void       *real_block,
     return NULL;
 
   _dbus_assert (GUARD_START_OFFSET + GUARD_END_PAD == GUARD_EXTRA_SIZE);
-  
-  *((dbus_uint32_t*)block) = requested_bytes;
-  *((dbus_uint32_t*)(block + 4)) = source;
+
+  *((dbus_uint32_t *) (void *) block) = requested_bytes;
+  *((dbus_uint32_t *) (void *) (block + 4)) = source;
 
   i = GUARD_INFO_SIZE;
   while (i < GUARD_START_OFFSET)
     {
-      (*(dbus_uint32_t*) &block[i]) = GUARD_VALUE;
-      
+      (*(dbus_uint32_t *) (void *) &block[i]) = GUARD_VALUE;
+
       i += 4;
     }
 
   i = GUARD_START_OFFSET + requested_bytes;
   while (i < (GUARD_START_OFFSET + requested_bytes + GUARD_END_PAD))
     {
-      (*(dbus_uint32_t*) &block[i]) = GUARD_VALUE;
-      
+      (*(dbus_uint32_t *) (void *) &block[i]) = GUARD_VALUE;
+
       i += 4;
     }
   
