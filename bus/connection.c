@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003  Red Hat, Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -24,7 +26,6 @@
 #include <config.h>
 #include "connection.h"
 
-#include "containers.h"
 #include "dispatch.h"
 #include "policy.h"
 #include "services.h"
@@ -105,7 +106,7 @@ typedef struct
   BusSELinuxID *selinux_id;
   BusAppArmorConfinement *apparmor_confinement;
 
-  long connection_tv_sec;  /**< Time when we connected (seconds component) */
+  dbus_int64_t connection_tv_sec;  /**< Time when we connected (seconds component) */
   long connection_tv_usec; /**< Time when we connected (microsec component) */
   int stamp;               /**< connections->stamp last time we were traversed */
   BusExtraHeaders want_headers;
@@ -308,9 +309,6 @@ bus_connection_disconnected (DBusConnection *connection)
       _dbus_list_remove_link (&d->connections->monitors, d->link_in_monitors);
       d->link_in_monitors = NULL;
     }
-
-  bus_containers_remove_connection (bus_context_get_containers (d->connections->context),
-                                    connection);
 
   if (d->link_in_connection_list != NULL)
     {
@@ -591,9 +589,6 @@ cache_peer_loginfo_string (BusConnectionData *d,
   const char *windows_sid = NULL;
   const char *security_label = NULL;
   dbus_bool_t prev_added;
-  const char *container = NULL;
-  const char *container_type = NULL;
-  const char *container_name = NULL;
   DBusCredentials *credentials;
 
   if (!_dbus_string_init (&loginfo_buf))
@@ -668,30 +663,6 @@ cache_peer_loginfo_string (BusConnectionData *d,
 
       did_append = _dbus_string_append_printf (&loginfo_buf,
                                                "label=\"%s\"", security_label);
-      if (!did_append)
-        goto oom;
-      else
-        prev_added = TRUE;
-    }
-
-  /* This does have to come from the connection, not the credentials */
-  if (bus_containers_connection_is_contained (connection, &container,
-                                              &container_type,
-                                              &container_name))
-    {
-      dbus_bool_t did_append;
-
-      if (prev_added)
-        {
-          if (!_dbus_string_append_byte (&loginfo_buf, ' '))
-            goto oom;
-        }
-
-      did_append = _dbus_string_append_printf (&loginfo_buf,
-                                               "container=%s %s=\"%s\")",
-                                               container,
-                                               container_type,
-                                               container_name);
       if (!did_append)
         goto oom;
       else
@@ -965,7 +936,8 @@ bus_connections_expire_incomplete (BusConnections *connections)
   
   if (connections->incomplete != NULL)
     {
-      long tv_sec, tv_usec;
+      dbus_int64_t tv_sec;
+      long tv_usec;
       DBusList *link;
       int auth_timeout;
       
@@ -2468,26 +2440,6 @@ bus_transaction_send (BusTransaction *transaction,
   
   d = BUS_CONNECTION_DATA (destination);
   _dbus_assert (d != NULL);
-
-  /* You might think that this is too late to be setting header fields,
-   * because the message is locked before sending - but remember that
-   * the message isn't actually queued to be sent (and hence locked)
-   * until we know we have enough memory for the entire transaction,
-   * and that doesn't happen until we know all the recipients.
-   * So this is about the last possible time we could edit the header. */
-  if ((d->want_headers & BUS_EXTRA_HEADERS_CONTAINER_INSTANCE) &&
-      dbus_message_get_container_instance (message) == NULL)
-    {
-      const char *path;
-
-      if (sender == NULL ||
-          !bus_containers_connection_is_contained (sender, &path,
-                                                   NULL, NULL))
-        path = "/";
-
-      if (!dbus_message_set_container_instance (message, path))
-        return FALSE;
-    }
 
   to_send = dbus_new (MessageToSend, 1);
   if (to_send == NULL)

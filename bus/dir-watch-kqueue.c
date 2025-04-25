@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2003 Red Hat, Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -233,7 +235,7 @@ bus_set_watched_dirs (BusContext *context, DBusList **directories)
   /* Look for directories in both the old and new sets, if
    * we find one, move its data into the new set.
    */
-  for (i = 0; new_dirs[i]; i++)
+  for (i = 0; i < MAX_DIRS_TO_WATCH && new_dirs[i]; i++)
     {
       for (j = 0; j < num_fds; j++)
         {
@@ -262,7 +264,7 @@ bus_set_watched_dirs (BusContext *context, DBusList **directories)
         }
     }
 
-  for (i = 0; new_dirs[i]; i++)
+  for (i = 0; i < MAX_DIRS_TO_WATCH && new_dirs[i]; i++)
     {
       if (new_fds[i] == -1)
         {

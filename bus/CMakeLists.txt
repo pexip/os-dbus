@@ -18,7 +18,7 @@ set(SERVICE_FILES test/data/valid-service-files)
 file(GLOB FILES "${SERVICE_FILES}/*.service.in" )
 foreach(FILE ${FILES})
     get_filename_component(FILENAME ${FILE} NAME_WE)
-    set(TARGET ${CMAKE_BINARY_DIR}/data/dbus-1/services/${FILENAME}.service)
+    set(TARGET ${PROJECT_BINARY_DIR}/data/dbus-1/services/${FILENAME}.service)
     if(CONFIG_VERBOSE)
         message("FROM: ${FILE}\nTO: ${TARGET}\n")
     endif()
@@ -51,8 +51,6 @@ set(BUS_SOURCES
 #    config-parser-trivial.c
     connection.c
     connection.h
-    containers.c
-    containers.h
     desktop-file.c
     desktop-file.h
     dir-watch.h
@@ -84,7 +82,7 @@ if(DBUS_ENABLE_STATS)
 endif()
 
 include_directories(
-    ${CMAKE_BINARY_DIR}
+    ${PROJECT_BINARY_DIR}
     ${EXPAT_INCLUDE_DIR}
 )
 

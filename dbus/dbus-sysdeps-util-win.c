@@ -4,6 +4,8 @@
  * Copyright (C) 2002, 2003, 2004, 2005  Red Hat, Inc.
  * Copyright (C) 2003 CodeFactory AB
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -201,8 +203,7 @@ _dbus_write_pid_to_file_and_pipe (const DBusString *pidfile,
           return FALSE;
         }
 
-      if (!_dbus_string_append_int (&pid, pid_to_write) ||
-          !_dbus_string_append (&pid, "\n"))
+      if (!_dbus_string_append_printf (&pid, DBUS_PID_FORMAT "\n", pid_to_write))
         {
           _dbus_string_free (&pid);
           _DBUS_SET_OOM (error);
@@ -1608,6 +1609,26 @@ _dbus_get_standard_session_servicedirs (DBusList **dirs)
 
 dbus_bool_t
 _dbus_get_standard_system_servicedirs (DBusList **dirs)
+{
+  *dirs = NULL;
+  return TRUE;
+}
+
+
+/**
+ * Returns the local admin directories for a system bus to look for service
+ * activation files
+ *
+ * On UNIX this should be the /etc/ and /run/ directories.
+ *
+ * On Windows there is no system bus and this function can return nothing.
+ *
+ * @param dirs the directory list we are returning
+ * @returns #FALSE on OOM
+ */
+
+dbus_bool_t
+_dbus_get_local_system_servicedirs (DBusList **dirs)
 {
   *dirs = NULL;
   return TRUE;

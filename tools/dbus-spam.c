@@ -4,6 +4,7 @@
  * Copyright © 2003 Philip Blundell <philb@gnu.org>
  * Copyright © 2011 Nokia Corporation
  * Copyright © 2014 Collabora Ltd.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -163,7 +164,7 @@ dbus_test_tool_spam (int argc, char **argv)
   int queue_len = 1;
   const char *payload = NULL;
   char *payload_buf = NULL;
-  size_t payload_len;
+  size_t payload_len = 0;
   int payload_type = DBUS_TYPE_STRING;
   DBusMessage *template = NULL;
   dbus_bool_t flood = FALSE;
@@ -216,6 +217,7 @@ dbus_test_tool_spam (int argc, char **argv)
       else if (strstr (arg, "--payload=") == arg)
         {
           payload = arg + strlen ("--payload=");
+          payload_len = strlen (payload);
         }
       else if (strcmp (arg, "--stdin") == 0)
         {

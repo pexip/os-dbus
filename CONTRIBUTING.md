@@ -10,6 +10,20 @@ Source code and issue tracking for the D-Bus specification and its
 reference implementation 'dbus' are provided by freedesktop.org Gitlab:
 <https://gitlab.freedesktop.org/dbus/dbus>.
 
+## Default branch renamed to `main`
+
+The default development branch for dbus has been renamed to `main`. To
+update your local checkout, use steps similar to:
+
+```sh
+git checkout master
+git branch -m master main
+git fetch
+git branch --unset-upstream
+git branch --set-upstream-to=origin/main
+git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+```
+
 ## Reporting security vulnerabilities
 
 If you find a security vulnerability that is not known to the public,
@@ -53,18 +67,18 @@ checkouts.
 D-Bus development happens in multiple branches in parallel. The main
 branches are the current stable branch, with an even minor number (like
 1.0, 1.2 and 1.4), and the next development branch, with the next odd
-number. At the time of writing, the stable branch is dbus 1.12.x and
-the development branch is dbus 1.13.x, leading to a new 1.14.x stable
+number. At the time of writing, the stable branch is dbus 1.16.x and
+the development branch is dbus 1.17.x, leading to a new 1.18.x stable
 branch in future.
 
 Stable branches are named after the version number itself (`dbus-1.2`,
 `dbus-1.4`), whereas the development branch is simply known as
-`master`.
+`main`.
 
 New features, enhancements, minor bug fixes, and bug fixes that are
-unusually intrusive should always be based on the `master` branch.
+unusually intrusive should always be based on the `main` branch.
 
-Fixes for significant bugs should be developed on the `master` branch
+Fixes for significant bugs should be developed on the `main` branch
 and cherry-picked to the most recent stable branch.
 
 Depending on the release cycles of various Linux distributions, some
@@ -74,9 +88,9 @@ These are announced on the D-Bus mailing list.
 
 Old development branches are not supported at all, and will not receive
 any bug fixes - not even for security vulnerabilities. Please do not
-use a development branch like 1.13.x in your OS distribution, unless
+use a development branch like 1.17.x in your OS distribution, unless
 you can guarantee that you will upgrade to the next stable branch such
-as 1.14.x when it becomes available.
+as 1.18.x when it becomes available.
 
 ### Commits
 
@@ -180,11 +194,15 @@ http://vsftpd.beasts.org/ has other good security suggestions.
 
 ### Licensing
 
-Please match the existing licensing (a dual-license: AFL-2.1 or GPL-2+,
-recipient's choice). Entirely new modules can be placed under a more
-permissive license: to avoid license proliferation, our preferred
-permissive license is the variant of the MIT/X11 license used by the
-Expat XML library (for example see the top of tools/ci-build.sh).
+Please match the existing licensing, which is generally a dual-license:
+AFL-2.1 or GPL-2+, recipient's choice (`AFL-2.1 OR GPL-2.0-or-later`
+in SPDX notation).
+
+Entirely new modules can be placed under a more permissive license:
+to avoid license proliferation, our preferred permissive license is
+the variant of the MIT/X11 license used by the Expat XML library (`MIT`
+in SPDX notation), which can be found in LICENSES/MIT.txt. For example,
+tools/ci-build.sh is under this license.
 
 ### Build systems
 
@@ -213,20 +231,20 @@ client library.
 * `DBUS_VERBOSE=1`
 
   Turns on printing verbose messages. This only works if D-Bus has been
-  compiled with `--enable-verbose-mode`.
+  compiled with `-Dverbose_mode=true`.
 
 * `DBUS_MALLOC_FAIL_NTH=n`
 
   Can be set to a number, causing every *n*th call to `dbus_alloc` or
   `dbus_realloc` to fail. This only works if D-Bus has been compiled with
-  `--enable-embedded-tests`.
+  `-Dintrusive_tests=true`.
 
 * `DBUS_MALLOC_FAIL_GREATER_THAN=n`
 
   Can be set to a number, causing every call to `dbus_alloc` or
   `dbus_realloc` to fail if the number of bytes to be allocated is greater
   than the specified number. This only works if D-Bus has been compiled with
-  `--enable-embedded-tests`.
+  `-Dintrusive_tests=true`.
 
 * `DBUS_TEST_MALLOC_FAILURES=n`
 
@@ -247,18 +265,18 @@ Please try to write test coverage for all new functionality.
 We have two broad categories of tests.
 
 The *modular tests* are enabled by configuring with
-`--enable-modular-tests`. These mostly use GLib's GTest framework,
+`-Dmodular_tests=enabled`. These mostly use GLib's GTest framework,
 and are standalone programs that do not affect the contents of the
 production dbus library and programs. Most of them can be installed
 alongside the library and programs by configuring with
-`--enable-installed-tests`.
+`-Dinstalled_tests=true`.
 
-The *embedded tests* are enabled by configuring with
-`--enable-embedded-tests`. Unlike the modular tests, enabling the
-embedded tests adds special code to libdbus and dbus-daemon, some of
+The *intrusive tests* are enabled by configuring with
+`-Dintrusive_tests=true`. Unlike the modular tests, enabling the
+intrusive tests adds special code to libdbus and dbus-daemon, some of
 which may harm performance or security. A production version of dbus
 that will be included in an operating system should never have the
-embedded tests enabled.
+intrusive tests enabled.
 
 If possible, new test coverage should be provided via modular tests,
 preferably using GLib's GTest framework. `test/dbus-daemon.c` is a good

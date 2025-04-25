@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2002-2006  Red Hat Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2391,8 +2393,10 @@ check_for_reply_and_update_dispatch_unlocked (DBusConnection  *connection,
 void
 _dbus_connection_block_pending_call (DBusPendingCall *pending)
 {
-  long start_tv_sec, start_tv_usec;
-  long tv_sec, tv_usec;
+  dbus_int64_t start_tv_sec;
+  long start_tv_usec;
+  dbus_int64_t tv_sec;
+  long tv_usec;
   DBusDispatchStatus status;
   DBusConnection *connection;
   dbus_uint32_t client_serial;
@@ -2423,7 +2427,7 @@ _dbus_connection_block_pending_call (DBusPendingCall *pending)
     {
       timeout_milliseconds = dbus_timeout_get_interval (timeout);
 
-      _dbus_verbose ("dbus_connection_send_with_reply_and_block(): will block %d milliseconds for reply serial %u from %ld sec %ld usec\n",
+      _dbus_verbose ("dbus_connection_send_with_reply_and_block(): will block %d milliseconds for reply serial %u from %" DBUS_INT64_MODIFIER "d sec %ld usec\n",
                      timeout_milliseconds,
                      client_serial,
                      start_tv_sec, start_tv_usec);
@@ -3399,7 +3403,8 @@ reply_handler_timeout (void *data)
  * @param pending_return return location for a #DBusPendingCall
  * object, or #NULL if connection is disconnected or when you try to
  * send Unix file descriptors on a connection that does not support
- * them.
+ * them. The caller owns this reference, and is responsible for calling
+ * dbus_pending_call_unref() when it is no longer needed.
  * @param timeout_milliseconds timeout in milliseconds, -1 (or
  *  #DBUS_TIMEOUT_USE_DEFAULT) for default or #DBUS_TIMEOUT_INFINITE for no
  *  timeout
@@ -5570,10 +5575,10 @@ dbus_connection_set_allow_anonymous (DBusConnection             *connection,
  * @param value #TRUE to pass through org.freedesktop.DBus.Peer messages
  */
 void
-_dbus_connection_set_builtin_filters_enabled (DBusConnection        *connection,
-                                              dbus_bool_t            value)
+dbus_connection_set_builtin_filters_enabled (DBusConnection         *connection,
+                                             dbus_bool_t             value)
 {
-  _dbus_assert (connection != NULL);
+  _dbus_return_if_fail (connection != NULL);
 
   CONNECTION_LOCK (connection);
   connection->builtin_filters_enabled = value;

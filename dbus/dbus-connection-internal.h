@@ -3,6 +3,8 @@
  *
  * Copyright (C) 2002  Red Hat Inc.
  *
+ * SPDX-License-Identifier: AFL-2.1 OR GPL-2.0-or-later
+ *
  * Licensed under the Academic Free License version 2.1
  *
  * This program is free software; you can redistribute it and/or modify
@@ -122,9 +124,6 @@ dbus_bool_t       _dbus_connection_get_linux_security_label       (DBusConnectio
                                                                    char           **label_p);
 DBUS_PRIVATE_EXPORT
 DBusCredentials  *_dbus_connection_get_credentials                (DBusConnection  *connection);
-DBUS_PRIVATE_EXPORT
-void              _dbus_connection_set_builtin_filters_enabled    (DBusConnection  *connection,
-                                                                   dbus_bool_t      value);
 
 /* if DBUS_ENABLE_STATS */
 DBUS_PRIVATE_EXPORT
